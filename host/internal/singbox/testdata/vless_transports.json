@@ -1,0 +1,200 @@
+{
+  "log": {
+    "level": "warn",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "type": "local",
+        "tag": "local"
+      }
+    ]
+  },
+  "inbounds": [
+    {
+      "type": "mixed",
+      "tag": "in-ws",
+      "listen": "127.0.0.1",
+      "listen_port": 27102
+    },
+    {
+      "type": "mixed",
+      "tag": "in-grpc",
+      "listen": "127.0.0.1",
+      "listen_port": 27103
+    },
+    {
+      "type": "mixed",
+      "tag": "in-hu",
+      "listen": "127.0.0.1",
+      "listen_port": 27104
+    },
+    {
+      "type": "mixed",
+      "tag": "in-h2",
+      "listen": "127.0.0.1",
+      "listen_port": 27105
+    },
+    {
+      "type": "mixed",
+      "tag": "in-plain",
+      "listen": "127.0.0.1",
+      "listen_port": 27106
+    },
+    {
+      "type": "mixed",
+      "tag": "in-udp443",
+      "listen": "127.0.0.1",
+      "listen_port": 27107
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "out-ws",
+      "server": "cdn.example.com",
+      "server_port": 443,
+      "uuid": "d47d7dee-9073-46b1-a078-dc5be5c1524b",
+      "tls": {
+        "enabled": true,
+        "server_name": "cdn.example.com",
+        "alpn": [
+          "h2",
+          "http/1.1"
+        ],
+        "utls": {
+          "enabled": true,
+          "fingerprint": "firefox"
+        }
+      },
+      "transport": {
+        "type": "ws",
+        "path": "/ws",
+        "headers": {
+          "Host": "cdn.example.com"
+        },
+        "max_early_data": 2048,
+        "early_data_header_name": "Sec-WebSocket-Protocol"
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "out-grpc",
+      "server": "203.0.113.5",
+      "server_port": 443,
+      "uuid": "d47d7dee-9073-46b1-a078-dc5be5c1524b",
+      "tls": {
+        "enabled": true,
+        "server_name": "g.example.com",
+        "insecure": true
+      },
+      "transport": {
+        "type": "grpc",
+        "service_name": "grpc-svc"
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "out-hu",
+      "server": "2001:db8::1",
+      "server_port": 8443,
+      "uuid": "d47d7dee-9073-46b1-a078-dc5be5c1524b",
+      "tls": {
+        "enabled": true
+      },
+      "transport": {
+        "type": "httpupgrade",
+        "host": "cdn.example.com",
+        "path": "/up"
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "out-h2",
+      "server": "h2.example.com",
+      "server_port": 443,
+      "uuid": "d47d7dee-9073-46b1-a078-dc5be5c1524b",
+      "tls": {
+        "enabled": true,
+        "server_name": "h2.example.com"
+      },
+      "transport": {
+        "type": "http",
+        "host": [
+          "a.example.com",
+          "b.example.com"
+        ],
+        "path": "/h2"
+      }
+    },
+    {
+      "type": "vless",
+      "tag": "out-plain",
+      "server": "198.51.100.7",
+      "server_port": 80,
+      "uuid": "d47d7dee-9073-46b1-a078-dc5be5c1524b"
+    },
+    {
+      "type": "vless",
+      "tag": "out-udp443",
+      "server": "r.example.com",
+      "server_port": 443,
+      "uuid": "d47d7dee-9073-46b1-a078-dc5be5c1524b",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "www.example.org",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "randomized"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "eG9ft1Ut-iZk-V87OwAE_APpKV_H8OYoS1KBvjlJwlg"
+        }
+      }
+    }
+  ],
+  "route": {
+    "default_domain_resolver": "local",
+    "rules": [
+      {
+        "inbound": [
+          "in-ws"
+        ],
+        "outbound": "out-ws"
+      },
+      {
+        "inbound": [
+          "in-grpc"
+        ],
+        "outbound": "out-grpc"
+      },
+      {
+        "inbound": [
+          "in-hu"
+        ],
+        "outbound": "out-hu"
+      },
+      {
+        "inbound": [
+          "in-h2"
+        ],
+        "outbound": "out-h2"
+      },
+      {
+        "inbound": [
+          "in-plain"
+        ],
+        "outbound": "out-plain"
+      },
+      {
+        "inbound": [
+          "in-udp443"
+        ],
+        "outbound": "out-udp443"
+      }
+    ]
+  }
+}

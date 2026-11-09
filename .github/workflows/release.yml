@@ -1,0 +1,71 @@
+# Выпуск Waysplit: при новом теге версии (v1.2.3) — тесты, сборка архивов и выпуск на GitHub.
+#
+# Вся проверка и сборка — в tools/ci.ps1 (его можно запустить и у себя, см. README); здесь —
+# только окружение (Go из host/go.mod, Node.js), архив для магазина как файл сборки и сам выпуск.
+# В выпуске — два архива без версии в имени, поэтому постоянные ссылки
+#   https://github.com/jacks553/waysplit/releases/latest/download/Waysplit-companion.zip
+#   https://github.com/jacks553/waysplit/releases/latest/download/Waysplit-extension.zip
+# всегда ведут на последний выпуск: компаньон (кнопка «Скачать» в расширении; ядра sing-box и Xray —
+# внутри, ci.ps1 скачивает официальные выпуски и сверяет SHA-256 из tools/cores.json) и расширение
+# для ручной установки (с полем key — тот же ID, что у версии для разработки). Рядом — их SHA-256
+# и архивы исходного кода этих версий ядер (-Sources). Архив для магазина (без key) в выпуск не идёт.
+#
+# Выпустить: поднять версию в extension/manifest.json и host/main.go, дописать CHANGELOG.md,
+# закоммитить, затем  git tag v1.2.3  и  git push origin v1.2.3.
+name: Выпуск
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # создать выпуск и загрузить в него архивы
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: host/go.mod
+          cache-dependency-path: host/go.sum
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # Windows PowerShell (не pwsh) — той же командой, что и на своём компьютере (README): так же
+      # у пользователей работает установщик. -ExecutionPolicy Bypass — чтобы не зависеть от политики
+      # машины сборки; код возврата ci.ps1 — код шага.
+      - name: Тесты и сборка (tools/ci.ps1)
+        shell: cmd
+        env:
+          TAG: ${{ github.ref_name }}
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools\ci.ps1 -Tag %TAG% -Sources
+
+      - name: Архив для Chrome Web Store (файл сборки, не в выпуске)
+        uses: actions/upload-artifact@v7
+        with:
+          name: chrome-web-store-${{ github.ref_name }}
+          path: store/waysplit-*.zip
+          if-no-files-found: error
+
+      - name: Выпуск на GitHub
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          $flags = @()
+          if ($env:TAG -match '-') { $flags += '--prerelease' } # v1.2.3-rc1 — не «последний выпуск»
+          $files = @('dist/Waysplit-companion.zip', 'dist/Waysplit-companion.zip.sha256', 'dist/Waysplit-extension.zip', 'dist/Waysplit-extension.zip.sha256')
+          foreach ($f in $files) { if (-not (Test-Path $f)) { Write-Error "нет $f"; exit 1 } }
+          $sources = @(Get-ChildItem dist/sources -Filter *.tar.gz | ForEach-Object { $_.FullName })
+          $want = @((Get-Content tools/cores.json -Raw | ConvertFrom-Json).cores).Count
+          if ($sources.Count -ne $want) { Write-Error "архивов исходного кода ядер $($sources.Count), нужно $want"; exit 1 }
+          gh release create $env:TAG @files @sources `
+            --verify-tag --title "Waysplit $($env:TAG.TrimStart('v'))" --notes-file dist/release-notes.md @flags
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

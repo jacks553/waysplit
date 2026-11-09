@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Waysplit",
+  "version": "1.0.0",
+  "description": "VPN для Chrome через ваши серверы VLESS, XHTTP и Hysteria2: часть сайтов через VPN, часть напрямую. Нужен компаньон для Windows.",
+  "minimum_chrome_version": "120",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvf56ojiPEiRfEm3bWBXmdaa9pNwPLhPuyTBCD7hRMQLJ2HgzzH7Osb+VXeIiglUFrGs53xFE6GlsDCFBAS7kxELi/uHFKO7QkmoyYE8MG+rZe2N91tiwKtzTPsyNNYCYD7Dv8xZvKrAugygI9a7aJOU90HNTJ0p2QHdX0Fznh3H8zBaFSjY6bGvE8+C5a9L/eV74py+eDL2xgTzX/EaLR9YbE1ciJqMDO34gm5NHwlaKsPb2bHRmC+EgFNUZgokDksOW8B9nsJ2NK2vOCFj6pWsTewECaX0hZ/O+npLrX40+vx3biwWKOUtf1ZlnIxQvrGHD7BVZLiEDqd1CQZIHGQIDAQAB",
+  "permissions": ["nativeMessaging", "proxy", "storage", "alarms", "activeTab", "privacy", "favicon"],
+  "optional_permissions": ["webRequest"],
+  "optional_host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
+  "action": {
+    "default_title": "Waysplit",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/state-off-16.png",
+      "32": "icons/state-off-32.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

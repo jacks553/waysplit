@@ -1,0 +1,37 @@
+{
+  "comment": "Наборы доменов для правил (SPEC, раздел 3.3): сайты грузят видео, картинки и скрипты с других доменов, и правило на один домен не помогает. Домены — в punycode, без www. action — действие по умолчанию для набора (если указано).",
+  "sets": [
+    {
+      "id": "ru-direct",
+      "name": "Российские сайты напрямую",
+      "action": "direct",
+      "note": "Зоны .ru, .рф, .su и сервисы VK, Яндекса и Одноклассников на других доменах: часть российских сайтов и банков не пускает с зарубежных IP.",
+      "domains": ["ru", "xn--p1ai", "su", "vk.com", "vk.me", "userapi.com", "yandex.net", "yastatic.net", "mycdn.me"]
+    },
+    {
+      "id": "youtube",
+      "name": "YouTube",
+      "domains": ["youtube.com", "googlevideo.com", "ytimg.com", "ggpht.com", "youtu.be", "youtube-nocookie.com"]
+    },
+    {
+      "id": "instagram",
+      "name": "Instagram",
+      "domains": ["instagram.com", "cdninstagram.com", "fbcdn.net"]
+    },
+    {
+      "id": "telegram",
+      "name": "Telegram Web",
+      "domains": ["telegram.org", "t.me", "telegram.me", "telesco.pe"]
+    },
+    {
+      "id": "discord",
+      "name": "Discord",
+      "domains": ["discord.com", "discord.gg", "discordapp.com", "discordapp.net", "discord.media"]
+    },
+    {
+      "id": "chatgpt",
+      "name": "ChatGPT",
+      "domains": ["chatgpt.com", "openai.com", "oaistatic.com", "oaiusercontent.com"]
+    }
+  ]
+}

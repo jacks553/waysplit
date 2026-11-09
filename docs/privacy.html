@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Waysplit — политика конфиденциальности / Privacy policy</title>
+  <style>
+    :root { color-scheme: light dark; --fg: #1f2328; --muted: #57606a; --bg: #ffffff; --line: #d0d7de; --accent: #2563eb; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fg: #e6edf3; --muted: #9da7b3; --bg: #0d1117; --line: #30363d; --accent: #6ea8fe; }
+    }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 20px 64px; }
+    h1 { font-size: 28px; line-height: 1.25; margin: 0 0 4px; }
+    h2 { font-size: 20px; margin: 32px 0 8px; }
+    .lang { display: flex; gap: 12px; margin: 8px 0 24px; }
+    .muted { color: var(--muted); }
+    a { color: var(--accent); }
+    code { font: 14px ui-monospace, "Cascadia Mono", Consolas, monospace; overflow-wrap: anywhere; }
+    li { margin: 4px 0; }
+    hr { border: 0; border-top: 1px solid var(--line); margin: 48px 0; }
+  </style>
+</head>
+<body>
+<main>
+  <nav class="lang"><a href="#ru">Русский</a><a href="#en">English</a></nav>
+
+  <article id="ru" lang="ru">
+    <h1>Политика конфиденциальности Waysplit</h1>
+    <p class="muted">Обновлено 8 ноября 2026 г. Относится к расширению Chrome «Waysplit» и программе-компаньону для Windows (waysplit-host).</p>
+
+    <p>Waysplit — VPN только для браузера Chrome через серверы, которые добавляете вы сами. <strong>Разработчик Waysplit не получает никаких ваших данных:</strong> у Waysplit нет своего сервера, учётных записей, аналитики, рекламы и телеметрии. Всё, что вы вводите, остаётся на вашем компьютере, а по сети уходит только туда, куда это нужно для работы, — список ниже.</p>
+
+    <h2>Что хранится и где</h2>
+    <p>Только на вашем компьютере:</p>
+    <ul>
+      <li><strong>В Chrome</strong> (хранилище расширения): серверы — ссылки <code>vless://</code> и <code>hysteria2://</code> со всеми параметрами, включая ключи и пароли; адреса подписок и то, что пришло с ними (трафик, срок, сообщение провайдера); правила для сайтов; настройки. Журнал событий для диагностики хранится только до закрытия браузера.</li>
+      <li><strong>В папке компаньона</strong> <code>%LOCALAPPDATA%\Waysplit</code>: файлы настроек ядер sing-box и Xray (в них данные серверов), журналы работы (ключи, пароли и адреса подписок в них скрыты), идентификатор устройства (см. ниже).</li>
+    </ul>
+    <p>Резервную копию («Настройки» → «Резервная копия» → «Сохранить копию») вы делаете сами, и в ней есть ссылки серверов с ключами — храните её как пароль.</p>
+
+    <h2>Какие сетевые запросы делает Waysplit</h2>
+    <ol>
+      <li><strong>Ваши VPN-серверы.</strong> Сайты, которые по вашим настройкам идут через VPN, Chrome открывает через выбранный вами сервер.</li>
+      <li><strong>Ваши подписки.</strong> Компаньон скачивает список серверов по адресу подписки: когда вы её добавляете, по кнопке «Обновить» и по расписанию из настроек. В запросе есть заголовок User-Agent из настроек (по умолчанию <code>v2rayN/7.0</code>: с ним панели подписок отдают список серверов, а не веб-страницу). Если напрямую подписка не скачалась, а VPN включён, запрос повторяется через текущий сервер.</li>
+      <li><strong>Проверка связи с сервером («пинг»):</strong> запрос к <code>https://www.gstatic.com/generate_204</code> (адрес Google для проверки соединения) через проверяемый сервер — по кнопке «Пинг» и для текущего сервера, когда открыто окно расширения.</li>
+      <li><strong>«Мой IP сейчас»</strong> (в диагностике): только по вашей кнопке — запрос к <code>https://api.ipify.org</code> через текущий сервер, чтобы показать, какой IP-адрес видят сайты.</li>
+    </ol>
+    <p>Запросы 3 и 4 не содержат никаких сведений о вас; адресаты видят только IP-адрес вашего VPN-сервера. Что делают со своими данными ваш VPN-провайдер и провайдер подписки, определяют их правила.</p>
+
+    <h2>Идентификатор устройства</h2>
+    <p>Некоторые провайдеры подписок выдают серверы, только если программа назовёт своё устройство: так они ограничивают число устройств на подписку. Для этого у Waysplit есть идентификатор устройства:</p>
+    <ul>
+      <li>это <strong>случайный номер, не связанный с оборудованием</strong> компьютера: не серийный номер, не MAC-адрес и не номер установки Windows;</li>
+      <li>он <strong>хранится только на этом компьютере</strong> — в файле <code>%LOCALAPPDATA%\Waysplit\device-id</code>;</li>
+      <li>он <strong>отправляется только провайдеру подписки и только если провайдер его требует</strong>: сначала подписка запрашивается без него, и только если без него провайдер серверов не даёт, запрос повторяется с ним. Такая подписка помечается в настройках как привязанная к устройству, и дальше она обновляется с идентификатором;</li>
+      <li>он отправляется только по защищённому соединению (<code>https://</code>).</li>
+    </ul>
+    <p>Вместе с ним провайдер получает название системы (Windows), её версию (10 или 11) и модель устройства «Chrome» — так это устройство понятно называется в списке устройств у провайдера. Удалить идентификатор: «Удалить.cmd» спросит об этом (см. ниже), или удалите сам файл. Учтите: без него при повторной установке провайдер посчитает компьютер новым устройством. Отвязать устройство от подписки — в личном кабинете провайдера.</p>
+
+    <h2>Что расширение видит в браузере</h2>
+    <ul>
+      <li><strong>Адрес открытой вкладки</strong> — только её домен и только когда вы открываете окно Waysplit (разрешение <code>activeTab</code>): чтобы показать, идёт ли этот сайт через VPN, и дать добавить для него правило.</li>
+      <li><strong>«Домены этой вкладки»</strong> — только после вашего разрешения (необязательные разрешения <code>webRequest</code> и доступ к сайтам; Chrome спросит его, когда вы первый раз нажмёте эту кнопку). С этого момента расширение отмечает, к каким доменам обращаются вкладки (картинки, видео и скрипты часто идут с других доменов), чтобы по кнопке показать этот список и дать добавить домены в правила. Запоминаются только имена доменов — не адреса страниц и не содержимое; у каждой вкладки свой список (не больше 300 доменов), он начинается заново на новой странице и хранится только в памяти браузера до его закрытия. Список показывается только вам и никуда не отправляется. Разрешение можно отозвать в настройках Chrome (сведения о расширении → доступ к сайтам).</li>
+      <li><strong>Значки сайтов</strong> (разрешение <code>favicon</code>) — у правил и у открытого сайта в окне Waysplit. Значки берутся только из памяти самого Chrome — тех сайтов, что вы уже открывали: Waysplit не делает за ними запросов в интернет и не обращается к сторонним сервисам, поэтому список ваших правил никуда не уходит. Нет значка — показывается первая буква домена.</li>
+      <li><strong>Настройки прокси и WebRTC Chrome</strong> (<code>proxy</code>, <code>privacy</code>) — чтобы направлять сайты через VPN и чтобы WebRTC не выдавал ваш настоящий IP-адрес.</li>
+    </ul>
+    <p>История браузера, содержимое страниц, вводимые данные и всё остальное не собираются и никуда не передаются.</p>
+
+    <h2>Передача данных</h2>
+    <p>Разработчик данные не получает, поэтому ничего не продаёт и никому не передаёт. Данные не используются для рекламы, не передаются брокерам данных, их не читают люди. Использование данных в Waysplit соответствует правилам Chrome Web Store User Data Policy, включая требования Limited Use.</p>
+
+    <h2>Как всё удалить</h2>
+    <ol>
+      <li>Удалите расширение в Chrome (правой кнопкой по значку Waysplit → «Удалить из Chrome») — вместе с ним удалятся серверы, подписки, правила и настройки.</li>
+      <li>Запустите «Удалить.cmd» из архива компаньона или из папки <code>%LOCALAPPDATA%\Programs\Waysplit</code> — он снимет регистрацию компаньона в Chrome и удалит папку программы <code>%LOCALAPPDATA%\Programs\Waysplit</code> и данные в <code>%LOCALAPPDATA%\Waysplit</code> (журналы, настройки ядер). Идентификатор устройства он удалит, только если на его вопрос ответить «да»; по умолчанию идентификатор остаётся, чтобы при повторной установке провайдер не посчитал компьютер новым устройством.</li>
+      <li>Резервные копии, которые вы сохраняли сами, удалите вручную.</li>
+    </ol>
+
+    <h2>Изменения и связь</h2>
+    <p>Эта страница хранится в репозитории Waysplit; история её изменений — там же. Вопросы — в разделе Issues: <a href="https://github.com/jacks553/waysplit/issues">github.com/jacks553/waysplit/issues</a>.</p>
+  </article>
+
+  <hr>
+
+  <article id="en" lang="en">
+    <h1>Waysplit privacy policy</h1>
+    <p class="muted">Last updated: November 8, 2026. Applies to the “Waysplit” Chrome extension and its Windows companion program (waysplit-host).</p>
+
+    <p>Waysplit is a browser-only VPN for Chrome that uses servers you add yourself. <strong>The Waysplit developer does not receive any of your data:</strong> Waysplit has no server of its own, no accounts, no analytics, no ads and no telemetry. Everything you enter stays on your computer; the only network requests are the ones needed for it to work, listed below.</p>
+
+    <h2>What is stored and where</h2>
+    <p>Only on your computer:</p>
+    <ul>
+      <li><strong>In Chrome</strong> (extension storage): servers — <code>vless://</code> and <code>hysteria2://</code> links with all their parameters, including keys and passwords; subscription URLs and what came with them (traffic, expiry date, provider message); site rules; settings. The diagnostic event log is kept only until the browser is closed.</li>
+      <li><strong>In the companion folder</strong> <code>%LOCALAPPDATA%\Waysplit</code>: configuration files for the sing-box and Xray cores (they contain server details), operation logs (keys, passwords and subscription URLs are masked), and the device identifier (see below).</li>
+    </ul>
+    <p>A backup (settings → “Резервная копия” → “Сохранить копию”, i.e. Backup → Save copy) is made only by you and contains server links with keys — keep it like a password.</p>
+
+    <h2>Network requests Waysplit makes</h2>
+    <ol>
+      <li><strong>Your VPN servers.</strong> Sites that your settings send through the VPN are opened by Chrome via the server you selected.</li>
+      <li><strong>Your subscriptions.</strong> The companion downloads the server list from the subscription URL: when you add it, when you press “Обновить” (Update), and on the schedule set in the settings. The request carries the User-Agent header from the settings (by default <code>v2rayN/7.0</code>, which makes subscription panels return a server list instead of a web page). If the direct download fails while the VPN is on, the request is repeated through the current server.</li>
+      <li><strong>Server connectivity check (“ping”):</strong> a request to <code>https://www.gstatic.com/generate_204</code> (Google’s connectivity-check address) through the server being checked — when you press “Пинг” (Ping), and for the current server while the extension window is open.</li>
+      <li><strong>“Мой IP сейчас” (My IP now)</strong>, in diagnostics: only when you press the button — a request to <code>https://api.ipify.org</code> through the current server, to show which IP address websites see.</li>
+    </ol>
+    <p>Requests 3 and 4 carry no information about you; their recipients see only the IP address of your VPN server. What your VPN provider and subscription provider do with their data is governed by their own policies.</p>
+
+    <h2>Device identifier</h2>
+    <p>Some subscription providers hand out servers only if the app identifies its device; this is how they limit the number of devices per subscription. For this, Waysplit has a device identifier:</p>
+    <ul>
+      <li>it is a <strong>random number not tied to the computer’s hardware</strong> — not a serial number, not a MAC address and not the Windows installation ID;</li>
+      <li>it is <strong>stored only on this computer</strong>, in the file <code>%LOCALAPPDATA%\Waysplit\device-id</code>;</li>
+      <li>it is <strong>sent only to the subscription provider and only if the provider requires it</strong>: the subscription is first requested without it, and only if the provider returns no servers without it is the request repeated with it. Such a subscription is marked in the settings as bound to the device and is then updated with the identifier;</li>
+      <li>it is sent only over a secure connection (<code>https://</code>).</li>
+    </ul>
+    <p>Together with it the provider receives the operating system name (Windows), its version (10 or 11) and the device model “Chrome”, so the device is recognizable in the provider’s device list. To delete the identifier, “Удалить.cmd” (Uninstall) will ask you about it (see below), or delete the file itself. Note that without it the provider will count the computer as a new device after a reinstall. To unbind the device from a subscription, use the provider’s account page.</p>
+
+    <h2>What the extension sees in the browser</h2>
+    <ul>
+      <li><strong>The address of the open tab</strong> — only its domain and only when you open the Waysplit window (<code>activeTab</code> permission): to show whether this site goes through the VPN and let you add a rule for it.</li>
+      <li><strong>“Домены этой вкладки” (Domains of this tab)</strong> — only after you grant permission (optional <code>webRequest</code> and site access permissions; Chrome asks the first time you press this button). From then on the extension notes which domains the tabs contact (images, video and scripts often come from other domains), so that on request it can show this list and let you add those domains to rules. Only domain names are kept — not page addresses and not content; each tab has its own list (at most 300 domains), which starts over on a new page and is kept only in browser memory until the browser is closed. The list is shown only to you and is not sent anywhere. You can revoke the permission in Chrome’s settings (extension details → site access).</li>
+      <li><strong>Website icons</strong> (<code>favicon</code> permission) — next to your site rules and the open site in the Waysplit window. Icons are read only from Chrome’s own local cache of sites you have already visited: Waysplit makes no network requests for them and uses no third-party services, so your list of rules never leaves the computer. If there is no icon, the first letter of the domain is shown.</li>
+      <li><strong>Chrome proxy and WebRTC settings</strong> (<code>proxy</code>, <code>privacy</code>) — to route sites through the VPN and keep WebRTC from exposing your real IP address.</li>
+    </ul>
+    <p>Browsing history, page content, form input and anything else are not collected and are not transmitted anywhere.</p>
+
+    <h2>Sharing</h2>
+    <p>The developer receives no data, so nothing is sold or shared with anyone. Data is not used for advertising, is not transferred to data brokers, and is not read by humans. Waysplit’s use of data complies with the Chrome Web Store User Data Policy, including the Limited Use requirements.</p>
+
+    <h2>How to delete everything</h2>
+    <ol>
+      <li>Remove the extension in Chrome (right-click the Waysplit icon → “Remove from Chrome”) — servers, subscriptions, rules and settings are deleted with it.</li>
+      <li>Run “Удалить.cmd” (Uninstall) from the companion archive or from <code>%LOCALAPPDATA%\Programs\Waysplit</code> — it unregisters the companion from Chrome and deletes the program folder <code>%LOCALAPPDATA%\Programs\Waysplit</code> and the data in <code>%LOCALAPPDATA%\Waysplit</code> (logs, core configurations). It deletes the device identifier only if you answer “да” (yes) to its question; by default the identifier is kept, so that after a reinstall the provider does not count the computer as a new device.</li>
+      <li>Delete any backups you saved yourself.</li>
+    </ol>
+
+    <h2>Changes and contact</h2>
+    <p>This page is kept in the Waysplit repository, together with its change history. Questions: the Issues section at <a href="https://github.com/jacks553/waysplit/issues">github.com/jacks553/waysplit/issues</a>.</p>
+  </article>
+</main>
+</body>
+</html>

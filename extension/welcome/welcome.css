@@ -1,0 +1,59 @@
+/* Страница «Начало работы» — в стиле окна расширения (SPEC-POPUP.md): сине-бирюзовый, карточки,
+   та же тема (как в системе, светлая, тёмная). Общие цвета и кнопки — lib/common.css. */
+
+body { background: var(--bg-full); }
+.wrap { max-width: 760px; margin: 0 auto; padding: 32px 24px 48px; display: grid; gap: 20px; }
+
+.hero {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  padding: 22px 26px;
+  border-radius: 18px;
+  background: var(--grad);
+  color: #fff;
+  box-shadow: var(--shadow);
+}
+.hero img { flex: none; filter: drop-shadow(0 6px 14px rgb(0 0 0 / 0.25)); }
+.hero h1 { margin: 0 0 6px; font-size: 24px; font-weight: 700; letter-spacing: -0.2px; }
+.hero p { color: rgb(255 255 255 / 0.92); }
+.hero .name-note { font-weight: 600; margin-bottom: 4px; }
+
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.step {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 14px;
+  padding: 16px 18px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.step[data-done="true"] { border-color: color-mix(in srgb, var(--brand-2) 55%, var(--line)); }
+.mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.step[data-done="true"] .mark { background: var(--grad); color: #fff; font-size: 0; }
+.step[data-done="true"] .mark::after { content: "✓"; font-size: 18px; }
+.body { display: grid; gap: 8px; min-width: 0; }
+.body h2 { margin: 4px 0 0; font-size: 17px; }
+.body code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); border-radius: 4px; padding: 1px 5px; }
+.howto { display: grid; gap: 8px; }
+.install { margin: 0; padding-left: 22px; display: grid; gap: 4px; }
+.howto a.btn { text-decoration: none; }
+.release-link { font-size: 13px; color: var(--accent); }
+.note { color: var(--muted); font-size: 13px; }
+.state { font-weight: 600; }
+.state[data-kind="ok"] { color: var(--ok); }
+.state[data-kind="error"] { color: var(--err); }
+.row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ghost, .btn { justify-self: start; }
+.foot { color: var(--muted); font-size: 13px; }
+.foot a { color: var(--accent); font-weight: 600; }

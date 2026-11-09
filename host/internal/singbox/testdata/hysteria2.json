@@ -1,0 +1,105 @@
+{
+  "log": {
+    "level": "warn",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "type": "local",
+        "tag": "local"
+      }
+    ]
+  },
+  "inbounds": [
+    {
+      "type": "mixed",
+      "tag": "in-hy",
+      "listen": "127.0.0.1",
+      "listen_port": 27110
+    },
+    {
+      "type": "mixed",
+      "tag": "in-multi",
+      "listen": "127.0.0.1",
+      "listen_port": 27111
+    },
+    {
+      "type": "mixed",
+      "tag": "in-mport",
+      "listen": "127.0.0.1",
+      "listen_port": 27112
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "hysteria2",
+      "tag": "out-hy",
+      "server": "hy.example.com",
+      "server_port": 443,
+      "password": "p@ss:word",
+      "tls": {
+        "enabled": true,
+        "server_name": "hy.example.com"
+      }
+    },
+    {
+      "type": "hysteria2",
+      "tag": "out-multi",
+      "server": "hy.example.com",
+      "server_ports": [
+        "443:443",
+        "20000:50000"
+      ],
+      "hop_interval": "30s",
+      "password": "pw",
+      "obfs": {
+        "type": "salamander",
+        "password": "ob"
+      },
+      "tls": {
+        "enabled": true,
+        "server_name": "hy.example.com"
+      }
+    },
+    {
+      "type": "hysteria2",
+      "tag": "out-mport",
+      "server": "192.0.2.10",
+      "server_ports": [
+        "8443:8443",
+        "30000:31000"
+      ],
+      "hop_interval": "30s",
+      "password": "pw",
+      "tls": {
+        "enabled": true,
+        "server_name": "192.0.2.10",
+        "insecure": true
+      }
+    }
+  ],
+  "route": {
+    "default_domain_resolver": "local",
+    "rules": [
+      {
+        "inbound": [
+          "in-hy"
+        ],
+        "outbound": "out-hy"
+      },
+      {
+        "inbound": [
+          "in-multi"
+        ],
+        "outbound": "out-multi"
+      },
+      {
+        "inbound": [
+          "in-mport"
+        ],
+        "outbound": "out-mport"
+      }
+    ]
+  }
+}

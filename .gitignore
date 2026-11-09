@@ -1,0 +1,35 @@
+# Программы: собранный компаньон, sing-box и его библиотека
+bin/
+*.exe
+*.dll
+# Значок и сведения о версии для exe: tools/release кладёт в host/ только на время сборки
+*.syso
+
+# Логи
+*.log
+
+# Мои ссылки для отладки (этап 1) — там секреты
+links.local.txt
+*.local.txt
+*.local.json
+
+# Приватный ключ расширения (tools/genkey) — в git не класть
+*.pem
+*.key
+
+# Резервные копии серверов и правил — там секреты
+waysplit-backup*.json
+linkvpn-backup*.json
+*.bak
+
+# Node.js (только для тестов расширения)
+node_modules/
+
+# Мусор редакторов и системы
+.vscode/
+Thumbs.db
+desktop.ini
+
+# Сборки для выкладки (tools/release)
+dist/
+store/*.zip

@@ -1,0 +1,7 @@
+# Переводы строк в репозитории — LF (как принято для Go и JS)
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.png binary
+*.ico binary
+*.woff2 binary

@@ -1,0 +1,35 @@
+{
+  "_note": "Ядра Waysplit — единственное место, где записаны их версии и SHA-256. Официальный архив выпуска (zip, zipSha256) и файлы из него (files: путь в архиве, имя у нас, SHA-256 файла — по ним уже скачанные ядра узнаются без интернета). Берут отсюда: tools/cores.ps1 (скачать и сверить: setup.ps1, build-companion.ps1, ci.ps1) и tools/release (положить в архив компаньона, CORES.txt). libcronet.dll из архива sing-box не берём: она нужна только протоколу naive, которого в Waysplit нет (sing-box без неё проверяет конфиг и работает — проверено 2026-11-08).",
+  "cores": [
+    {
+      "name": "sing-box",
+      "version": "1.14.4",
+      "author": "SagerNet",
+      "license": "GPL-3.0-or-later",
+      "zip": "https://github.com/SagerNet/sing-box/releases/download/v1.14.4/sing-box-1.14.4-windows-amd64.zip",
+      "zipSha256": "99185d75d314a07dbba4a130c8ad986cbeb629a07927975636b341ca61f991df",
+      "sourceTree": "https://github.com/SagerNet/sing-box/tree/v1.14.4",
+      "sourceArchive": "https://github.com/SagerNet/sing-box/archive/refs/tags/v1.14.4.tar.gz",
+      "sourceName": "sing-box-1.14.4-source.tar.gz",
+      "files": [
+        { "from": "sing-box-1.14.4-windows-amd64/sing-box.exe", "name": "sing-box.exe", "sha256": "8f30682ee198855440d2a7fe070d5d3653793b2d01bb8c85eea88f93bbe7c8b9" },
+        { "from": "sing-box-1.14.4-windows-amd64/LICENSE", "name": "sing-box-LICENSE.txt", "sha256": "bb3805862b583aee73ad6f7805ec634747a37257a637a3069857843f05ea589c" }
+      ]
+    },
+    {
+      "name": "Xray-core",
+      "version": "26.10.31",
+      "author": "XTLS",
+      "license": "MPL-2.0",
+      "zip": "https://github.com/XTLS/Xray-core/releases/download/v26.10.31/Xray-windows-64.zip",
+      "zipSha256": "2e04a9995a6f2ad1b28c0bb25c708ecb2695e43a1c9c7889c4b6ac2b48cf7a6a",
+      "sourceTree": "https://github.com/XTLS/Xray-core/tree/v26.10.31",
+      "sourceArchive": "https://github.com/XTLS/Xray-core/archive/refs/tags/v26.10.31.tar.gz",
+      "sourceName": "Xray-core-26.10.31-source.tar.gz",
+      "files": [
+        { "from": "xray.exe", "name": "xray.exe", "sha256": "d5b558191cccb1e92a5772b68b8cab67717b26f634b0f15153215f65ae982a7e" },
+        { "from": "LICENSE", "name": "xray-LICENSE.txt", "sha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5" }
+      ]
+    }
+  ]
+}

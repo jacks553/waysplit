@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Waysplit</title>
+  <link rel="icon" href="../icons/icon32.png">
+  <link rel="stylesheet" href="../lib/common.css">
+  <link rel="stylesheet" href="popup.css">
+  <script type="module" src="popup.js"></script>
+</head>
+<!-- Окно расширения (SPEC-POPUP.md): вкладки внизу, вложенные экраны поверх вкладки. Та же
+     страница открывается и на всю вкладку браузера (?full — «Развернуть», страница настроек). -->
+<body>
+<div class="app" id="app">
+  <header class="top" id="top">
+    <img class="logo" src="../icons/icon48.png" alt="" width="24" height="24">
+    <span class="brand">Waysplit</span>
+    <button class="icon-btn" id="helpBtn" type="button" aria-label="Помощь" aria-haspopup="menu" title="Помощь"></button>
+    <button class="icon-btn" id="expandBtn" type="button" aria-label="Развернуть на всю вкладку" title="Развернуть на всю вкладку"></button>
+  </header>
+
+  <main class="content" id="content">
+    <!-- Главная -->
+    <section class="panel" id="panel-home" role="tabpanel" aria-labelledby="tab-home">
+      <div class="conflict" id="conflict" role="alert" hidden>
+        <strong>Прокси сейчас управляет другое расширение.</strong>
+        Отключите его: пока оно включено, Waysplit не может направить трафик через свой сервер.
+      </div>
+      <div class="conflict" id="webrtcWarn" role="alert" hidden>
+        <strong>Защита WebRTC не включилась.</strong>
+        Этой настройкой управляет другое расширение — сайты могут узнать ваш настоящий IP через WebRTC.
+      </div>
+
+      <section class="power-block">
+        <button class="power" id="power" type="button" aria-pressed="false" data-state="off">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5v8"/><path d="M6.6 6.9a7.6 7.6 0 1 0 10.8 0"/></svg>
+        </button>
+        <p class="power-label">VPN для всех сайтов</p>
+        <p class="status" id="status" aria-live="polite">Выключено</p>
+        <p class="detail" id="detail"></p>
+      </section>
+
+      <div class="problem" id="problem" hidden>
+        <p class="problem-text" id="problemText"></p>
+        <p class="hint" id="hint" hidden></p>
+        <button class="link small-link" id="problemGo" type="button" hidden></button>
+        <ol class="steps" id="steps" hidden></ol>
+        <div class="download-row" id="downloadRow" hidden>
+          <a class="btn btn-small" id="download" href="#" target="_blank" rel="noopener">Скачать</a>
+          <a class="release-link" id="releasePage" href="#" target="_blank" rel="noopener">страница выпуска</a>
+        </div>
+      </div>
+
+      <button class="card row-card" id="serverRow" type="button" hidden>
+        <span class="flag" id="srvFlag"></span>
+        <span class="row-main">
+          <span class="row-label">Сервер</span>
+          <span class="row-name" id="srvName"></span>
+        </span>
+        <span class="bars-slot" id="srvBars"></span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+
+      <section class="card site" id="site" hidden>
+        <span class="row-label">Этот сайт</span>
+        <div class="site-main">
+          <span class="favicon" id="siteIcon" aria-hidden="true"></span>
+          <select class="site-domain" id="siteDomain" aria-label="Для какого домена правило"></select>
+        </div>
+        <p class="site-why" id="siteWhy"></p>
+        <div class="site-warn" id="siteWarn" hidden>
+          <span id="siteWarnText"></span>
+          <button class="btn btn-small" id="siteWarnFix" type="button">Включить</button>
+        </div>
+        <div class="site-controls" id="siteControls">
+          <button class="switch-row" id="siteSwitch" type="button" role="switch" aria-checked="false">
+            <span class="switch" aria-hidden="true"></span>
+            <span id="siteSwitchText">Напрямую</span>
+          </button>
+          <button class="flag-btn" id="siteServer" type="button" aria-label="Сервер для этого сайта" title="Сервер для этого сайта">
+            <span class="flag" id="siteFlag"></span>
+            <span class="chev small" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="site-links">
+          <button class="link small-link" id="ruleRemove" type="button" hidden>Убрать правило</button>
+          <button class="link small-link" id="tdButton" type="button" aria-expanded="false">Домены этой вкладки</button>
+        </div>
+        <div class="td" id="td" hidden>
+          <p class="td-note" id="tdNote"></p>
+          <ul class="td-list" id="tdList"></ul>
+          <div class="td-actions" id="tdActions" hidden>
+            <select class="select-small" id="tdAction" aria-label="Что делать с отмеченными доменами"></select>
+            <button class="btn btn-small" id="tdAdd" type="button">Добавить правила</button>
+          </div>
+        </div>
+        <div class="reload" id="reload" hidden>
+          <span>Правило сохранено. Обновите вкладку: уже открытые соединения могут ещё идти по-старому.</span>
+          <button class="btn btn-small" id="reloadTab" type="button">Обновить вкладку</button>
+        </div>
+      </section>
+
+      <form class="card add-card" id="homeAdd" hidden>
+        <label class="row-label" for="homeLinks">Добавьте сервер: вставьте ссылку или адрес подписки</label>
+        <textarea id="homeLinks" rows="3" spellcheck="false" placeholder="vless://… или hysteria2://… — по одной на строку&#10;https://… — подписка"></textarea>
+        <button class="btn" id="homeAddBtn" type="submit">Добавить</button>
+        <p class="add-result" id="homeAddResult" hidden></p>
+      </form>
+    </section>
+
+    <!-- Серверы -->
+    <section class="panel" id="panel-servers" role="tabpanel" aria-labelledby="tab-servers" hidden>
+      <div class="panel-head">
+        <h2>Серверы <span class="count" id="srvCount"></span></h2>
+        <button class="btn btn-small" id="srvAdd" type="button">+ Добавить</button>
+      </div>
+      <input class="search" id="srvSearch" type="search" placeholder="Поиск по имени или адресу" autocomplete="off">
+      <div class="tools">
+        <button class="ghost" id="pingAll" type="button">Пинг всех</button>
+        <button class="ghost" id="fastest" type="button">Самый быстрый</button>
+      </div>
+      <div id="srvGroups"></div>
+      <p class="empty" id="srvEmpty" hidden>Серверов пока нет. Нажмите «+ Добавить» и вставьте ссылки серверов или адрес подписки.</p>
+      <p class="hint" id="srvHint">Нажмите на сервер, чтобы сделать его текущим. Порядок — перетаскиванием или «Выше» / «Ниже» в меню ⋯.</p>
+    </section>
+
+    <!-- Правила -->
+    <section class="panel" id="panel-rules" role="tabpanel" aria-labelledby="tab-rules" hidden>
+      <div class="panel-head">
+        <h2>Правила сайтов <span class="count" id="rulesCount"></span></h2>
+        <button class="icon-btn" id="rulesMore" type="button" aria-label="Ещё: наборы, импорт, экспорт" aria-haspopup="menu" title="Ещё"></button>
+      </div>
+      <form class="rule-add" id="ruleForm">
+        <textarea class="search rule-input" id="ruleInput" rows="1" spellcheck="false" placeholder="Введите домен" aria-label="Домен или адрес сайта (несколько — по одному на строку); заодно поиск по правилам"></textarea>
+        <select class="select-small rule-action" id="ruleAction" aria-label="Что делать с этими сайтами"></select>
+        <button class="btn plus" id="ruleAddBtn" type="submit" aria-label="Добавить правило" title="Добавить правило">+</button>
+      </form>
+      <p class="rules-off" id="rulesOff" hidden></p>
+      <ul class="rules" id="rulesList"></ul>
+      <div class="empty-box" id="rulesEmpty" hidden>
+        <p><b>Правил пока нет.</b> Правило говорит, как открывать сайт: через VPN (через текущий или выбранный сервер) или напрямую.</p>
+        <p>Например: <code>example.com</code> → «Без VPN» — сайт и все его поддомены (www.example.com, m.example.com) пойдут напрямую, даже когда VPN включён.</p>
+      </div>
+      <p class="hint" id="rulesHint">Правило для домена действует и на все поддомены, побеждает самое конкретное. Можно задать целую зону: ru, рф, su.</p>
+    </section>
+
+    <!-- Настройки -->
+    <section class="panel" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+      <div class="panel-head"><h2>Настройки</h2></div>
+
+      <fieldset class="group">
+        <legend>Если сервер недоступен</legend>
+        <label class="check"><input type="radio" name="onFailure" value="block">
+          <span><b>Не открывать сайт</b> — защита от утечки: без VPN сайт не откроется напрямую</span></label>
+        <label class="check"><input type="radio" name="onFailure" value="direct">
+          <span><b>Открыть напрямую</b> — сайт откроется, но с вашего настоящего IP</span></label>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend>Правила сайтов</legend>
+        <label class="check"><input type="checkbox" id="setRulesWhenOff">
+          <span>Правила работают, когда VPN выключен: сайты из правил «через VPN» идут через VPN, остальные — напрямую</span></label>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend>Защита и запуск</legend>
+        <label class="check"><input type="checkbox" id="webrtcProtection">
+          <span>Защита WebRTC: пока VPN включён, сайты не узнают настоящий IP через WebRTC (видеозвонки идут через VPN)</span></label>
+        <label class="field"><span>При запуске Chrome</span>
+          <select class="select-small" id="autoConnect">
+            <option value="restore">восстановить, как было</option>
+            <option value="off">VPN выключен</option>
+          </select></label>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend>Подписки</legend>
+        <label class="field"><span>User-Agent при скачивании</span>
+          <input class="search" id="subscriptionUA" type="text" spellcheck="false" maxlength="200"></label>
+        <label class="field"><span>Обновлять раз в, часов</span>
+          <input class="search narrow" id="subscriptionIntervalHours" type="number" min="1" max="168" step="1"></label>
+        <p class="hint">Если сервер подписки сам сообщает интервал, берётся его. С браузерным User-Agent панели вроде Marzban и Remnawave отдают веб-страницу вместо списка серверов.</p>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend>Для опытных</legend>
+        <label class="field"><span>Локальные порты серверов: начиная с <span class="hint" id="portRangeEnd"></span></span>
+          <input class="search narrow" id="portRangeStart" type="number" min="1024" max="65337" step="1"></label>
+        <label class="field"><span>Подробность журнала ядер</span>
+          <select class="select-small" id="logLevel">
+            <option value="error">только ошибки</option>
+            <option value="warn">предупреждения (обычно)</option>
+            <option value="info">подробно</option>
+            <option value="debug">очень подробно</option>
+            <option value="trace">всё</option>
+          </select></label>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend>Оформление</legend>
+        <label class="field"><span>Тема</span>
+          <select class="select-small" id="theme">
+            <option value="system">как в системе</option>
+            <option value="light">светлая</option>
+            <option value="dark">тёмная</option>
+          </select></label>
+      </fieldset>
+
+      <fieldset class="group">
+        <legend>Резервная копия</legend>
+        <p class="hint">Серверы, подписки, правила, избранное и настройки — в одном файле. <b>В файле секреты</b> (ссылки серверов и адреса подписок): храните его как пароль и никому не пересылайте.</p>
+        <div class="tools">
+          <button class="ghost" id="exportBackup" type="button">Сохранить копию</button>
+          <button class="ghost" id="importBackup" type="button">Восстановить из копии</button>
+          <input type="file" id="backupFile" accept=".json,application/json" hidden>
+        </div>
+      </fieldset>
+
+      <div class="card list-card">
+        <button class="list-row" id="openDiag" type="button"><span>Диагностика</span><span class="chev" aria-hidden="true"></span></button>
+        <a class="list-row" id="helpLink" target="_blank" rel="noopener"><span>Помощь</span><span class="ext" aria-hidden="true"></span></a>
+        <a class="list-row" id="issuesLink" target="_blank" rel="noopener"><span>Сообщить об ошибке</span><span class="ext" aria-hidden="true"></span></a>
+      </div>
+      <p class="versions" id="versions"></p>
+    </section>
+  </main>
+
+  <div class="screens" id="screens"></div>
+
+  <nav class="tabbar" role="tablist" aria-label="Разделы">
+    <button class="tab" id="tab-home" role="tab" type="button" data-tab="home" aria-controls="panel-home"><span class="tab-icon"></span><span>Главная</span></button>
+    <button class="tab" id="tab-servers" role="tab" type="button" data-tab="servers" aria-controls="panel-servers"><span class="tab-icon"></span><span>Серверы</span></button>
+    <button class="tab" id="tab-rules" role="tab" type="button" data-tab="rules" aria-controls="panel-rules"><span class="tab-icon"></span><span>Правила</span></button>
+    <button class="tab" id="tab-settings" role="tab" type="button" data-tab="settings" aria-controls="panel-settings"><span class="tab-icon"></span><span>Настройки</span></button>
+  </nav>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+</div>
+
+<div class="pop" id="pop" popover="auto" role="menu"></div>
+<dialog class="dlg" id="dlg">
+  <form method="dialog" class="dlg-form" id="dlgForm">
+    <p class="dlg-title" id="dlgTitle"></p>
+    <p class="dlg-text" id="dlgText"></p>
+    <input class="search" id="dlgInput" type="text" maxlength="100" hidden>
+    <div class="dlg-buttons">
+      <button class="ghost" value="cancel" type="submit" id="dlgCancel">Отмена</button>
+      <button class="btn" value="ok" type="submit" id="dlgOk">ОК</button>
+    </div>
+  </form>
+</dialog>
+</body>
+</html>

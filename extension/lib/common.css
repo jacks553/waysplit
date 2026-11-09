@@ -1,0 +1,184 @@
+/* Общее для окна расширения и «Начала работы»: цвета (светлая и тёмная тема), шрифты, кнопки. */
+
+/* Chrome на Windows не рисует эмодзи-флаги — берём их из шрифта Twemoji Country Flags
+   (только символы флагов; остальной текст — системным шрифтом). Лицензия: fonts/LICENSE-*.md */
+@font-face {
+  font-family: "Twemoji Country Flags";
+  unicode-range: U+1F1E6-1F1FF, U+1F3F4, U+E0062-E0063, U+E0065, U+E0067, U+E006C, U+E006E, U+E0073-E0074, U+E0077, U+E007F;
+  src: url("../fonts/TwemojiCountryFlags.woff2") format("woff2");
+  font-display: swap;
+}
+
+:root {
+  --bg: #f4f6fa;
+  --card: #ffffff;
+  --text: #172033;
+  --muted: #5d6b82;
+  --line: #e2e7f0;
+  --hover: #f0f3f9;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-soft: #e8efff;
+  --ok: #0f9d6b;
+  --mid: #b97f04;
+  --warn: #b97f04;
+  --warn-bg: #fff6dd;
+  --err: #d23b3b;
+  --err-bg: #fdecec;
+  --code-bg: #eef2f8;
+  --idle: #c3cad6;
+  --brand-1: #2563eb;
+  --brand-2: #0d9488;
+  --teal: #0d9488;
+  --grad: linear-gradient(135deg, #2563eb 0%, #1d6fd0 45%, #0d9488 100%);
+  --bar4: #16a34a;
+  --bar3: #65a30d;
+  --bar2: #d97706;
+  --bar1: #dc2626;
+  --bar-off: #d5dbe5;
+  --bg-full: #e9edf4;
+  --shadow: 0 8px 28px rgb(23 32 51 / 0.16);
+  --font: "Twemoji Country Flags", "Segoe UI", system-ui, sans-serif;
+  --mono: Consolas, "Cascadia Mono", monospace;
+  color-scheme: light;
+}
+
+/* Тёмная тема: по системе (если в настройках не выбрана светлая) или выбрана явно. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151d;
+    --card: #1a202b;
+    --text: #e8edf6;
+    --muted: #93a0b5;
+    --line: #2a3242;
+    --hover: #222a37;
+    --accent: #4f86f7;
+    --accent-hover: #6b9af8;
+    --accent-soft: #1f2c47;
+    --ok: #2fc48d;
+    --mid: #e0a826;
+    --warn: #e0a826;
+    --warn-bg: #3a3017;
+    --err: #f06a6a;
+    --err-bg: #3a1f23;
+    --code-bg: #232b38;
+    --idle: #4a5568;
+  --brand-1: #3b74f0;
+  --brand-2: #14a597;
+  --teal: #2dd4bf;
+  --grad: linear-gradient(135deg, #2f6ae6 0%, #2167c4 45%, #0f9b8e 100%);
+  --bar4: #34d27f;
+  --bar3: #a3d64a;
+  --bar2: #f0a63a;
+  --bar1: #f06a6a;
+  --bar-off: #3a4456;
+  --bg-full: #0b0f15;
+  --shadow: 0 10px 30px rgb(0 0 0 / 0.5);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #11151d;
+  --card: #1a202b;
+  --text: #e8edf6;
+  --muted: #93a0b5;
+  --line: #2a3242;
+  --hover: #222a37;
+  --accent: #4f86f7;
+  --accent-hover: #6b9af8;
+  --accent-soft: #1f2c47;
+  --ok: #2fc48d;
+  --mid: #e0a826;
+  --warn: #e0a826;
+  --warn-bg: #3a3017;
+  --err: #f06a6a;
+  --err-bg: #3a1f23;
+  --code-bg: #232b38;
+  --idle: #4a5568;
+  --brand-1: #3b74f0;
+  --brand-2: #14a597;
+  --teal: #2dd4bf;
+  --grad: linear-gradient(135deg, #2f6ae6 0%, #2167c4 45%, #0f9b8e 100%);
+  --bar4: #34d27f;
+  --bar3: #a3d64a;
+  --bar2: #f0a63a;
+  --bar1: #f06a6a;
+  --bar-off: #3a4456;
+  --bg-full: #0b0f15;
+  --shadow: 0 10px 30px rgb(0 0 0 / 0.5);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; } /* иначе display у блоков перебивает hidden */
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 var(--font);
+}
+
+p { margin: 0; }
+/* select — тоже: иначе в выпадающих списках флаги стран вместо картинки рисуются буквами («DE»). */
+button, input, select, textarea { font: inherit; color: inherit; }
+
+.btn {
+  appearance: none;
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 14px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn:hover { background: var(--accent-hover); }
+.btn:disabled { opacity: 0.6; cursor: default; }
+.btn:focus-visible, .link:focus-visible, .ghost:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn-small { padding: 6px 10px; font-size: 13px; }
+
+.ghost {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: var(--card);
+  font-size: 13px;
+  cursor: pointer;
+}
+.ghost:hover { background: var(--hover); }
+.ghost:disabled { opacity: 0.55; cursor: default; }
+.ghost.danger { color: var(--err); }
+
+.link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+.link:hover { text-decoration: underline; }
+
+.label { color: var(--muted); font-size: 12px; }
+
+textarea, .search {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  padding: 7px 9px;
+}
+textarea { resize: vertical; min-height: 64px; font: 12px/1.4 var(--mono); }
+textarea:focus-visible, .search:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+
+/* Пинг: good < 200 мс, mid < 500, bad — дольше, fail — нет ответа. */
+.ping { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; color: var(--muted); }
+.ping[data-level="good"] { color: var(--ok); }
+.ping[data-level="mid"] { color: var(--mid); }
+.ping[data-level="bad"], .ping[data-level="fail"] { color: var(--err); }
+
+.add-result { font-size: 13px; }
+.add-result[data-kind="error"] { color: var(--err); }

@@ -1,0 +1,9 @@
+{
+  "name": "waysplit",
+  "private": true,
+  "description": "Только для тестов кода расширения: npm test (нужен Node.js). Само расширение сборки не требует.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"tests/**/*.test.js\""
+  }
+}

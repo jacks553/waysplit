@@ -1,0 +1,180 @@
+{
+  "log": {
+    "loglevel": "warning",
+    "access": "none"
+  },
+  "inbounds": [
+    {
+      "tag": "in-s_a",
+      "listen": "127.0.0.1",
+      "port": 27101,
+      "protocol": "socks",
+      "settings": {
+        "auth": "noauth",
+        "udp": false
+      }
+    },
+    {
+      "tag": "in-s_b",
+      "listen": "127.0.0.1",
+      "port": 27102,
+      "protocol": "socks",
+      "settings": {
+        "auth": "noauth",
+        "udp": false
+      }
+    },
+    {
+      "tag": "in-s_c",
+      "listen": "127.0.0.1",
+      "port": 27103,
+      "protocol": "socks",
+      "settings": {
+        "auth": "noauth",
+        "udp": false
+      }
+    },
+    {
+      "tag": "in-s_d",
+      "listen": "127.0.0.1",
+      "port": 27104,
+      "protocol": "socks",
+      "settings": {
+        "auth": "noauth",
+        "udp": false
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "block",
+      "protocol": "blackhole"
+    },
+    {
+      "tag": "out-s_a",
+      "protocol": "vless",
+      "settings": {
+        "address": "eu.example.com",
+        "port": 443,
+        "id": "d47d7dee-9073-46b1-a078-dc5be5c1524b",
+        "encryption": "none"
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "www.example.org",
+          "fingerprint": "chrome",
+          "password": "eG9ft1Ut-iZk-V87OwAE_APpKV_H8OYoS1KBvjlJwlg",
+          "shortId": "b43351f6",
+          "spiderX": "/"
+        },
+        "xhttpSettings": {
+          "host": "cdn.example.com",
+          "path": "/xh",
+          "mode": "packet-up",
+          "extra": {
+            "xPaddingBytes": "100-1000"
+          }
+        }
+      }
+    },
+    {
+      "tag": "out-s_b",
+      "protocol": "vless",
+      "settings": {
+        "address": "tls.example.com",
+        "port": 443,
+        "id": "d47d7dee-9073-46b1-a078-dc5be5c1524b",
+        "encryption": "none"
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "tls.example.com",
+          "alpn": [
+            "h2",
+            "http/1.1"
+          ],
+          "fingerprint": "firefox",
+          "pinnedPeerCertSha256": "6f0dbd0c8b8a5f2d7a3b9a1c0e4f5d6c7b8a9f0e1d2c3b4a59687766554433ff",
+          "verifyPeerCertByName": "real.example.com,alt.example.com"
+        },
+        "xhttpSettings": {
+          "path": "/p"
+        }
+      }
+    },
+    {
+      "tag": "out-s_c",
+      "protocol": "vless",
+      "settings": {
+        "address": "enc.example.com",
+        "port": 443,
+        "id": "d47d7dee-9073-46b1-a078-dc5be5c1524b",
+        "flow": "xtls-rprx-vision",
+        "encryption": "mlkem768x25519plus.native.0rtt.eG9ft1Ut-iZk-V87OwAE_APpKV_H8OYoS1KBvjlJwlg"
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "www.example.org",
+          "fingerprint": "chrome",
+          "password": "eG9ft1Ut-iZk-V87OwAE_APpKV_H8OYoS1KBvjlJwlg",
+          "shortId": "ab"
+        }
+      }
+    },
+    {
+      "tag": "out-s_d",
+      "protocol": "vless",
+      "settings": {
+        "address": "ws.example.com",
+        "port": 443,
+        "id": "d47d7dee-9073-46b1-a078-dc5be5c1524b",
+        "encryption": "mlkem768x25519plus.native.0rtt.eG9ft1Ut-iZk-V87OwAE_APpKV_H8OYoS1KBvjlJwlg"
+      },
+      "streamSettings": {
+        "network": "ws",
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "ws.example.com"
+        },
+        "wsSettings": {
+          "host": "ws.example.com",
+          "path": "/ws"
+        }
+      }
+    }
+  ],
+  "routing": {
+    "rules": [
+      {
+        "inboundTag": [
+          "in-s_a"
+        ],
+        "outboundTag": "out-s_a"
+      },
+      {
+        "inboundTag": [
+          "in-s_b"
+        ],
+        "outboundTag": "out-s_b"
+      },
+      {
+        "inboundTag": [
+          "in-s_c"
+        ],
+        "outboundTag": "out-s_c"
+      },
+      {
+        "inboundTag": [
+          "in-s_d"
+        ],
+        "outboundTag": "out-s_d"
+      }
+    ]
+  }
+}
