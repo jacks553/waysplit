@@ -12,7 +12,8 @@
 //	                                       (ID версии для разработки), без ключей и служебных файлов;
 //	go run ./release public [-author …] [-message …]
 //	                                     — публичный репозиторий в dist/public: последний коммит без
-//	                                       внутренних заметок, проверка на секреты (public.go).
+//	                                       внутренних заметок, проверка на секреты; есть клон —
+//	                                       новый коммит поверх его истории (public.go).
 //
 // Сборки сначала всё проверяют и при ошибке ничего не пишут. -draft — собрать, даже если
 // в ссылках ещё заглушка имени на GitHub (GITHUB_USER): только для первой загрузки в магазин,
@@ -52,8 +53,8 @@ func main() {
 	draft := fs.Bool("draft", false, "собрать с заглушкой имени на GitHub (не для публикации)")
 	rootDir := fs.String("root", "..", "папка проекта")
 	out := fs.String("out", "", "public: куда выгрузить (по умолчанию dist/public)")
-	author := fs.String("author", "", "public: автор единственного коммита — служебный адрес GitHub")
-	message := fs.String("message", "", "public: сообщение коммита (по умолчанию «Waysplit <версия>»)")
+	author := fs.String("author", "", "public: автор коммита — служебный адрес GitHub")
+	message := fs.String("message", "", "public: сообщение коммита (первый — по умолчанию «Waysplit <версия>»; поверх истории — обязательно)")
 	cores := fs.String("cores", "", "companion: папка с файлами ядер (по умолчанию dist/cores)")
 	fs.Parse(os.Args[2:])
 	root, err := filepath.Abs(*rootDir)

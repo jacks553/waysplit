@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -465,5 +466,89 @@ func TestLookalikes(t *testing.T) {
 	}
 	if len(got) != 6 {
 		t.Errorf("лишнее: %v", got)
+	}
+}
+
+// TestPublicUpdate — первая выгрузка создаёт репозиторий из одного коммита, следующая ложится
+// новым коммитом поверх его истории: изменённые и новые файлы обновлены, удалённые пропали,
+// внутренние заметки не попали, без -message коммит поверх истории не делается.
+func TestPublicUpdate(t *testing.T) {
+	root := t.TempDir()
+	out := filepath.Join(t.TempDir(), "public")
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		full := append([]string{"-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "core.autocrlf=false"}, args...)
+		b, err := exec.Command("git", full...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, b)
+		}
+		return strings.TrimSpace(string(b))
+	}
+	write := func(name, text string) {
+		t.Helper()
+		p := filepath.Join(root, filepath.FromSlash(name))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	git(root, "init", "-q", "-b", "main")
+	write(".gitattributes", "* text=auto eol=lf\n") // как в проекте: иначе git archive отдаст CRLF при core.autocrlf
+	write("README.md", "первая версия\n")
+	write("docs/old.html", "старая страница\n")
+	write("PROGRESS.md", "внутренние заметки\n")
+	write("extension/manifest.json", `{"version": "1.0.0"}`)
+	git(root, "add", "-A")
+	git(root, "commit", "-q", "-m", "один")
+
+	const author = "tester <1+tester@users.noreply.github.com>"
+	if err := buildPublic(root, out, author, ""); err != nil {
+		t.Fatal(err)
+	}
+	if n := git(out, "rev-list", "--count", "HEAD"); n != "1" {
+		t.Fatalf("после первой выгрузки коммитов %s, нужен 1", n)
+	}
+	first := git(out, "rev-parse", "HEAD")
+
+	write("README.md", "вторая версия\n")
+	os.Remove(filepath.Join(root, "docs", "old.html"))
+	write("docs/new.html", "новая страница\n")
+	write("PROGRESS.md", "ещё заметки\n")
+	git(root, "add", "-A")
+	git(root, "commit", "-q", "-m", "два")
+
+	if err := buildPublic(root, out, author, ""); err == nil || !strings.Contains(err.Error(), "-message") {
+		t.Fatalf("без -message поверх истории — нужна ошибка, а не %v", err)
+	}
+	if err := buildPublic(root, out, author, "Документация"); err != nil {
+		t.Fatal(err)
+	}
+	if n := git(out, "rev-list", "--count", "HEAD"); n != "2" {
+		t.Fatalf("коммитов %s, нужно 2 (новый поверх прежнего)", n)
+	}
+	if parent := git(out, "rev-parse", "HEAD~1"); parent != first {
+		t.Errorf("прежний коммит переписан: %s, был %s", parent, first)
+	}
+	if got := git(out, "log", "-1", "--format=%s|%ae|%ce"); got != "Документация|1+tester@users.noreply.github.com|1+tester@users.noreply.github.com" {
+		t.Errorf("последний коммит: %s", got)
+	}
+	if got := git(out, "diff", "--name-status", "HEAD~1", "HEAD"); got != "M\tREADME.md\nA\tdocs/new.html\nD\tdocs/old.html" {
+		t.Errorf("изменения:\n%s", got)
+	}
+	if b, _ := os.ReadFile(filepath.Join(out, "README.md")); string(b) != "вторая версия\n" {
+		t.Errorf("README.md: %q", b)
+	}
+	if _, err := os.Stat(filepath.Join(out, "PROGRESS.md")); err == nil {
+		t.Error("внутренние заметки попали в выгрузку")
+	}
+	if st := git(out, "status", "--porcelain"); st != "" {
+		t.Errorf("после коммита остались изменения: %s", st)
+	}
+	// Повтор без изменений — коммита нет.
+	if err := buildPublic(root, out, author, "ничего"); err != nil {
+		t.Fatal(err)
+	}
+	if n := git(out, "rev-list", "--count", "HEAD"); n != "2" {
+		t.Errorf("без изменений появился коммит: %s", n)
 	}
 }

@@ -20,9 +20,9 @@
 #     проверяется именно то, что люди ставят вручную;
 #  8. -Sources: архивы исходного кода ядер этих версий в dist\sources (их прикладываем к выпуску:
 #     GPL-3.0 у sing-box, MPL-2.0 у Xray);
-#  9. текст выпуска dist\release-notes.md: раздел версии из CHANGELOG.md, как установить (раздел
-#     «Как попробовать до магазина» из README.md, пока он там есть), SHA-256 архивов, ядра и где
-#     их исходный код.
+#  9. текст выпуска dist\release-notes.md: раздел версии из CHANGELOG.md, как установить (разделы
+#     README.md «Как установить», «Ручная установка (запасной вариант)» и «Переход с ручной версии
+#     на версию из магазина»), SHA-256 архивов, ядра и где их исходный код.
 param(
   [Parameter(Mandatory = $true)][string]$Tag,
   [switch]$SkipChrome,
@@ -247,19 +247,16 @@ function Section([string]$file, [string]$pattern, [switch]$WithHeading) {
 }
 $section = Section 'CHANGELOG.md' ('^## ' + [regex]::Escape($version) + '\b')
 if (-not $section) { Fail "в CHANGELOG.md нет раздела «## $version»" }
-# Как установить: пока версии в магазине нет — раздел «Как попробовать до магазина» из README
-# (один и тот же текст и там, и в описании выпуска). Уберут раздел из README — обычная «Установка».
-$install = Section 'README.md' '^## Как попробовать до магазина' -WithHeading
-if ($install) {
-  if ($install -match '\]\((?!https?://)') { Fail 'в разделе README «Как попробовать до магазина» есть ссылка не с https:// — в описании выпуска она не сработает' }
-} else {
-  $install = @(
-    '## Установка',
-    '',
-    '1. Расширение Waysplit — из Chrome Web Store.',
-    '2. Компаньон для Windows 10 и 11: скачайте **Waysplit-companion.zip** ниже, распакуйте (правой кнопкой → «Извлечь всё») и запустите «Установить.cmd». Ядра sing-box и Xray уже в архиве — установке интернет не нужен. Почему Windows может предупредить и как сверить архив — в README.'
-  ) -join "`n"
+# Как установить — разделы README (один и тот же текст и там, и в описании выпуска): магазин и
+# компаньон, ручная установка как запасной вариант, переход с ручной версии на версию из магазина.
+$parts = @()
+foreach ($h in @('Как установить', 'Ручная установка (запасной вариант)', 'Переход с ручной версии на версию из магазина')) {
+  $text = Section 'README.md' ('^## ' + [regex]::Escape($h) + '\s*$') -WithHeading
+  if (-not $text) { Fail "в README.md нет раздела «## $h» — он нужен для описания выпуска" }
+  if ($text -match '\]\((?!https?://)') { Fail "в разделе README «$h» есть ссылка не с https:// — в описании выпуска она не сработает" }
+  $parts += $text
 }
+$install = $parts -join "`n`n"
 $sha = (Get-Content "$zip.sha256" -Raw).Trim().Split(' ')[0]
 $extSha = (Get-Content "$extZip.sha256" -Raw).Trim().Split(' ')[0]
 $coreLines = @()

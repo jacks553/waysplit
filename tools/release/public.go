@@ -1,11 +1,16 @@
 package main
 
-// Публичный репозиторий (SPEC-STORE.md, 3): чистая история из одного коммита и проверка на
-// секреты поиском по всем файлам (а не по .gitignore).
+// Публичный репозиторий (SPEC-STORE.md, 3): своя история без внутренних заметок и прежней почты
+// автора, проверка на секреты поиском по всем файлам (а не по .gitignore).
 //
 //	go run ./release public                  — выгрузить последний коммит в dist/public и проверить;
-//	go run ./release public -author "Имя <123+имя@users.noreply.github.com>"
-//	                                         — то же и git init + один коммит от служебного адреса GitHub.
+//	go run ./release public -author "Имя <123+имя@users.noreply.github.com>" [-message "что изменилось"]
+//	                                         — то же и коммит от служебного адреса GitHub.
+//
+// Первый раз (в dist/public ещё нет .git) — git init и первый коммит. Дальше dist/public — клон
+// публичного репозитория: файлы в нём заменяются выгрузкой (удалённые из проекта — удаляются),
+// .git не трогается, и изменения ложатся обычным коммитом поверх его истории — отправка без
+// перезаписи (git push). Для такого коммита нужно -message.
 //
 // Выгружается то, что в последнем коммите (git archive HEAD), кроме внутренних заметок
 // privateFiles: в них подробности о компьютере, провайдере и проверках автора.
@@ -325,12 +330,22 @@ func buildPublic(root, out, author, message string) error {
 		return fmt.Errorf("git: %w", err)
 	}
 
-	// Папка выгрузки: новая или наша прежняя (с меткой).
+	// Папка выгрузки: новая, наша прежняя (с меткой) без git — стирается, наша прежняя с .git —
+	// клон публичного репозитория: файлы заменяются, история остаётся.
+	update := false
 	if _, err := os.Stat(out); err == nil {
 		if _, err := os.Stat(filepath.Join(out, publicMark)); err != nil {
 			return fmt.Errorf("%s уже есть и это не прежняя выгрузка — выберите другую папку (-out)", out)
 		}
-		if err := os.RemoveAll(out); err != nil {
+		if _, err := os.Stat(filepath.Join(out, ".git")); err == nil {
+			update = true
+			if author != "" && strings.TrimSpace(message) == "" {
+				return errors.New("-message: для коммита поверх истории публичного репозитория нужно сообщение — что изменилось")
+			}
+			if err := clearExcept(out, ".git", publicMark); err != nil {
+				return err
+			}
+		} else if err := os.RemoveAll(out); err != nil {
 			return err
 		}
 	}
@@ -456,20 +471,45 @@ func buildPublic(root, out, author, message string) error {
 		return errors.New("в выгрузке есть то, чего не должно быть в публичном репозитории (список выше)")
 	}
 
+	if update {
+		// Что изменится в публичном репозитории: A — новый файл, M — изменён, D — удалён.
+		if b, err := exec.Command("git", "-C", out, "add", "-A").CombinedOutput(); err != nil {
+			return fmt.Errorf("git add: %v\n%s", err, b)
+		}
+		changes, err := gitOut(out, "diff", "--cached", "--name-status")
+		if err != nil {
+			return fmt.Errorf("git diff: %w", err)
+		}
+		if changes == "" {
+			fmt.Println("Изменений относительно публичного репозитория нет — коммит не нужен.")
+			return nil
+		}
+		last, _ := gitOut(out, "log", "-1", "--format=%h %s")
+		fmt.Printf("Изменения относительно последнего коммита публичного репозитория (%s):\n", last)
+		for _, l := range strings.Split(changes, "\n") {
+			fmt.Println("  " + l)
+		}
+	}
 	if author == "" {
-		fmt.Println("Репозиторий не создан: для него нужен -author \"Имя <ID+имя@users.noreply.github.com>\".")
+		if update {
+			fmt.Println("Коммит не создан: для него нужны -author \"Имя <ID+имя@users.noreply.github.com>\" и -message.")
+		} else {
+			fmt.Println("Репозиторий не создан: для него нужен -author \"Имя <ID+имя@users.noreply.github.com>\".")
+		}
 		return nil
 	}
 	env := append(os.Environ(), "GIT_AUTHOR_NAME="+authorName, "GIT_AUTHOR_EMAIL="+authorEmail,
 		"GIT_COMMITTER_NAME="+authorName, "GIT_COMMITTER_EMAIL="+authorEmail)
-	gitInit := exec.Command("git", "-C", out, "init", "-q", "-b", "main")
-	gitInit.Env = env
-	if b, err := gitInit.CombinedOutput(); err != nil {
-		return fmt.Errorf("git init: %v\n%s", err, b)
-	}
-	// Метка папки выгрузки — не для репозитория.
-	if err := os.WriteFile(filepath.Join(out, ".git", "info", "exclude"), []byte(publicMark+"\n"), 0o644); err != nil {
-		return err
+	if !update {
+		gitInit := exec.Command("git", "-C", out, "init", "-q", "-b", "main")
+		gitInit.Env = env
+		if b, err := gitInit.CombinedOutput(); err != nil {
+			return fmt.Errorf("git init: %v\n%s", err, b)
+		}
+		// Метка папки выгрузки — не для репозитория.
+		if err := os.WriteFile(filepath.Join(out, ".git", "info", "exclude"), []byte(publicMark+"\n"), 0o644); err != nil {
+			return err
+		}
 	}
 	if strings.TrimSpace(message) == "" {
 		message = "Waysplit " + mustManifestVersion(root)
@@ -485,8 +525,35 @@ func buildPublic(root, out, author, message string) error {
 			return fmt.Errorf("git %s: %v\n%s", args[0], err, b)
 		}
 	}
-	ids, _ := gitOut(out, "log", "--format=%an <%ae> / %cn <%ce>")
-	fmt.Printf("Создан репозиторий %s: один коммит, автор и коммиттер — %s\n", out, ids)
+	ids, _ := gitOut(out, "log", "-1", "--format=%h, автор и коммиттер — %an <%ae> / %cn <%ce>")
+	if update {
+		fmt.Printf("Новый коммит поверх истории %s: %s. Отправка — обычный git push, без перезаписи.\n", out, ids)
+	} else {
+		fmt.Printf("Создан репозиторий %s: один коммит %s\n", out, ids)
+	}
+	return nil
+}
+
+// clearExcept — удаляет всё в папке, кроме перечисленных имён верхнего уровня (.git и метки):
+// выгрузка заново кладёт файлы, а удалённые из проекта так пропадают и из публичного репозитория.
+func clearExcept(dir string, keep ...string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		skip := false
+		for _, k := range keep {
+			if strings.EqualFold(e.Name(), k) {
+				skip = true
+			}
+		}
+		if !skip {
+			if err := os.RemoveAll(filepath.Join(dir, e.Name())); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
