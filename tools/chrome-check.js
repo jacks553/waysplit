@@ -699,8 +699,9 @@ try {
     }
     return { ready, first, seen: seen.join(', ') }; })()`);
   check(ui0.first === 'home' && ui0.seen === 'panel-servers, panel-rules, panel-settings, panel-home', `окно открылось на «Главной», вкладки переключаются (${ui0.seen})`);
-  // У автора — 60–110 мс; порог с запасом на медленную машину сборки (GitHub Actions).
-  check(ui0.ready > 0 && ui0.ready < 1500, `окно показано с данными за ${Math.round(ui0.ready)} мс от открытия`);
+  // У автора — 90–160 мс; порог с запасом на медленную машину сборки (GitHub Actions): на ней первое
+  // открытие окна сразу после загрузки расширения занимало 1600–1900 мс (выпуск 1.1.0).
+  check(ui0.ready > 0 && ui0.ready < 3000, `окно показано с данными за ${Math.round(ui0.ready)} мс от открытия`);
   if (shotsDir) await popup.shot(join(shotsDir, 'popup-empty.png'), 'light');
   const welcome = (await chrome.send('Target.getTargets')).targetInfos.find((t) => t.url.endsWith('/welcome/welcome.html'));
   check(!!welcome, 'при установке открылась страница «Начало работы»');
