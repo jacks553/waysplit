@@ -16,16 +16,6 @@ export function serverMeta(s) {
   return parts.join(' · ');
 }
 
-// pingView — текст и оценка пинга: good (< 200 мс), mid (< 500), bad, fail (нет ответа), none (не меряли).
-export function pingView(s) {
-  if (s.lastPingMs > 0) {
-    const ms = s.lastPingMs;
-    return { text: `${ms} мс`, level: ms < 200 ? 'good' : ms < 500 ? 'mid' : 'bad' };
-  }
-  if (s.lastPingError) return { text: 'нет ответа', level: 'fail', title: s.lastPingError };
-  return { text: '—', level: 'none' };
-}
-
 // pingBars — полоски задержки в окне (SPEC-POPUP.md): n от 1 до 4 (больше — лучше), 0 — нет ответа,
 // -1 — ещё не меряли. Пинг меряется запросом через сам сервер (соединение, TLS, ответ сайта),
 // поэтому 400–800 мс — обычное дело: до 600 мс — 4 полоски, до 1000 — 3, до 1600 — 2, дольше — 1.
@@ -58,6 +48,10 @@ export function plural(n, [one, few, many]) {
   return `${n} ${many}`;
 }
 
+// Слова для plural — одни на всё окно.
+export const SERVER_WORDS = ['сервер', 'сервера', 'серверов'];
+export const DOMAIN_WORDS = ['домен', 'домена', 'доменов'];
+
 // PING_FRESH_MS — сколько пинг сервера считается свежим: моложе — окно расширения не меряет его
 // заново при каждом открытии (меньше запросов через сервер; число в статусе — не старше минуты).
 export const PING_FRESH_MS = 60_000;
@@ -86,7 +80,6 @@ export async function send(msg) {
 }
 
 // Действие правила в выпадающем списке: 'direct', 'proxy:' (текущий сервер), 'proxy:<id сервера>'.
-export const actionValue = (r) => (r.action === 'direct' ? 'direct' : `proxy:${r.serverId || ''}`);
 export const parseAction = (v) => (v === 'direct' ? { action: 'direct', serverId: null } : { action: 'proxy', serverId: v.slice(6) || null });
 
 // fillActions — варианты «Без VPN», «Через VPN — текущий сервер», «Через VPN — <сервер>».

@@ -5,6 +5,8 @@
 import { NativeHost } from './lib/native.js';
 import { Controller } from './lib/controller.js';
 import { TabDomains } from './lib/tabdomains.js';
+import { SiteCollector } from './lib/sitedomains.js';
+import { normalize } from './lib/storage.js';
 
 const WATCHDOG = 'watchdog';
 const SUBSCRIPTIONS = 'subscriptions';
@@ -50,11 +52,27 @@ const controller = new Controller({
     start: () => chrome.alarms.create(WATCHDOG, { periodInMinutes: 1 }),
     stop: () => chrome.alarms.clear(WATCHDOG),
   },
+  // Наборы и списки для «доменов сайта» — файл самого расширения (не из интернета).
+  sets: async () => (await fetch(chrome.runtime.getURL('lib/domain-sets.json'))).json(),
 });
 
 const tabDomains = new TabDomains({
   getSession: async (key) => (await chrome.storage.session.get(key))[key],
   setSession: (obj) => chrome.storage.session.set(obj),
+});
+
+// Автосбор «доменов сайта» (lib/sitedomains.js): пока во вкладке открыт сайт с правилом
+// «через VPN», домены, к которым она обращается, привязываются к этому правилу. Из вкладок
+// инкогнито (если пользователь разрешил расширению работать в инкогнито) — не привязываются:
+// правила хранятся на диске. «Домены этой вкладки» для них работают — это только память сеанса.
+const collector = new SiteCollector({
+  load: async () => normalize(await chrome.storage.local.get(null)),
+  data: controller.siteData(),
+  isPrivate: async (tabId) => (await chrome.tabs.get(tabId)).incognito,
+  attach: (batch, tabs) => controller.init().then(() => controller.attachSiteDomains(batch, tabs, (tabId) => tabDomains.has(tabId))),
+});
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && (changes.rules || changes.settings)) collector.invalidate();
 });
 
 // Слушатели — сразу при запуске фона (иначе Chrome не разбудит его этими событиями).
@@ -73,14 +91,24 @@ chrome.proxy.onProxyError.addListener((details) => {
 });
 // Прокси Chrome изменился (например, включили Browsec) — проверить, кто им управляет.
 chrome.proxy.settings.onChange.addListener(() => controller.reconcile());
-chrome.tabs.onRemoved.addListener((tabId) => tabDomains.forget(tabId));
+chrome.tabs.onRemoved.addListener((tabId) => {
+  tabDomains.forget(tabId);
+  collector.forget(tabId);
+  controller.clearSiteNew(tabId);
+});
 
-// «Домены этой вкладки» (SPEC 3.3): наблюдение за запросами — только когда пользователь дал
-// разрешение (webRequest + доступ к сайтам запрашиваются при первом нажатии кнопки).
+// «Домены этой вкладки» (SPEC 3.3) и автосбор «доменов сайта»: наблюдение за запросами — только
+// когда пользователь дал разрешение (webRequest + доступ к сайтам запрашиваются один раз, кнопкой
+// в окне). Запросы только читаются, ничего не меняется и не блокируется.
 function watchRequests() {
   if (!chrome.webRequest || watchRequests.on) return;
   watchRequests.on = true;
-  chrome.webRequest.onBeforeRequest.addListener((d) => tabDomains.seen(d), { urls: ['<all_urls>'] });
+  chrome.webRequest.onBeforeRequest.addListener(async (d) => {
+    const seen = await tabDomains.seen(d);
+    if (!seen) return;
+    if (seen.navigated) controller.clearSiteNew(d.tabId); // новая страница — подсказка «обновите вкладку» не нужна
+    else collector.seen(d.tabId, seen.top, seen.host);
+  }, { urls: ['<all_urls>'] });
 }
 watchRequests();
 chrome.permissions.onAdded.addListener(watchRequests);
@@ -101,7 +129,11 @@ const commands = {
     msg.action, msg.serverId ?? null),
   updateRule: (msg) => controller.updateRule(msg.id, msg.patch || {}),
   removeRules: (msg) => controller.removeRules(Array.isArray(msg.ids) ? msg.ids : []),
+  restoreRules: (msg) => controller.restoreRules(msg.rules),
   importRules: (msg) => controller.importRules(msg.data),
+  removeSiteDomain: (msg) => controller.removeSiteDomain(msg.id, String(msg.domain || '')),
+  restoreSiteDomains: (msg) => controller.restoreSiteDomains(msg.id),
+  clearSiteNew: (msg) => controller.clearSiteNew(Number(msg.tabId)),
   setSetting: (msg) => controller.setSetting(msg.key, msg.value),
   addSubscription: (msg) => controller.addSubscription(msg.url),
   updateSubscription: (msg) => controller.updateSubscription(msg.id),

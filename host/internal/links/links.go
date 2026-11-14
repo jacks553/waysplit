@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"unicode"
@@ -109,6 +110,27 @@ var notYet = map[string]string{
 // ErrSubscription — строка оказалась адресом подписки, а не ссылкой сервера.
 var ErrSubscription = errors.New("это ссылка на подписку, а не на сервер")
 
+// ErrHapp — ссылка приложения Happ (код закрыт): зашифрованные happ://crypt… (crypt, crypt2 …
+// crypt5) открывает только Happ, их не расшифровываем. Из ссылок happ:// понимаем только
+// happ://add/https://… (HappSubscription); любая другая — эта причина.
+var ErrHapp = errors.New("Ссылка зашифрована для приложения Happ — открыть её может только Happ. Попросите у провайдера обычную ссылку на подписку (https://…)")
+
+// HappSubscription — адрес подписки из ссылки happ://add/<адрес>, если адрес — обычный https://…
+// (такую строку добавляем как подписку, как будто вставили сам адрес); иначе ok = false.
+func HappSubscription(line string) (addr string, ok bool) {
+	link := cleanLine(line)
+	const prefix = "happ://add/"
+	if len(link) <= len(prefix) || !strings.EqualFold(link[:len(prefix)], prefix) {
+		return "", false
+	}
+	addr = link[len(prefix):]
+	u, err := url.Parse(addr)
+	if err != nil || !strings.EqualFold(u.Scheme, "https") || u.Host == "" || strings.ContainsAny(addr, " \t") {
+		return "", false
+	}
+	return addr, true
+}
+
 // Parse разбирает одну ссылку сервера.
 func Parse(line string) (*Server, error) {
 	link := cleanLine(line)
@@ -121,6 +143,12 @@ func Parse(line string) (*Server, error) {
 	scheme, _, ok := strings.Cut(link, "://")
 	if !ok || scheme == "" {
 		return nil, errors.New("не похоже на ссылку сервера")
+	}
+	if strings.EqualFold(scheme, "happ") {
+		if _, sub := HappSubscription(link); sub {
+			return nil, ErrSubscription
+		}
+		return nil, ErrHapp
 	}
 	p := parsers[strings.ToLower(scheme)]
 	if p == nil {
@@ -179,6 +207,11 @@ func ParseText(text string) *TextResult {
 		if IsSubscriptionURL(line) {
 			hostlog.AddSecret(line)
 			res.Subscriptions = append(res.Subscriptions, line)
+			continue
+		}
+		if addr, ok := HappSubscription(line); ok { // happ://add/https://… — как сам адрес
+			hostlog.AddSecret(addr)
+			res.Subscriptions = append(res.Subscriptions, addr)
 			continue
 		}
 		s, err := Parse(line)

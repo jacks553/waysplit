@@ -1,16 +1,18 @@
 // Вкладка «Главная»: большая кнопка VPN, статус, строка «Сервер», блок «Этот сайт»
-// (переключатель «через VPN / напрямую», сервер для сайта, «Домены этой вкладки»), ошибки и шаги
+// (переключатель «через VPN / без VPN», сервер для сайта, «Домены этой вкладки»), ошибки и шаги
 // установки компаньона.
 
-import { addSummary, fillActions, freshPing, parseAction, send, splitFlag } from '../lib/format.js';
-import { findRule, routeFor, ruleServer } from '../lib/rules.js';
+import { DOMAIN_WORDS, addSummary, fillActions, freshPing, parseAction, pingBars, plural, send, splitFlag } from '../lib/format.js';
+import { routeFor, routeIn, ruleServer, ruleTable } from '../lib/rules.js';
 import { siteOf } from '../lib/tabdomains.js';
+import { stillAttached } from '../lib/sitedomains.js';
 import { normalizeDomain, parents, toUnicode } from '../lib/domains.js';
 import { DOWNLOAD_URL, DOWNLOAD_ZIP_URL, INSTALL_STEPS, MIN_HOST_VERSION, REPO_URL, olderThan, outdatedMessage } from '../lib/companion.js';
 import { $, barsEl, el, faviconEl, flagEl, icon, setIcon, toast } from './ui.js';
 import { S, currentServer, defineTab, showTab, vpnOn } from './state.js';
 import { openPicker } from './picker.js';
 import { openDiag } from './diag.js';
+import { SITE_PERMS, checkPerm, renderPermCards } from './siteperm.js';
 
 const LOG_HINT = { text: 'Подробности — в журнале ядра.', go: 'diag', goText: 'Открыть диагностику' };
 
@@ -66,7 +68,8 @@ function render() {
     on: [`Подключено · ${name}${ping.serverId === server?.id && ping.ms ? ` · ${ping.ms} мс` : ''}`, 'Весь трафик Chrome идёт через сервер'],
     warn: ['Сервер не отвечает', warnDetail(name, ping.error)],
     error: ['Ошибка', st?.message || ''],
-    rules: ['Выключено · работают правила', `Через VPN идут только сайты из правил (правил «через VPN»: ${st?.viaVpn ?? 0})`],
+    // Одна строка: на «Главной» мало места (две строки сдвигают блок «Этот сайт» за край окна).
+    rules: ['Выключено · работают правила', `Через VPN — ${plural(st?.viaVpn ?? 0, ['сайт', 'сайта', 'сайтов'])} из правил`],
   };
   const [title, detail] = texts[state] || texts.off;
   $('status').textContent = title;
@@ -86,9 +89,15 @@ function render() {
     $('srvName').textContent = splitFlag(server.name).name;
     $('srvName').title = server.name;
     $('srvBars').replaceChildren(barsEl(server));
+    // Сервер не ответил на пинг — словами, а не только бледными полосками.
+    $('srvLabel').replaceChildren('Сервер', ...(pingBars(server).n === 0 ? [' · ', el('span', { className: 'srv-fail', textContent: 'нет ответа' })] : []));
   }
   $('homeAdd').hidden = view.servers.length > 0;
+  // «Российские сайты — без VPN» — настройка ruDirect (та же галочка — в «Настройках»).
+  $('ruSwitch').hidden = !view.servers.length;
+  $('ruSwitch').setAttribute('aria-checked', String(view.settings.ruDirect));
   renderSite();
+  renderPermCards();
 
   if (state === 'on' && ping.serverId !== server.id) checkPing(server.id);
 }
@@ -97,7 +106,7 @@ function render() {
 function warnDetail(name, error) {
   const reason = error.replace(/^Сервер не отвечает\s*/, '').replace(/^\((.*)\)$/, '$1');
   const what = S.view.settings.onFailure === 'direct'
-    ? 'Сайты открываются напрямую, без VPN.'
+    ? 'Сайты открываются без VPN.'
     : 'Сайты не откроются, пока он недоступен: выберите другой сервер.';
   return `«${name}» не ответил${reason ? ` (${reason})` : ''}. ${what}`;
 }
@@ -135,7 +144,17 @@ function fillDomains() {
   const options = base ? parents(base).filter((d) => d.includes('.')) : [];
   $('siteDomain').replaceChildren(...options.map((d) => el('option', { value: d, textContent: toUnicode(d) })));
   $('siteDomain').disabled = options.length < 2;
-  $('siteIcon').replaceWith(Object.assign(faviconEl(siteOf(base || S.site.host)), { id: 'siteIcon' }));
+}
+
+// siteIcon — значок сайта рядом с доменом: сам значок — сайта целиком (такой есть в памяти Chrome),
+// а буква, пока значка нет, — первая буква показанного домена (bank.example.net → «B»).
+function siteIcon(domain) {
+  const base = normalizeDomain(S.site.host).domain || S.site.host;
+  const label = domain || base;
+  if ($('siteIcon').dataset.label === label) return;
+  const node = Object.assign(faviconEl(siteOf(base), label), { id: 'siteIcon' });
+  node.dataset.label = label;
+  $('siteIcon').replaceWith(node);
 }
 
 const exactRule = (domain) => S.view.rules.find((r) => r.domain === domain) || null;
@@ -146,40 +165,48 @@ function renderSite() {
   if ($('site').hidden) return;
   if (!$('siteDomain').options.length) fillDomains();
   const domain = $('siteDomain').value;
-  const r = routeFor(view, S.site.host);
+  siteIcon(domain);
+  const r = routeFor(view, S.site.host, S.ruDomains);
   const exact = exactRule(domain);
   const local = r.kind === 'local';
   const on = vpnOn();
 
   // sleeping — правило «через VPN» есть, но сработать не может: VPN выключен, а правила при
-  // выключенном VPN отключены. off — правило для этого домена отключено. В жёлтой строке — «Включить».
+  // выключенном VPN отключены. off — правило для этого домена отключено. В жёлтой строке — кнопка
+  // «Включить правила» / «Включить правило».
   const sleeping = !local && r.inactive?.action === 'proxy' ? r.inactive : null;
   const off = !local && exact && !exact.enabled ? exact : null;
 
   let why;
-  if (local) why = 'Локальный адрес — всегда напрямую';
+  if (local) why = 'Локальный адрес — всегда без VPN';
   else if (r.rule) {
     const via = r.kind === 'vpn' ? ` · через ${r.server.name}` : ' · без VPN';
-    why = `По правилу для ${toUnicode(r.rule.domain)}${via}`;
-  } else if (r.inactive?.action === 'direct') why = `По правилу для ${toUnicode(r.inactive.domain)} · без VPN`;
+    // via — сайт идёт по правилу другого сайта: его домен привязан к тому правилу («домен сайта»).
+    const linked = r.via ? ` (${toUnicode(r.via)} — домен этого сайта)` : '';
+    const extra = !r.via && r.rule.siteDomains.length ? ` · +${plural(r.rule.siteDomains.length, DOMAIN_WORDS)} сайта` : '';
+    why = `По правилу для ${toUnicode(r.rule.domain)}${linked}${via}${extra}`;
+  } else if (r.ru) why = 'Без VPN: российский сайт — включено «Российские сайты — без VPN»';
+  else if (r.inactive?.action === 'direct') why = `По правилу для ${toUnicode(r.inactive.domain)} · без VPN`;
   else if (sleeping) why = `Правило для ${toUnicode(sleeping.domain)} есть, но сейчас не действует`;
-  else why = `Правила нет — как у остальных сайтов (${on ? 'через текущий сервер' : 'напрямую: VPN выключен'})`;
+  else why = `Правила нет — как у остальных сайтов: ${on ? 'через VPN' : 'без VPN'}`; // одна строка: «Главная» должна помещаться в окно
   $('siteWhy').textContent = why;
 
   warnFix = sleeping ? { setting: true } : off ? { ruleId: off.id } : null;
   $('siteWarn').hidden = !warnFix;
   if (sleeping) {
-    $('siteWarnText').textContent = 'VPN выключен, а правила при выключенном VPN отключены — сайт идёт напрямую.';
+    $('siteWarnText').textContent = 'VPN выключен, а правила при выключенном VPN отключены — сайт идёт без VPN.';
+    $('siteWarnFix').textContent = 'Включить правила';
     $('siteWarnFix').title = 'Включить «Правила работают, когда VPN выключен»';
   } else if (off) {
     $('siteWarnText').textContent = `Правило для ${toUnicode(off.domain)} отключено — сайт открывается как остальные.`;
+    $('siteWarnFix').textContent = 'Включить правило';
     $('siteWarnFix').title = 'Включить правило';
   }
 
   $('siteControls').hidden = local || !domain;
   const viaVpn = r.kind === 'vpn';
   $('siteSwitch').setAttribute('aria-checked', String(viaVpn));
-  $('siteSwitchText').textContent = viaVpn ? 'Через VPN' : 'Напрямую';
+  $('siteSwitchText').textContent = viaVpn ? 'Через VPN' : 'Без VPN';
   // Кнопка справа — куда идёт сайт: флаг сервера или «без VPN». Правило сейчас не действует —
   // флаг сервера из правила, приглушённо.
   const idle = viaVpn ? null : sleeping || (off?.action === 'proxy' ? off : null);
@@ -193,6 +220,13 @@ function renderSite() {
   btn.title = idle && target ? `По правилу — через ${target.name}, но сейчас правило не действует. Выбрать сервер`
     : target ? `Сервер для сайта: ${target.name}` : 'Сайт идёт без VPN — выбрать сервер';
   $('ruleRemove').hidden = !exact;
+
+  // Автосбор привязал к правилу этого сайта новые домены — уже сделанные запросы к ним прошли
+  // по-старому: нужна перезагрузка вкладки. Только про домены, которые ещё привязаны: правило
+  // могли удалить.
+  const fresh = stillAttached(view.rules, S.siteNew[S.site.tabId]);
+  $('siteNew').hidden = !fresh.length;
+  $('siteNew').title = fresh.map(toUnicode).join(', ');
 }
 
 // warnFix — что включает кнопка в жёлтой строке: настройку «Правила работают, когда VPN выключен»
@@ -217,6 +251,14 @@ async function setSiteRule(action, serverId = null) {
   else showProblem(resp?.error?.code, resp?.error?.message || 'Не получилось');
 }
 
+$('ruSwitch').addEventListener('click', async () => {
+  const value = !S.view.settings.ruDirect;
+  const resp = await send({ type: 'setSetting', key: 'ruDirect', value });
+  if (!resp?.ok) toast(resp?.error?.message || 'Не получилось', 'error');
+  else toast(value ? 'Российские сайты идут без VPN, даже когда VPN включён. Правила для отдельных сайтов важнее. Обновите открытые вкладки.'
+    : 'Российские сайты снова идут как остальные. Обновите открытые вкладки.', 'keep');
+});
+
 $('siteSwitch').addEventListener('click', () => {
   const viaVpn = $('siteSwitch').getAttribute('aria-checked') === 'true';
   setSiteRule(viaVpn ? 'direct' : 'proxy');
@@ -234,7 +276,7 @@ $('siteDomain').addEventListener('change', renderSite);
 
 // «Домены этой вкладки» (SPEC 3.3): к каким доменам обращалась вкладка — правила галочками.
 // Разрешение (наблюдать за запросами и видеть адреса сайтов) Chrome спрашивает при первом нажатии.
-const TD_PERMS = { permissions: ['webRequest'], origins: ['<all_urls>'] };
+const TD_PERMS = SITE_PERMS; // то же разрешение, что у автосбора «доменов сайта»
 
 $('tdButton').addEventListener('click', async () => {
   const open = $('td').hidden;
@@ -251,6 +293,7 @@ $('tdButton').addEventListener('click', async () => {
     } catch {
       granted = false;
     }
+    checkPerm();
     $('tdNote').textContent = granted
       ? 'Разрешение получено. Обновите вкладку — расширение запомнит, к каким доменам она обращается, — и нажмите кнопку ещё раз.'
       : 'Без разрешения список не собрать. Можно нажать ещё раз.';
@@ -273,9 +316,10 @@ async function renderTabDomains() {
   const own = siteOf(S.site.host);
   const list = [...sites.keys()].sort((a, b) => (a === own ? -1 : b === own ? 1 : a.localeCompare(b)));
   $('tdNote').textContent = `Вкладка обращалась к ${list.length} сайтам. Отметьте нужные:`;
+  const table = ruleTable(S.view.rules); // одна на весь список
   $('tdList').replaceChildren(...list.map((site) => {
     const box = el('input', { type: 'checkbox', value: site });
-    const rule = findRule(S.view.rules, site);
+    const rule = routeIn(table, site)?.rule;
     const label = el('label', {}, box, faviconEl(site),
       el('span', { className: 'td-name', textContent: toUnicode(site), title: `запросов к адресам сайта: ${sites.get(site)}` }));
     if (rule) label.append(el('span', { className: 'td-rule', textContent: rule.action === 'direct' ? 'без VPN' : 'через VPN' }));
@@ -304,6 +348,12 @@ $('tdAdd').addEventListener('click', async () => {
 $('reloadTab').addEventListener('click', async () => {
   if (S.site) await chrome.tabs.reload(S.site.tabId);
   $('reload').hidden = true;
+});
+$('siteNewReload').addEventListener('click', async () => {
+  $('siteNew').hidden = true;
+  if (!S.site) return;
+  send({ type: 'clearSiteNew', tabId: S.site.tabId });
+  await chrome.tabs.reload(S.site.tabId);
 });
 
 // --- кнопка VPN, сервер, пинг ---

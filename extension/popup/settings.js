@@ -9,7 +9,7 @@ import { $, ask, el, setIcon, toast } from './ui.js';
 import { S, defineTab } from './state.js';
 import { openDiag } from './diag.js';
 import { openFull } from './full.js';
-
+import { permGranted, requestPerm } from './siteperm.js';
 
 let hello = null; // версии компаньона и ядер — спрашиваем один раз, когда вкладку открыли
 
@@ -18,6 +18,9 @@ function render() {
   for (const r of document.querySelectorAll('input[name="onFailure"]')) r.checked = r.value === settings.onFailure;
   $('webrtcProtection').checked = settings.webrtcProtection;
   $('setRulesWhenOff').checked = settings.rulesWhenOff;
+  $('setRuDirect').checked = settings.ruDirect;
+  $('autoSiteDomains').checked = settings.autoSiteDomains;
+  $('autoSitePerm').hidden = !settings.autoSiteDomains || permGranted();
   for (const id of ['autoConnect', 'subscriptionUA', 'subscriptionIntervalHours', 'portRangeStart', 'logLevel', 'theme']) {
     if (document.activeElement !== $(id)) $(id).value = settings[id];
   }
@@ -53,13 +56,24 @@ async function save(key, value, okText = 'Сохранено') {
 
 for (const r of document.querySelectorAll('input[name="onFailure"]')) {
   r.addEventListener('change', () => save('onFailure', r.value,
-    r.value === 'block' ? 'Сервер недоступен — сайты не откроются напрямую' : 'Сервер недоступен — сайты откроются напрямую'));
+    r.value === 'block' ? 'Сервер недоступен — сайты не откроются' : 'Сервер недоступен — сайты откроются без VPN'));
 }
 $('webrtcProtection').addEventListener('change', (e) => save('webrtcProtection', e.target.checked));
 // Та же настройка — и в меню «⋯» вкладки «Правила».
 $('setRulesWhenOff').addEventListener('change', (e) => save('rulesWhenOff', e.target.checked, e.target.checked
-  ? 'Правила работают и при выключенном VPN: сайты из правил «через VPN» идут через VPN, остальные — напрямую'
-  : 'При выключенном VPN правила не действуют: все сайты идут напрямую'));
+  ? 'Правила работают и при выключенном VPN: сайты из правил «через VPN» идут через VPN, остальные — без VPN'
+  : 'При выключенном VPN правила не действуют: все сайты идут без VPN'));
+// «Российские сайты — без VPN» — тот же переключатель, что на «Главной».
+$('setRuDirect').addEventListener('change', (e) => save('ruDirect', e.target.checked, e.target.checked
+  ? 'Российские сайты идут без VPN, даже когда VPN включён. Правила для отдельных сайтов важнее'
+  : 'Российские сайты снова идут как остальные'));
+// «Домены сайта»: автосбор для правил «через VPN». Нужно разрешение Chrome видеть запросы вкладок.
+$('autoSiteDomains').addEventListener('change', (e) => save('autoSiteDomains', e.target.checked, e.target.checked
+  ? 'Домены сайта из правил «через VPN» будут добавляться к правилу сами'
+  : 'Новые домены сами не добавляются; уже добавленные остаются — убрать их можно в меню «⋯» правила'));
+$('autoSitePermBtn').addEventListener('click', async () => {
+  toast(await requestPerm() ? 'Разрешение получено. Обновите вкладки с сайтами из правил.' : 'Разрешение не дано — работают только готовые наборы.', 'keep');
+});
 $('autoConnect').addEventListener('change', (e) => save('autoConnect', e.target.value));
 $('logLevel').addEventListener('change', (e) => save('logLevel', e.target.value, 'Сохранено (ядро перезапустится с новым журналом)'));
 $('theme').addEventListener('change', (e) => save('theme', e.target.value));

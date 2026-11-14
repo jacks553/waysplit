@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Waysplit",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "VPN для Chrome через ваши серверы VLESS, XHTTP и Hysteria2: часть сайтов через VPN, часть напрямую. Нужен компаньон для Windows.",
   "minimum_chrome_version": "120",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvf56ojiPEiRfEm3bWBXmdaa9pNwPLhPuyTBCD7hRMQLJ2HgzzH7Osb+VXeIiglUFrGs53xFE6GlsDCFBAS7kxELi/uHFKO7QkmoyYE8MG+rZe2N91tiwKtzTPsyNNYCYD7Dv8xZvKrAugygI9a7aJOU90HNTJ0p2QHdX0Fznh3H8zBaFSjY6bGvE8+C5a9L/eV74py+eDL2xgTzX/EaLR9YbE1ciJqMDO34gm5NHwlaKsPb2bHRmC+EgFNUZgokDksOW8B9nsJ2NK2vOCFj6pWsTewECaX0hZ/O+npLrX40+vx3biwWKOUtf1ZlnIxQvrGHD7BVZLiEDqd1CQZIHGQIDAQAB",

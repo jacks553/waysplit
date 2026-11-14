@@ -1,16 +1,18 @@
 // Вкладка «Правила» (SPEC-POPUP.md): поле «Введите домен» — и добавление, и поиск по списку;
 // рядом — что делать с сайтом (без VPN, через VPN как у остальных, конкретный сервер) и «+».
 // Строка правила: значок сайта (только из памяти Chrome), домен, куда идёт (нажатие — выбор
-// сервера), корзина, «⋯» (отключить без удаления / включить). «Готовые наборы», импорт, экспорт и
-// «Правила работают, когда VPN выключен» — в меню «⋯» вкладки.
+// сервера), корзина, «⋯» (отключить без удаления / включить, «Домены сайта»). Под доменом —
+// «+N доменов сайта»: домены, привязанные к правилу (lib/sitedomains.js). «Готовые наборы»,
+// импорт, экспорт и «Правила работают, когда VPN выключен» — в меню «⋯» вкладки.
 
-import { send, splitFlag } from '../lib/format.js';
+import { DOMAIN_WORDS, parseAction, plural, send, splitFlag } from '../lib/format.js';
 import { toUnicode } from '../lib/domains.js';
 import { exportRules } from '../lib/rules.js';
 import { $, el, faviconEl, flagEl, icon, openMenu, setIcon, toast } from './ui.js';
-import { S, defineTab, openScreen, serverById, vpnOn } from './state.js';
+import { S, closeScreen, defineTab, openScreen, serverById, vpnOn } from './state.js';
 import { openPicker } from './picker.js';
 import { openFull } from './full.js';
+import { openSiteSetting, permGranted, renderPermCards, requestPerm } from './siteperm.js';
 
 let sets = null;
 
@@ -35,7 +37,11 @@ function render() {
   $('rulesHint').hidden = !view.rules.length;
   // Правила сейчас не действуют: VPN выключен, а при выключенном VPN они отключены.
   $('rulesOff').hidden = vpnOn() || view.settings.rulesWhenOff || !view.rules.length;
-  $('rulesOff').textContent = 'VPN выключен, а правила при выключенном VPN отключены (меню ⋯) — сейчас все сайты идут напрямую.';
+  $('rulesOff').textContent = 'VPN выключен, а правила при выключенном VPN отключены (меню ⋯) — сейчас все сайты идут без VPN.';
+  renderPermCards();
+  // Напоминание, почему российские сайты идут без VPN, хотя правила для них нет.
+  $('rulesRu').hidden = !view.settings.ruDirect;
+  $('rulesRu').title = 'Зоны .ru, .рф, .su, VK, Яндекс и другие российские сайты идут без VPN. Правила ниже важнее. Выключить — на «Главной» или в «Настройках».';
 
   const q = queryText().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
   const list = view.rules
@@ -55,12 +61,13 @@ function ruleItem(r) {
   const sub = [];
   if (!r.domain.includes('.')) sub.push('вся зона');
   if (shown !== r.domain) sub.push(r.domain);
+  if (r.siteDomains.length) sub.push(`+${plural(r.siteDomains.length, DOMAIN_WORDS)} сайта`);
   if (!r.enabled) sub.push('выключено');
   if (sub.length) name.append(el('span', { className: 'rule-sub', textContent: sub.join(' · ') }));
 
   // Главное в строке — куда идёт сайт: «без VPN», «VPN» (текущий сервер, как у остальных) или
   // флаг сервера; нажатие — выбор сервера. Включить и выключить правило — в меню «⋯» (переключатель
-  // в строке путали с переключателем «через VPN / напрямую» на «Главной»).
+  // в строке путали с переключателем «через VPN / без VPN» на «Главной»).
   const target = el('button', { type: 'button', className: 'rule-target' });
   target.dataset.action = 'target';
   const server = r.action === 'proxy' && r.serverId ? serverById(r.serverId) : null;
@@ -92,27 +99,99 @@ function ruleItem(r) {
   return li;
 }
 
-// ruleMenu — «⋯» у правила: выключить без удаления (или включить), выбрать сервер.
+// ruleMenu — «⋯» у правила: выключить без удаления (или включить), выбрать сервер, домены сайта.
 function ruleMenu(anchor, r) {
   openMenu(anchor, [
     { label: r.enabled ? 'Отключить правило' : 'Включить правило', run: () => setEnabled(r, !r.enabled) },
     { label: 'Выбрать сервер…', run: () => openPicker({ kind: 'rule', ruleId: r.id }) },
+    ...(r.domain.includes('.') ? [{ label: r.siteDomains.length ? `Домены сайта (${r.siteDomains.length})…` : 'Домены сайта…', run: () => openSiteDomains(r.id) }] : []),
   ]);
+}
+
+// openSiteDomains — экран «Домены сайта»: что привязано к правилу, убрать любой домен, вернуть
+// убранные. Привязанные домены — часть правила: идут так же, как оно, и удаляются вместе с ним.
+function openSiteDomains(ruleId) {
+  const rule = () => S.view.rules.find((x) => x.id === ruleId) || null;
+  const first = rule();
+  if (!first) return;
+  const say = (resp, text, kind = '') => toast(resp?.ok ? text : resp?.error?.message || 'Не получилось', resp?.ok ? kind : 'error');
+  openScreen({
+    title: 'Домены сайта',
+    sub: toUnicode(first.domain),
+    className: 'sd-screen',
+    build(sc) {
+      sc.how = el('p', { className: 'hint' });
+      sc.auto = el('p', { className: 'hint sd-auto' });
+      sc.allow = el('button', { type: 'button', className: 'btn btn-small', textContent: 'Разрешить', hidden: true });
+      sc.allow.addEventListener('click', async () => {
+        toast(await requestPerm() ? 'Разрешение получено. Обновите вкладку с сайтом.' : 'Разрешение не дано.', 'keep');
+      });
+      sc.list = el('ul', { className: 'sd-list' });
+      sc.list.addEventListener('click', async (e) => {
+        const domain = e.target.closest('button[data-domain]')?.dataset.domain;
+        if (!domain) return;
+        say(await send({ type: 'removeSiteDomain', id: ruleId, domain }), `${toUnicode(domain)} убран: сам больше не добавится. Обновите вкладку с сайтом.`, 'keep');
+      });
+      sc.empty = el('p', { className: 'empty sd-empty' });
+      sc.removed = el('p', { className: 'hint sd-removed' });
+      sc.restore = el('button', { type: 'button', className: 'link', textContent: 'Вернуть убранные' });
+      sc.restore.addEventListener('click', async () => {
+        say(await send({ type: 'restoreSiteDomains', id: ruleId }), 'Убранные домены снова могут добавляться');
+      });
+      // Автосбор выключен — не «включите в „Настройках“» словами, а кнопка, которая туда ведёт.
+      sc.toSettings = el('button', { type: 'button', className: 'link', textContent: 'Открыть настройки', hidden: true });
+      sc.toSettings.addEventListener('click', openSiteSetting);
+      sc.body.append(sc.how, sc.list, sc.empty, el('div', { className: 'sd-auto-row' }, sc.auto, sc.allow, sc.toSettings), el('div', { className: 'sd-removed-row' }, sc.removed, sc.restore));
+    },
+    render(sc) {
+      const r = rule();
+      if (!r) { // правило удалили, пока экран открыт
+        setTimeout(closeScreen, 0);
+        return;
+      }
+      const proxy = r.action === 'proxy';
+      const server = proxy && r.serverId ? serverById(r.serverId) : null;
+      sc.setTitle(r.siteDomains.length ? `Домены сайта · ${r.siteDomains.length}` : 'Домены сайта');
+      sc.how.textContent = `Видео, картинки и скрипты сайта лежат на других доменах. Эти домены идут так же, как ${toUnicode(r.domain)}: ${
+        proxy ? `через VPN${server ? ` (${splitFlag(server.name).name})` : ''}` : 'без VPN'} — во всех вкладках. Удалите правило — уйдут и они.`;
+      sc.list.replaceChildren(...r.siteDomains.map((d) => {
+        const shown = toUnicode(d);
+        const del = el('button', { type: 'button', className: 'icon-btn danger', title: 'Убрать домен' });
+        del.dataset.domain = d;
+        del.setAttribute('aria-label', `Убрать домен ${shown}`);
+        setIcon(del, 'close');
+        return el('li', { className: 'sd-item' }, faviconEl(d), el('span', { className: 'sd-name', textContent: shown, title: shown }), del);
+      }));
+      sc.empty.hidden = r.siteDomains.length > 0;
+      sc.empty.textContent = 'Привязанных доменов пока нет.';
+      const auto = S.view.settings.autoSiteDomains;
+      sc.allow.hidden = !(proxy && auto && !permGranted());
+      sc.toSettings.hidden = !(proxy && !auto);
+      sc.auto.textContent = !proxy ? 'Для правил «без VPN» домены сами не добавляются — только из готового набора.'
+        : !auto ? 'Автоматическое добавление доменов выключено.'
+          : !permGranted() ? 'Чтобы новые домены добавлялись сами, нужно разрешение Chrome видеть запросы вкладок.'
+            : 'Новые домены добавляются сами, пока сайт открыт во вкладке. Общие сервисы (Google, счётчики, реклама) и российские сайты не добавляются.';
+      const gone = r.siteDomainsRemoved;
+      sc.removed.parentElement.hidden = !gone.length;
+      sc.removed.textContent = `Убраны и сами не добавляются: ${gone.map(toUnicode).join(', ')}.`;
+    },
+  });
 }
 
 async function setEnabled(r, enabled) {
   const resp = await send({ type: 'updateRule', id: r.id, patch: { enabled } });
   if (!resp?.ok) toast(resp?.error?.message || 'Не получилось', 'error');
-  else toast(enabled ? `Правило для ${toUnicode(r.domain)} включено` : `Правило для ${toUnicode(r.domain)} отключено: сайт открывается как остальные, пока его снова не включат`);
+  else toast(enabled ? `Правило для ${toUnicode(r.domain)} включено` : `Правило для ${toUnicode(r.domain)} отключено: сайт открывается как остальные, пока его снова не включат`, enabled ? '' : 'keep');
 }
+
+// keepIf — сообщение-итог остаётся до закрытия, если в нём есть пропущенные строки с причинами.
+const keepIf = (result) => (result.skipped.length ? 'keep' : '');
 
 // summary — «Добавлено 2, обновлено 1, пропущено 1: не похоже на домен».
 function summary(r, prefix = '') {
   const reasons = [...new Set(r.skipped.map((s) => `${s.text} — ${s.reason}`))];
   return `${prefix}добавлено ${r.added}, обновлено ${r.updated}, пропущено ${r.skipped.length}${reasons.length ? `: ${reasons.join('; ')}` : ''}`;
 }
-
-const parse = (v) => (v === 'direct' ? { action: 'direct', serverId: null } : { action: 'proxy', serverId: v.slice(6) || null });
 
 $('ruleForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -121,13 +200,13 @@ $('ruleForm').addEventListener('submit', async (e) => {
     $('ruleInput').focus();
     return;
   }
-  const resp = await send({ type: 'addRules', text, ...parse($('ruleAction').value) });
+  const resp = await send({ type: 'addRules', text, ...parseAction($('ruleAction').value) });
   if (!resp?.ok) {
     toast(resp?.error?.message || 'Не получилось', 'error');
     return;
   }
   const r = resp.result;
-  toast(summary(r).replace(/^д/, 'Д'), r.added + r.updated ? '' : 'error');
+  toast(summary(r).replace(/^д/, 'Д'), r.added + r.updated ? keepIf(r) : 'error');
   if (r.added + r.updated) {
     $('ruleInput').value = '';
     grow();
@@ -159,8 +238,16 @@ $('rulesList').addEventListener('click', async (e) => {
   let resp = { ok: true };
   if (action === 'more') ruleMenu(e.target.closest('button'), r);
   else if (action === 'remove') {
+    // Корзина удаляет сразу, без вопроса, — поэтому в сообщении «Вернуть»: правило возвращается
+    // таким, каким было, вместе с доменами сайта.
     resp = await send({ type: 'removeRules', ids: [id] });
-    if (resp?.ok) toast(`Правило для ${toUnicode(r.domain)} удалено`);
+    if (resp?.ok) {
+      toast(`Правило удалено: ${toUnicode(r.domain)}`, '', { action: { label: 'Вернуть', run: async () => {
+        const back = await send({ type: 'restoreRules', rules: [r] });
+        const ok = back?.ok && back.result.restored > 0;
+        toast(ok ? `Правило для ${toUnicode(r.domain)} возвращено` : back?.error?.message || `Для ${toUnicode(r.domain)} уже есть другое правило — прежнее не возвращено`, ok ? '' : 'error');
+      } } });
+    }
   } else if (action === 'target') openPicker({ kind: 'rule', ruleId: id });
   if (!resp?.ok) toast(resp?.error?.message || 'Не получилось', 'error');
 });
@@ -182,8 +269,8 @@ async function toggleWhenOff() {
   const value = !S.view.settings.rulesWhenOff;
   const resp = await send({ type: 'setSetting', key: 'rulesWhenOff', value });
   if (!resp?.ok) toast(resp?.error?.message || 'Не получилось', 'error');
-  else toast(value ? 'Правила работают и при выключенном VPN: сайты из правил «через VPN» идут через VPN, остальные — напрямую'
-    : 'При выключенном VPN правила не действуют: все сайты идут напрямую');
+  else toast(value ? 'Правила работают и при выключенном VPN: сайты из правил «через VPN» идут через VPN, остальные — без VPN'
+    : 'При выключенном VPN правила не действуют: все сайты идут без VPN');
 }
 
 function exportToFile() {
@@ -211,7 +298,7 @@ function importRules() {
       return;
     }
     const resp = await send({ type: 'importRules', data });
-    toast(resp?.ok ? summary(resp.result, 'Импорт: ') : resp?.error?.message || 'Не получилось', resp?.ok ? '' : 'error');
+    toast(resp?.ok ? summary(resp.result, 'Импорт: ') : resp?.error?.message || 'Не получилось', resp?.ok ? keepIf(resp.result) : 'error');
   });
   input.click();
 }
@@ -238,7 +325,7 @@ async function openSets() {
         el('ul', { className: 'sets' }, ...list.map((set) => {
           const add = async (action) => {
             const resp = await send({ type: 'addRules', domains: set.domains, action, serverId: null });
-            toast(resp?.ok ? summary(resp.result, `Набор «${set.name}» (${action === 'direct' ? 'без VPN' : 'через VPN'}): `) : resp?.error?.message || 'Не получилось', resp?.ok ? '' : 'error');
+            toast(resp?.ok ? summary(resp.result, `Набор «${set.name}» (${action === 'direct' ? 'без VPN' : 'через VPN'}): `) : resp?.error?.message || 'Не получилось', resp?.ok ? keepIf(resp.result) : 'error');
           };
           const button = (action, text, cls) => {
             const b = el('button', { type: 'button', className: cls, textContent: text, onclick: () => add(action) });

@@ -2,20 +2,25 @@
 // Окно только показывает данные из chrome.storage и шлёт команды фону (lib/format.js, send).
 
 import { normalize } from '../lib/storage.js';
+import { siteData } from '../lib/sitedomains.js';
 import { $, el, setIcon } from './ui.js';
 
 // S — всё, что показывает окно. site — открытая вкладка браузера: { host, tabId } (только http(s));
 // full — окно развёрнуто на всю вкладку (popup.html?full).
-export const S = { view: normalize(), status: null, site: null, full: false };
+// siteNew — { id вкладки: [новые «домены сайта»] }: подсказка «обновите вкладку» на «Главной».
+// ruDomains — домены переключателя «Российские сайты — без VPN» (набор из lib/domain-sets.json):
+// по ним окно показывает маршрут сайта так же, как его решит PAC.
+export const S = { view: normalize(), status: null, site: null, full: false, siteNew: {}, ruDomains: [] };
 
-const dataSubs = new Set();
-export const onData = (fn) => dataSubs.add(fn);
+let ruLoading = null; // файл самого расширения — читается один раз
+const loadRu = () => (ruLoading ??= fetch(chrome.runtime.getURL('lib/domain-sets.json')).then((r) => r.json()).then((j) => siteData(j).ruDirect, () => []));
 
 export async function loadData() {
-  const [local, session] = await Promise.all([chrome.storage.local.get(null), chrome.storage.session.get('status')]);
+  const [local, session, ru] = await Promise.all([chrome.storage.local.get(null), chrome.storage.session.get(['status', 'siteNew']), loadRu()]);
+  S.ruDomains = ru;
   S.view = normalize(local);
   S.status = session.status || null;
-  for (const fn of dataSubs) fn();
+  S.siteNew = session.siteNew || {};
   renderVisible();
 }
 

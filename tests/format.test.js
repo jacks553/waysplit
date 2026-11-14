@@ -1,7 +1,7 @@
 // Тесты extension/lib/format.js: подписи серверов и пинга.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PING_FRESH_MS, freshPing, hostPort, matches, pingView, serverMeta } from '../extension/lib/format.js';
+import { PING_FRESH_MS, freshPing, hostPort, matches, serverMeta } from '../extension/lib/format.js';
 
 test('адрес и подпись сервера', () => {
   assert.equal(hostPort({ address: 'nl.example.com', port: 443 }), 'nl.example.com:443');
@@ -9,14 +9,6 @@ test('адрес и подпись сервера', () => {
   assert.equal(serverMeta({ protocol: 'vless', security: 'reality', address: 'nl.example.com', port: 443 }), 'VLESS · Reality · nl.example.com:443');
   assert.equal(serverMeta({ protocol: 'hysteria2', security: 'tls', address: 'hy.example.com', port: 443 }), 'HY2 · TLS · hy.example.com:443');
   assert.equal(serverMeta({ protocol: 'vless', security: 'none', address: '198.51.100.7', port: 80 }), 'VLESS · без TLS · 198.51.100.7:80');
-});
-
-test('пинг: оценка по времени, нет ответа, не меряли', () => {
-  assert.deepEqual(pingView({ lastPingMs: 48 }), { text: '48 мс', level: 'good' });
-  assert.deepEqual(pingView({ lastPingMs: 350 }), { text: '350 мс', level: 'mid' });
-  assert.deepEqual(pingView({ lastPingMs: 900 }), { text: '900 мс', level: 'bad' });
-  assert.deepEqual(pingView({ lastPingMs: null, lastPingError: 'Сервер не отвечает' }), { text: 'нет ответа', level: 'fail', title: 'Сервер не отвечает' });
-  assert.deepEqual(pingView({}), { text: '—', level: 'none' });
 });
 
 test('свежий пинг — моложе минуты; старше, будущий или не меряли — нет', () => {

@@ -103,8 +103,10 @@ func AddSecret(s string) {
 }
 
 var (
-	linkRe = regexp.MustCompile(`(?i)\b(vless|vmess|trojan|ss|hysteria2|hy2|hysteria|tuic)://[^\s"'<>]+`)
+	linkRe = regexp.MustCompile(`(?i)\b(vless|vmess|trojan|ss|hysteria2|hy2|hysteria|tuic|happ)://[^\s"'<>]+`)
 	uuidRe = regexp.MustCompile(`(?i)\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`)
+	// happKindRe — вид ссылки Happ (crypt, crypt4, add…): его показываем, остальное — нет.
+	happKindRe = regexp.MustCompile(`^[A-Za-z0-9]{1,12}$`)
 )
 
 // Mask прячет секреты: запомненные через AddSecret, ссылки серверов и всё, что похоже на uuid.
@@ -122,12 +124,25 @@ func Mask(s string) string {
 // uuid сокращается до первых 4 символов, пароль и параметры (?…) скрываются.
 //
 //	vless://d47d7dee-…@vpn.example.com:443?pbk=…#Имя → vless://d47d…@vpn.example.com:443?…#Имя
+//
+// Ссылки приложения Happ — только вид: happ://crypt4/<шифровка> → happ://crypt4/…,
+// happ://add/<адрес подписки> → happ://add/… (после вида — только секреты).
 func MaskLink(link string) string {
 	i := strings.Index(link, "://")
 	if i < 0 {
 		return "***"
 	}
 	scheme, rest := link[:i], link[i+3:]
+	if strings.EqualFold(scheme, "happ") {
+		kind := rest
+		if j := strings.IndexAny(kind, "/?#"); j >= 0 {
+			kind = kind[:j]
+		}
+		if !happKindRe.MatchString(kind) {
+			return scheme + "://…"
+		}
+		return scheme + "://" + kind + "/…"
+	}
 	name := ""
 	if j := strings.IndexByte(rest, '#'); j >= 0 {
 		name, rest = rest[j:], rest[:j]

@@ -10,6 +10,7 @@
 //   alarms { start(), stop() } — сторож раз в минуту будит фон, если тот уснул
 //   privacy { protect(), release() } — защита WebRTC (chrome.privacy); необязательно
 //   ui     { setIcon(state, title) } — значок на панели: off | on | rules | error; необязательно
+//   sets   () → содержимое lib/domain-sets.json (наборы и списки для «доменов сайта»); необязательно
 //   timers { setTimeout, clearTimeout, setInterval, clearInterval }
 
 import { buildPac } from './pac.js';
@@ -18,17 +19,18 @@ import { routingPlan } from './rules.js';
 import { normalizeDomain } from './domains.js';
 import { dropSubscription, isDue, mergeSubscription, subHost } from './subscriptions.js';
 import { maskUrl } from './format.js';
+import { attachSets, canAttach, cleanSiteDomain, indexRules, siteData, tidySiteDomains } from './sitedomains.js';
 import { MIN_HOST_VERSION, olderThan, outdatedMessage } from './companion.js';
 
 export const HEARTBEAT_MS = 20000;
-export const RECONNECT_DELAYS = [1000, 3000, 10000, 30000];
-export const PING_URL = 'https://www.gstatic.com/generate_204';
+const RECONNECT_DELAYS = [1000, 3000, 10000, 30000];
+const PING_URL = 'https://www.gstatic.com/generate_204';
 const APPLY_TIMEOUT = 60000;
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/; // как у компаньона: из таких id собираются теги sing-box
 
 export class Controller {
-  constructor({ store, proxy, host, alarms, privacy = null, ui = null, timers = globalThis, now = Date.now }) {
-    Object.assign(this, { store, proxy, host, alarms, privacy, ui, timers, now });
+  constructor({ store, proxy, host, alarms, privacy = null, ui = null, sets = null, timers = globalThis, now = Date.now }) {
+    Object.assign(this, { store, proxy, host, alarms, privacy, ui, sets, timers, now });
     this.appliedPac = undefined; // что стоит в Chrome — неизвестно, пока фон не поставил сам
     this.rtc = undefined; // защита WebRTC: 'on' — поставлена нами, 'off' — снята, иначе — почему не вышло
     this.iconKey = '';
@@ -48,6 +50,7 @@ export class Controller {
     this.running = null;
     this.again = false;
     this.writes = Promise.resolve();
+    this.hintWrites = Promise.resolve();
     host.onDisconnect = (err) => this.#hostLost(err);
   }
 
@@ -60,9 +63,32 @@ export class Controller {
         const st = normalize(await this.store.get());
         if (st.settings.autoConnect === 'off' && st.enabled) await this.store.set({ enabled: false });
       }
+      await this.#applySetsOnce();
       await this.reconcile();
     })();
     return this.initDone;
+  }
+
+  // siteData — наборы и списки для «доменов сайта» (lib/domain-sets.json), читаются один раз.
+  siteData() {
+    this.siteDataP ??= (async () => {
+      try {
+        return siteData(await this.sets?.());
+      } catch {
+        this.siteDataFailed = true; // файл не прочитался: наборов нет, но остальное работает
+        return siteData();
+      }
+    })();
+    return this.siteDataP;
+  }
+
+  // #applySetsOnce — один раз после обновления с версии без «доменов сайта»: правилам, чей домен —
+  // главный домен набора (youtube.com), привязать домены набора (кроме тех, у кого своё правило).
+  async #applySetsOnce() {
+    if (normalize(await this.store.get()).siteSetsApplied) return;
+    const data = await this.siteData();
+    if (this.siteDataFailed) return; // попробуем при следующем запуске фона
+    await this.#mutate((st) => (st.siteSetsApplied ? null : { rules: attachSets(st.rules, data), siteSetsApplied: true }));
   }
 
   reconcile() {
@@ -89,7 +115,7 @@ export class Controller {
 
   async #step() {
     const st = normalize(await this.store.get());
-    const plan = routingPlan(st);
+    const plan = routingPlan(st, (await this.siteData()).ruDirect);
     const server = plan.current;
     const want = plan.vpnOn;
     // SPEC 3.4: ядро — только когда нужно: VPN включён, работают правила «через VPN» или идёт пинг.
@@ -378,11 +404,14 @@ export class Controller {
   }
 
   // addRules — правила для доменов (адрес или домен, по одному в элементе). Один домен — одно
-  // правило: для уже известного домена правило заменяется. serverId — только для 'proxy'
-  // (null — текущий сервер).
+  // правило: для уже известного домена правило заменяется (его «домены сайта» остаются).
+  // serverId — только для 'proxy' (null — текущий сервер). Домен — главный в наборе (youtube.com):
+  // остальные домены набора привязываются к правилу как «домены сайта». Домен был привязан
+  // к другому правилу — привязка снимается: теперь у него своё правило.
   async addRules(entries, action, serverId = null) {
     if (action !== 'direct' && action !== 'proxy') throw coded('BAD_RULE', 'Неизвестное действие правила');
     const res = { added: 0, updated: 0, skipped: [], domains: [] };
+    const data = await this.siteData();
     await this.#mutate((st) => {
       if (action === 'proxy' && serverId && !st.servers.some((s) => s.id === serverId)) throw coded('NOT_FOUND', 'Такого сервера нет');
       const rules = [...st.rules];
@@ -405,12 +434,13 @@ export class Controller {
           rules[i] = { ...rules[i], ...fields };
           res.updated++;
         } else {
-          rules.push({ id: newId(rules, 'r_'), domain: n.domain, ...fields });
+          rules.push({ id: newId(rules, 'r_'), domain: n.domain, ...fields, siteDomains: [], siteDomainsRemoved: [] });
           index.set(n.domain, rules.length - 1);
           res.added++;
         }
       }
-      return { rules };
+      const touched = new Set(res.domains.map((d) => rules[index.get(d)].id));
+      return { rules: attachSets(tidySiteDomains(rules), data, touched) };
     });
     await this.reconcile();
     return res;
@@ -444,14 +474,134 @@ export class Controller {
     await this.reconcile();
   }
 
+  // restoreRules — вернуть только что удалённые правила такими, какими они были (кнопка «Вернуть»
+  // в сообщении об удалении): действие, сервер, включённость и домены сайта. Правило для домена,
+  // у которого за это время появилось другое правило, не возвращается. Ответ: { restored }.
+  async restoreRules(list) {
+    let restored = 0;
+    await this.#mutate((st) => {
+      const rules = [...st.rules];
+      for (const r of Array.isArray(list) ? list : []) {
+        const n = normalizeDomain(r?.domain);
+        if (n.error || (r.action !== 'direct' && r.action !== 'proxy') || rules.some((x) => x.domain === n.domain)) continue;
+        const sameId = typeof r.id === 'string' && /^r_[a-z0-9]{1,16}$/.test(r.id) && !rules.some((x) => x.id === r.id);
+        rules.push({
+          id: sameId ? r.id : newId(rules, 'r_'), domain: n.domain, action: r.action,
+          serverId: r.action === 'proxy' && st.servers.some((s) => s.id === r.serverId) ? r.serverId : null, enabled: r.enabled !== false,
+          siteDomains: r.siteDomains, siteDomainsRemoved: r.siteDomainsRemoved,
+        });
+        restored++;
+      }
+      return restored ? { rules: tidySiteDomains(rules) } : null;
+    });
+    await this.reconcile();
+    return { restored };
+  }
+
+  // --- «домены сайта» (lib/sitedomains.js) ---
+
+  // removeSiteDomain — убрать привязанный домен из правила. Он запоминается как убранный:
+  // автосбор и наборы его не вернут.
+  async removeSiteDomain(ruleId, domain) {
+    await this.#mutate((st) => {
+      const rule = st.rules.find((r) => r.id === ruleId);
+      if (!rule) throw coded('NOT_FOUND', 'Такого правила нет');
+      if (!rule.siteDomains.includes(domain)) return null;
+      const next = {
+        ...rule,
+        siteDomains: rule.siteDomains.filter((d) => d !== domain),
+        siteDomainsRemoved: [...new Set([...rule.siteDomainsRemoved, domain])],
+      };
+      return { rules: st.rules.map((r) => (r.id === ruleId ? next : r)) };
+    });
+    await this.reconcile();
+  }
+
+  // restoreSiteDomains — забыть убранные домены правила: наборы привяжут свои сразу, автосбор —
+  // когда вкладка снова к ним обратится.
+  async restoreSiteDomains(ruleId) {
+    const data = await this.siteData();
+    await this.#mutate((st) => {
+      if (!st.rules.some((r) => r.id === ruleId)) throw coded('NOT_FOUND', 'Такого правила нет');
+      const rules = st.rules.map((r) => (r.id === ruleId ? { ...r, siteDomainsRemoved: [] } : r));
+      return { rules: attachSets(rules, data, new Set([ruleId])) };
+    });
+    await this.reconcile();
+  }
+
+  // attachSiteDomains — автосбор (SiteCollector): batch — { id правила: [домены] }, tabs —
+  // { id вкладки: [домены] }. Каждый домен проверяется заново по свежим правилам: правило всё ещё
+  // включено и «через VPN», у домена нет своего правила, он никуда не привязан и не убран.
+  // В storage.session.siteNew — что нового у какой вкладки (подсказка «обновите вкладку» в окне).
+  // isOpen(id вкладки) — открыта ли она ещё: вкладку могли закрыть, пока домены ждали записи, —
+  // такой подсказку не пишем (сами домены правилу остаются).
+  async attachSiteDomains(batch, tabs = {}, isOpen = () => true) {
+    const added = new Map(); // id правила → домены
+    await this.#mutate((st) => {
+      if (st.settings.autoSiteDomains === false) return null;
+      const rules = st.rules.map((r) => ({ ...r, siteDomains: [...r.siteDomains] }));
+      for (const [ruleId, domains] of Object.entries(batch || {})) {
+        const rule = rules.find((r) => r.id === ruleId);
+        if (!rule || !rule.enabled || rule.action !== 'proxy') continue;
+        for (const raw of Array.isArray(domains) ? domains : []) {
+          const d = cleanSiteDomain(raw);
+          if (!d || !canAttach(indexRules(rules), rule, d)) continue;
+          rule.siteDomains.push(d);
+          added.set(ruleId, [...(added.get(ruleId) || []), d]);
+        }
+      }
+      return added.size ? { rules } : null;
+    });
+    if (!added.size) return { added: 0 };
+    const all = new Set([...added.values()].flat());
+    const st = normalize(await this.store.get());
+    for (const [ruleId, domains] of added) {
+      const rule = st.rules.find((r) => r.id === ruleId);
+      this.log('info', `Домены сайта ${rule?.domain ?? ruleId}: добавлено ${domains.length} (${domains.slice(0, 8).join(', ')}${domains.length > 8 ? ', …' : ''})`);
+    }
+    await this.#hints((siteNew) => {
+      const next = { ...siteNew };
+      for (const [tabId, domains] of Object.entries(tabs || {})) {
+        const fresh = (Array.isArray(domains) ? domains : []).filter((d) => all.has(d));
+        if (fresh.length && isOpen(Number(tabId))) next[tabId] = [...new Set([...(next[tabId] || []), ...fresh])];
+      }
+      return next;
+    });
+    await this.reconcile();
+    return { added: all.size };
+  }
+
+  // clearSiteNew — вкладку обновили, закрыли или открыли в ней другую страницу: подсказка не нужна.
+  async clearSiteNew(tabId) {
+    await this.#hints((siteNew) => {
+      if (!(tabId in siteNew)) return null;
+      const { [tabId]: _gone, ...rest } = siteNew;
+      return rest;
+    });
+  }
+
+  // #hints — изменения подсказок «обновите вкладку» (storage.session.siteNew) по одному:
+  // прочитать → поправить → записать. Иначе запись автосбора для одной вкладки и снятие подсказки
+  // у другой, начатые одновременно, затирают друг друга.
+  #hints(fn) {
+    const job = this.hintWrites.then(async () => {
+      const next = fn((await this.store.getSession('siteNew')) || {});
+      if (next) await this.store.setSession({ siteNew: next });
+    });
+    this.hintWrites = job.catch(() => {});
+    return job;
+  }
+
   // importRules — правила из файла резервной копии (exportRules). Сервер ищется по имени;
-  // не нашёлся — правило идёт через текущий сервер.
+  // не нашёлся — правило идёт через текущий сервер. «Домены сайта» — из файла; в файлах
+  // версии 1.0.0 их нет — тогда правилу привязываются домены его набора (как в addRules).
   async importRules(data) {
     const list = Array.isArray(data?.rules) ? data.rules : null;
     if (data?.type !== 'rules' || !list) throw coded('BAD_FILE', 'Это не файл правил Waysplit');
     const st = normalize(await this.store.get());
     const groups = new Map(); // «действие|сервер|вкл» → домены: добавляем пачками
     const res = { added: 0, updated: 0, skipped: [], domains: [] };
+    const fromFile = new Map(); // домен → «домены сайта» из файла
     for (const r of list) {
       if (r?.action !== 'direct' && r?.action !== 'proxy') {
         res.skipped.push({ text: String(r?.domain ?? ''), reason: 'неизвестное действие' });
@@ -461,6 +611,8 @@ export class Controller {
       const key = `${r.action}|${serverId ?? ''}|${r.enabled !== false}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(r.domain);
+      const n = normalizeDomain(r.domain);
+      if (!n.error && Array.isArray(r.siteDomains)) fromFile.set(n.domain, { siteDomains: r.siteDomains, siteDomainsRemoved: r.siteDomainsRemoved });
     }
     for (const [key, domains] of groups) {
       const [action, serverId, enabled] = key.split('|');
@@ -471,6 +623,9 @@ export class Controller {
       if (enabled === 'false') {
         await this.#mutate((cur) => ({ rules: cur.rules.map((x) => (part.domains.includes(x.domain) ? { ...x, enabled: false } : x)) }));
       }
+    }
+    if (fromFile.size) {
+      await this.#mutate((cur) => ({ rules: tidySiteDomains(cur.rules.map((x) => (fromFile.has(x.domain) ? { ...x, ...fromFile.get(x.domain) } : x))) }));
     }
     await this.reconcile();
     return res;
@@ -650,17 +805,25 @@ export class Controller {
       });
     }
     const serverIds = new Set(servers.map((s) => s.id));
-    const rules = [];
+    // «Домены сайта» — из копии; в копиях версии 1.0.0 их нет — тогда по наборам.
+    let rules = [];
+    const old = new Set(); // id правил из копии без «доменов сайта»
     for (const r of Array.isArray(data.rules) ? data.rules : []) {
       const n = normalizeDomain(r?.domain);
       if (n.error || (r.action !== 'direct' && r.action !== 'proxy') || rules.some((x) => x.domain === n.domain)) continue;
-      rules.push({ id: newId(rules, 'r_'), domain: n.domain, action: r.action, serverId: r.action === 'proxy' && serverIds.has(r.serverId) ? r.serverId : null, enabled: r.enabled !== false });
+      const id = newId(rules, 'r_');
+      if (!Array.isArray(r.siteDomains)) old.add(id);
+      rules.push({
+        id, domain: n.domain, action: r.action, serverId: r.action === 'proxy' && serverIds.has(r.serverId) ? r.serverId : null, enabled: r.enabled !== false,
+        siteDomains: r.siteDomains, siteDomainsRemoved: r.siteDomainsRemoved,
+      });
     }
+    rules = attachSets(tidySiteDomains(rules), await this.siteData(), old);
     const currentServerId = serverIds.has(data.currentServerId) ? data.currentServerId : servers[0]?.id ?? null;
     // Избранное — по key: ключи из копии, у которых сервер восстановился (старые копии — без избранного).
     const keys = new Set(servers.map((s) => s.key));
     const favorites = [...new Set((Array.isArray(data.favorites) ? data.favorites : []).filter((k) => keys.has(k)))];
-    await this.#mutate(() => ({ servers, subscriptions, rules, settings, currentServerId, favorites }));
+    await this.#mutate(() => ({ servers, subscriptions, rules, settings, currentServerId, favorites, siteSetsApplied: true }));
     this.log('info', `Восстановлено из резервной копии: серверов ${servers.length}, подписок ${subscriptions.length}, правил ${rules.length}`);
     await this.reconcile();
     return { servers: servers.length, skipped, subscriptions: subscriptions.length, rules: rules.length };
@@ -826,6 +989,9 @@ function coded(code, message) {
 // Допустимые значения настроек (SPEC 3.6).
 const SETTING_CHECKS = {
   rulesWhenOff: (v) => typeof v === 'boolean',
+  autoSiteDomains: (v) => typeof v === 'boolean',
+  siteDomainsAsked: (v) => typeof v === 'boolean',
+  ruDirect: (v) => typeof v === 'boolean',
   onFailure: (v) => v === 'block' || v === 'direct',
   webrtcProtection: (v) => typeof v === 'boolean',
   autoConnect: (v) => v === 'restore' || v === 'off',

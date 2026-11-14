@@ -51,9 +51,13 @@ body { background: var(--bg-full); }
 .release-link { font-size: 13px; color: var(--accent); }
 .note { color: var(--muted); font-size: 13px; }
 .state { font-weight: 600; }
-.state[data-kind="ok"] { color: var(--ok); }
+.state[data-kind="ok"] { color: var(--status-ok); }
 .state[data-kind="error"] { color: var(--err); }
 .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .ghost, .btn { justify-self: start; }
 .foot { color: var(--muted); font-size: 13px; }
 .foot a { color: var(--accent); font-weight: 600; }
+/* Галочка «Российские сайты — без VPN» на шаге со ссылкой — та же настройка, что переключатель в окне. */
+.option { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; cursor: pointer; }
+.option input { margin: 3px 0 0; accent-color: var(--accent); flex: none; }
+.option-sub { display: block; color: var(--muted); font-size: 13px; }

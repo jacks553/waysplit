@@ -2,11 +2,17 @@
 // Вверху — поиск; избранные сверху, потом группы по подпискам, свои ссылки — отдельно. При открытии
 // пинг видимых серверов обновляется сам, не чаще раза в минуту на сервер.
 
-import { PROTOCOLS, SECURITY, freshPing, hostPort, matches, plural, send, splitFlag } from '../lib/format.js';
+import { PROTOCOLS, SECURITY, SERVER_WORDS, freshPing, hostPort, matches, pingBars, plural, send, splitFlag } from '../lib/format.js';
 import { ruleServer } from '../lib/rules.js';
 import { toUnicode } from '../lib/domains.js';
 import { barsEl, el, flagEl, icon, setIcon, toast } from './ui.js';
 import { S, closeScreen, currentServer, isFav, openScreen, serverById, vpnOn } from './state.js';
+
+// metaEl — вторая строка в строке сервера. Текст — в своём элементе: только так он обрезается
+// с многоточием (у самой строки display: flex, и текст прямо в ней обрезался бы без «…»).
+function metaEl(text) {
+  return el('span', { className: 'srv-meta' }, el('span', { className: 'srv-meta-text', textContent: text }));
+}
 
 // serverItem — строка сервера: флаг, имя, протокол мелко, полоски задержки, звёздочка.
 // full — с адресом (вкладка «Серверы»); more — кнопка «⋯».
@@ -17,7 +23,11 @@ export function serverItem(s, { selected = false, full = false, more = false } =
   li.setAttribute('aria-selected', String(selected));
   const parts = [PROTOCOLS[s.protocol] || s.protocol, SECURITY[s.security] || s.security];
   if (full) parts.push(hostPort(s));
-  const meta = el('span', { className: 'srv-meta', textContent: parts.join(' · ') });
+  // Сервер не ответил на пинг — словами и первым в строке, а не только бледными полосками; причина —
+  // во всплывающей подсказке полосок. Остальной текст строки, если не помещается, — с многоточием.
+  const failed = pingBars(s).n === 0;
+  const meta = metaEl(`${failed ? ' · ' : ''}${parts.join(' · ')}`);
+  if (failed) meta.prepend(el('span', { className: 'srv-fail', textContent: 'нет ответа' }));
   if (s.core === 'xray') meta.append(el('span', { className: 'tag', textContent: 'Xray', title: 'Этот сервер запускает ядро Xray (XHTTP или VLESS Encryption)' }));
   const fav = isFav(s);
   const star = el('button', { type: 'button', className: 'icon-btn star', title: fav ? 'Убрать из избранного' : 'В избранное' });
@@ -147,8 +157,8 @@ export function openPicker(mode) {
   function specials() {
     if (mode.kind === 'site') {
       return [
-        { key: 'same', title: 'Как у остальных сайтов', sub: vpnOn() ? 'сейчас — через текущий сервер' : 'сейчас — напрямую: VPN выключен' },
-        { key: 'direct', title: 'Без VPN', sub: 'сайт всегда открывается напрямую' },
+        { key: 'same', title: 'Как у остальных сайтов', sub: vpnOn() ? 'сейчас — через текущий сервер' : 'сейчас — без VPN: VPN выключен' },
+        { key: 'direct', title: 'Без VPN', sub: 'сайт всегда открывается без VPN, даже когда VPN включён' },
       ];
     }
     if (mode.kind === 'rule') {
@@ -233,7 +243,7 @@ export function openPicker(mode) {
         return;
       }
       const servers = S.view.servers;
-      sc.setSub(plural(servers.length, ['сервер', 'сервера', 'серверов']));
+      sc.setSub(plural(servers.length, SERVER_WORDS));
       const sel = chosen();
       const found = servers.filter((s) => matches(s, query));
       const parts = [];
@@ -246,7 +256,7 @@ export function openPicker(mode) {
           li.setAttribute('aria-selected', String(sel === x.key));
           const ic = el('span', { className: 'flag special-ic' });
           ic.innerHTML = icon(x.key === 'direct' ? 'direct' : 'rules');
-          li.append(ic, el('span', { className: 'srv-main' }, el('span', { className: 'srv-name', textContent: x.title }), el('span', { className: 'srv-meta', textContent: x.sub })));
+          li.append(ic, el('span', { className: 'srv-main' }, el('span', { className: 'srv-name', textContent: x.title }), metaEl(x.sub)));
           return li;
         })));
       }

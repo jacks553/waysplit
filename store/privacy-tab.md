@@ -2,6 +2,8 @@
 
 Что вставить в каждое поле. Тексты для полей — по-английски: их читают проверяющие магазина. Под каждым — перевод и объяснение для вас. Сверено с документацией магазина 8 ноября 2026 г. (cws-dashboard-privacy, user-data-faq, limited-use, program-policies).
 
+> **Версия 1.1.0 («домены сайта»), 14 ноября 2026 г.** Перед отправкой 1.1.0 на проверку в панели нужно заменить три текста — они помечены ниже «ИЗМЕНЕНО в 1.1.0»: **storage**, **webRequest** и **доступ к сайтам**. Галочки в «Использовании данных» остаются те же (Authentication information, Web history, User activity), изменились только наши объяснения, почему. Остальные поля не менялись. В панели у каждого поля обоснования есть предел длины (в документации он не назван; в панели виден счётчик) — тексты ниже короче 1000 знаков; если какой-то не влезет, напишите мне.
+
 ## Единственное назначение (Single purpose description)
 
 ```text
@@ -24,10 +26,12 @@ Talks to the Waysplit companion, a separate Windows program the user installs. I
 Core function: sets a PAC script so that Chrome sends sites through the local proxy port of the selected server (127.0.0.1) or directly, according to the user's per-site rules. The previous proxy setting is cleared when the VPN and rules are off.
 ```
 
-**storage**
+**storage** — ИЗМЕНЕНО в 1.1.0
 ```text
-Keeps the user's servers, subscriptions, site rules and settings locally (chrome.storage.local), and the current connection state and diagnostic events for this browser session (chrome.storage.session). Nothing is synced or sent to the developer.
+Keeps the user's servers, subscriptions, site rules (including the content domains attached to each rule) and settings locally (chrome.storage.local), and the current connection state, diagnostic events and per-tab domain lists for this browser session (chrome.storage.session). Nothing is synced or sent to the developer.
 ```
+
+Перевод: локально хранятся серверы, подписки, правила сайтов (вместе с привязанными к правилу доменами сайта) и настройки; на время сеанса браузера — состояние подключения, события для диагностики и списки доменов вкладок. Ничего не синхронизируется и не отправляется разработчику.
 
 **alarms**
 ```text
@@ -51,10 +55,19 @@ Shows website icons next to the user's site rules and next to the active site in
 
 Перевод: значки сайтов у правил и у открытого сайта в окне — чтобы список легче читался. Значки берутся только из памяти самого Chrome (адрес `_favicon` расширения): никаких запросов в интернет и сторонних сервисов, список правил не уходит с компьютера. Нет значка — первая буква домена.
 
-**webRequest (необязательное) и доступ к сайтам `<all_urls>` (необязательный)** — если панель спросит обоснование для них (Host permission justification):
+**webRequest (необязательное)** — ИЗМЕНЕНО в 1.1.0
 ```text
-Optional, requested only when the user clicks "Domains of this tab" in the popup. Observes (never blocks or modifies) which domains the tabs load — e.g. videos and images served from other domains — so the user can add those domains to the VPN rules. Only domain names are kept, per tab, in session memory until the browser closes; nothing is transmitted. The user can revoke the permission at any time.
+Optional; asked once, with an explanation in the popup, after the user creates a "through VPN" site rule (or clicks "Domains of this tab"). Only observes which domains the tabs request; never blocks or modifies requests. Purpose — per-site VPN routing: a site loads its video, images and scripts from other domains, and Chrome picks a proxy by request URL, not by tab. (1) While a site with the user's "through VPN" rule is open in a tab, the domains this tab loads from are attached to that rule, so the whole site goes through the VPN. They are stored locally as part of the rule and listed in its menu, where the user can remove any; the feature can be turned off in settings. Never attached: common services (search, analytics, ads, script CDNs) and anything from incognito tabs. (2) "Domains of this tab" lists the current tab's domains so the user can add rules manually; kept in session memory only. Only domain names are read — no URLs, no page content. Nothing is transmitted.
 ```
+
+Перевод: необязательное; спрашивается один раз, с объяснением в окне, после первого правила «через VPN» (или по кнопке «Домены этой вкладки»). Только наблюдает, к каким доменам обращаются вкладки; запросы не блокирует и не меняет. Зачем — маршрут для каждого сайта: сайт грузит видео, картинки и скрипты с других доменов, а Chrome выбирает прокси по адресу запроса, а не по вкладке. (1) Пока во вкладке открыт сайт с правилом «через VPN», домены, с которых эта вкладка грузит данные, привязываются к этому правилу — через VPN идёт весь сайт. Они хранятся локально как часть правила и видны в его меню, где любой можно убрать; функцию можно выключить в настройках. Никогда не привязываются: общие сервисы (поиск, счётчики, реклама, библиотеки скриптов) и всё из вкладок инкогнито. (2) «Домены этой вкладки» — список доменов текущей вкладки, чтобы добавить правила вручную; только в памяти сеанса. Читаются только имена доменов — не адреса страниц и не содержимое. Ничего никуда не отправляется.
+
+**Доступ к сайтам `<all_urls>` (необязательный; Host permission justification)** — ИЗМЕНЕНО в 1.1.0
+```text
+Optional, granted together with webRequest. Chrome delivers webRequest events only for hosts the extension has access to, and the sites the user makes rules for — and the domains those sites load their content from — are not known in advance, so the access cannot be narrowed to a fixed list. It is used only to observe the domain names of the tabs' requests (see the webRequest justification). The extension injects no scripts, reads no page content and changes nothing on any site. The user can revoke the permission at any time in Chrome's extension settings; the rest of the extension keeps working without it.
+```
+
+Перевод: необязательный, даётся вместе с webRequest. Chrome отдаёт события webRequest только для сайтов, к которым у расширения есть доступ, а сайты, для которых пользователь делает правила, и домены, с которых они грузят содержимое, заранее неизвестны — сузить доступ до списка нельзя. Доступ нужен только чтобы видеть имена доменов в запросах вкладок. Расширение не внедряет скрипты, не читает содержимое страниц и ничего на сайтах не меняет. Разрешение можно отозвать в настройках расширения в Chrome; остальное продолжит работать.
 
 ## Удалённый код (Remote code)
 
@@ -74,8 +87,8 @@ Optional, requested only when the user clicks "Domains of this tab" in the popup
 | **Authentication information** (пароли, учётные данные) | **да** | ссылки серверов содержат ключи и пароли, адрес подписки — секретный токен; хранятся в Chrome и уходят компаньону и вашим же серверам / провайдеру — в этом смысл расширения |
 | Personal communications | нет | — |
 | Location (регион, IP-адрес, GPS) | нет | расширение не определяет ваше местоположение; «Мой IP сейчас» показывает IP сервера VPN, а не ваш |
-| **Web history** (посещённые страницы) | **да** | расширение видит домен открытой вкладки (activeTab), чтобы показать маршрут сайта; только на компьютере, не сохраняется |
-| **User activity** (в т. ч. «network monitoring») | **да** | «Домены этой вкладки» после вашего разрешения следит, к каким доменам обращаются вкладки (webRequest); только имена доменов, только в памяти браузера |
+| **Web history** (посещённые страницы) | **да** | расширение видит домен открытой вкладки (activeTab), чтобы показать маршрут сайта. С версии 1.1.0 ещё и сохраняет на компьютере «домены сайта» — домены, с которых грузят данные сайты из ваших правил «через VPN» (часть правила; адреса страниц не сохраняются). Никуда не отправляется |
+| **User activity** (в т. ч. «network monitoring») | **да** | после вашего разрешения расширение следит, к каким доменам обращаются вкладки (webRequest): для «доменов сайта» и для «Доменов этой вкладки». Только имена доменов, только на компьютере |
 | Website content | нет | содержимое страниц не читается |
 
 **Идентификатор устройства — не «личные данные»** (решение автора). Это случайный номер, не связанный с оборудованием и с человеком; он уходит только провайдеру подписки, только если тот требует, и только по https (так и в политике конфиденциальности). В «личные данные» магазин относит то, что указывает на человека (имя, адрес, почта, номера документов). Если проверяющие сочтут иначе и попросят отметить «Personally identifiable information», — отметим, это не меняет ничего в работе расширения.

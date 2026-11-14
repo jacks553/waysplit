@@ -3,7 +3,7 @@
 // скопировать ссылку, выше / ниже, удалить), порядок — и перетаскиванием. Экраны: «Добавить»,
 // «Подписка» (сведения, обновить, проверить, переименовать, удалить).
 
-import { addSummary, fmtBytes, fmtDate, maskUrl, matches, plural, send } from '../lib/format.js';
+import { SERVER_WORDS, addSummary, fmtBytes, fmtDate, maskUrl, matches, plural, send } from '../lib/format.js';
 import { $, ask, el, openMenu, setIcon, toast } from './ui.js';
 import { S, defineTab, isFav, openScreen, closeScreen, serverById } from './state.js';
 import { groupsOf, serverItem, toggleFavorite } from './picker.js';
@@ -16,7 +16,7 @@ const subServers = (id) => S.view.servers.filter((s) => s.subscriptionId === id)
 
 // subFacts — коротко о подписке: серверов, трафик, срок.
 function subFacts(sub, long = false) {
-  const facts = [plural(subServers(sub.id).length, ['сервер', 'сервера', 'серверов'])];
+  const facts = [plural(subServers(sub.id).length, SERVER_WORDS)];
   const info = sub.info;
   if (info?.total > 0) facts.push(`трафик ${fmtBytes(info.upload + info.download)} из ${fmtBytes(info.total)}`);
   else if (info && info.upload + info.download > 0) facts.push(`трафик ${fmtBytes(info.upload + info.download)}`);
@@ -112,7 +112,7 @@ function serverMenu(anchor, s) {
 async function copyLink(s) {
   try {
     await navigator.clipboard.writeText(s.link);
-    toast('Ссылка скопирована. В ней секреты сервера — не пересылайте её чужим.');
+    toast('Ссылка скопирована. В ней секреты сервера — не пересылайте её чужим.', 'keep');
   } catch (err) {
     toast(`Не удалось скопировать: ${err.message}`, 'error');
   }
@@ -254,7 +254,7 @@ $('fastest').addEventListener('click', async () => {
 
 // --- экран «Добавить» ---
 
-export function openAdd() {
+function openAdd() {
   openScreen({
     title: 'Добавить серверы',
     className: 'add-screen',
@@ -332,7 +332,7 @@ function fact(name, value, cls = '') {
 }
 
 // openSub — «сведения о подписке»: всё о ней, действия и проверка (SPEC-SUBS.md, шаг 1).
-export function openSub(id) {
+function openSub(id) {
   openScreen({
     title: subOf(id)?.name || 'Подписка',
     className: 'sub-screen',
@@ -345,7 +345,8 @@ export function openSub(id) {
         el('button', { type: 'button', className: 'ghost danger', textContent: 'Удалить', onclick: async () => { if (await removeSub(subOf(id))) closeScreen(); } }));
       // Проверка подписки: отчёт компаньона без секретов.
       const device = el('input', { id: 'subCheckDevice', type: 'checkbox' });
-      const runBtn = el('button', { id: 'subCheckRun', type: 'button', className: 'btn btn-small', textContent: 'Проверить подписку' });
+      // Залитая кнопка на экране одна — «Обновить»; проверка — контурная.
+      const runBtn = el('button', { id: 'subCheckRun', type: 'button', className: 'ghost', textContent: 'Проверить подписку' });
       const copyBtn = el('button', { id: 'subCheckCopy', type: 'button', className: 'ghost', textContent: 'Скопировать отчёт', hidden: true });
       const state = el('p', { id: 'subCheckState', className: 'note', hidden: true });
       const report = el('pre', { id: 'subCheckReport', className: 'log report', hidden: true });
@@ -393,7 +394,7 @@ export function openSub(id) {
         return;
       }
       sc.setTitle(sub.name);
-      sc.setSub(plural(subServers(id).length, ['сервер', 'сервера', 'серверов']));
+      sc.setSub(plural(subServers(id).length, SERVER_WORDS));
       const info = sub.info;
       const rows = [
         ...fact('Адрес', maskUrl(sub.url)),

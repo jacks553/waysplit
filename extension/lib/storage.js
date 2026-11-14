@@ -1,11 +1,18 @@
 // Модель данных в chrome.storage.local (SPEC, раздел 4). Секреты (ссылки серверов) — только
 // в local, не в sync. Пишет в хранилище только фоновая часть; окна читают и шлют ей команды.
 
-export const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 1;
 export const PORT_RANGE = 199; // 27101–27299 при начале по умолчанию
 
 export const DEFAULT_SETTINGS = {
   rulesWhenOff: true,
+  // «Домены сайта» (lib/sitedomains.js): автосбор для правил «через VPN» и спрашивали ли уже
+  // разрешение Chrome видеть запросы вкладок (спрашиваем один раз).
+  autoSiteDomains: true,
+  siteDomainsAsked: false,
+  // «Российские сайты — без VPN»: домены набора «Российские сайты без VPN» (lib/domain-sets.json)
+  // идут напрямую, даже когда VPN включён. Это настройка, а не правила: правила пользователя важнее.
+  ruDirect: false,
   onFailure: 'block', // сервер недоступен: 'block' — не открывать сайт, 'direct' — напрямую
   webrtcProtection: true,
   autoConnect: 'restore', // при запуске Chrome: 'restore' — как было, 'off' — выключено
@@ -24,7 +31,15 @@ export function normalize(raw = {}) {
     currentServerId: raw.currentServerId ?? null,
     servers: Array.isArray(raw.servers) ? raw.servers : [],
     subscriptions: Array.isArray(raw.subscriptions) ? raw.subscriptions : [],
-    rules: Array.isArray(raw.rules) ? raw.rules : [],
+    // У правил из версии 1.0.0 «доменов сайта» нет — пустые списки.
+    rules: (Array.isArray(raw.rules) ? raw.rules : []).map((r) => ({
+      ...r,
+      siteDomains: Array.isArray(r.siteDomains) ? r.siteDomains : [],
+      siteDomainsRemoved: Array.isArray(r.siteDomainsRemoved) ? r.siteDomainsRemoved : [],
+    })),
+    // siteSetsApplied — правилам из прежней версии уже привязаны домены их наборов (один раз,
+    // Controller.init).
+    siteSetsApplied: raw.siteSetsApplied === true,
     // favorites — избранные серверы (звёздочки в окне, SPEC-POPUP.md): по key сервера, а не по id —
     // key не меняется при обновлении подписки и при повторном добавлении той же ссылки.
     favorites: Array.isArray(raw.favorites) ? raw.favorites.filter((k) => typeof k === 'string') : [],

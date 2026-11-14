@@ -17,7 +17,11 @@ func TestMaskLink(t *testing.T) {
 		"vless://short@h.example.com:443":                                   "vless://***@h.example.com:443",
 		"vless://" + uuid + "@h.example.com:443#EU%20%7C%20LTE":             "vless://d47d…@h.example.com:443#EU | LTE",
 		"vmess://eyJhZGQiOiJ4IiwiaWQiOiJzZWNyZXQifQ==#VM":                   "vmess://…#VM",
-		"не ссылка": "***",
+		"happ://crypt4/QUJDREVGR0g+/ab@cd?x=1#имя":                          "happ://crypt4/…",
+		"HAPP://CRYPT/abc": "HAPP://CRYPT/…",
+		"happ://add/https://user@sub.example.com/api/sub/TOKEN": "happ://add/…",
+		"happ://@secret-host/x":                                 "happ://…",
+		"не ссылка":                                             "***",
 	} {
 		if got := MaskLink(in); got != want {
 			t.Errorf("MaskLink(%q) = %q, ожидалось %q", in, got, want)
@@ -29,9 +33,9 @@ func TestMask(t *testing.T) {
 	AddSecret("очень-секретный-пароль")
 	AddSecret("ab") // слишком короткий — не запоминается, иначе маскировал бы всё подряд
 	in := "сервер vless://" + uuid + "@h.example.com:443?pbk=K#A, uuid " + strings.ToUpper(uuid) +
-		", пароль очень-секретный-пароль, слово ab"
+		", пароль очень-секретный-пароль, слово ab, Happ happ://crypt5/ZmFrZS1wYXlsb2Fk, happ://add/https://sub.example.com/sub/TOKEN42"
 	got := Mask(in)
-	for _, leak := range []string{uuid, strings.ToUpper(uuid), "очень-секретный-пароль", "pbk=K"} {
+	for _, leak := range []string{uuid, strings.ToUpper(uuid), "очень-секретный-пароль", "pbk=K", "ZmFrZS1wYXlsb2Fk", "TOKEN42", "sub.example.com"} {
 		if strings.Contains(got, leak) {
 			t.Errorf("в тексте осталось %q: %s", leak, got)
 		}

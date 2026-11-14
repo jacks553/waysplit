@@ -3,8 +3,8 @@
 //
 // Настоящее окно расширения на вымышленных данных — копия расширения с подделкой компаньона
 // (tools/shots-lib.js). Окно показано на фоне в цветах значка с подписью — как его видно на панели
-// Chrome. Кадры: 1 — «Главная» (подключено, «Этот сайт» — напрямую по правилу); 2 — выбор сервера
-// (избранное, подписка, полоски); 3 — правила сайтов; 4 — серверы с подпиской; 5 — тёмная тема.
+// Chrome. Кадры: 1 — «Главная» (подключено, «Этот сайт» — без VPN по правилу); 2 — выбор сервера
+// (избранное, подписка, полоски); 3 — правила сайтов (у одного — «+4 домена сайта»); 4 — серверы с подпиской; 5 — тёмная тема.
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -14,7 +14,7 @@ import { prepareExtension, root, seed, sleep, startChrome } from './shots-lib.js
 const outDir = resolve(process.argv[2] || join(root, 'store', 'screenshots'));
 const work = mkdtempSync(join(tmpdir(), 'waysplit-shots-'));
 
-// Сцена: окно расширения (popup.html во фрейме, 400×580 — как на панели) на фоне в цветах значка,
+// Сцена: окно расширения (popup.html во фрейме, 400×600 — как на панели) на фоне в цветах значка,
 // слева — подпись.
 const stageHtml = `<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><title>Waysplit</title>
@@ -32,9 +32,9 @@ body { font-family: "Segoe UI", system-ui, sans-serif; color: #fff; overflow: hi
 .caption img { display: block; margin: 0 0 8px -16px; }
 .caption h1 { font-size: 46px; line-height: 1.15; margin: 0 0 18px; font-weight: 700; letter-spacing: -0.5px; }
 .caption p { font-size: 23px; line-height: 1.45; margin: 0; max-width: 540px; opacity: 0.94; }
-.window { width: calc(400px * var(--z)); height: calc(580px * var(--z)); border-radius: 14px; overflow: hidden;
+.window { width: calc(400px * var(--z)); height: calc(600px * var(--z)); border-radius: 14px; overflow: hidden;
   box-shadow: 0 28px 70px rgba(4, 20, 60, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.15); }
-iframe { display: block; border: 0; width: 400px; height: 580px; transform: scale(var(--z)); transform-origin: 0 0; }
+iframe { display: block; border: 0; width: 400px; height: 600px; transform: scale(var(--z)); transform-origin: 0 0; }
 `;
 const stageJs = `const q = new URLSearchParams(location.search);
 document.getElementById('title').textContent = q.get('t') || '';
@@ -53,9 +53,13 @@ async function main() {
   try {
     const { id } = await chrome.send('Extensions.loadUnpacked', { path: ext });
     const base = `chrome-extension://${id}`;
-    const ctl = await chrome.page(400, 580);
+    const ctl = await chrome.page(400, 600);
     await ctl.goto(`${base}/popup/popup.html?full`);
     const { msg } = await seed(ctl);
+    // «Домены сайта» (новое в 1.1.0): у правила video.example.com — четыре привязанных домена
+    // (вымышленные), в строке правила видно «+4 домена сайта». Привязка — как при импорте правил.
+    await msg({ type: 'importRules', data: { type: 'rules', rules: [{ domain: 'video.example.com', action: 'proxy', server: null, enabled: true,
+      siteDomains: ['video-cdn.example.net', 'img-video.example.net', 'static-video.example.org', 'player.example.org'], siteDomainsRemoved: [] }] } });
     await msg({ type: 'setSetting', key: 'theme', value: 'light' });
     await msg({ type: 'toggle', enabled: true });
 
@@ -82,12 +86,12 @@ async function main() {
     };
 
     await shot('1-popup.png', 'https://www.bank.example.net/login', 'VPN только для Chrome',
-      'Нужные сайты — через ваш сервер, остальные — напрямую. Другие программы на компьютере VPN не затрагивает.');
+      'Нужные сайты — через ваш сервер, остальные — без VPN. Другие программы на компьютере VPN не затрагивает.');
     await shot('2-servers.png', 'https://shop.example.org/catalog', 'Ваши серверы под рукой',
       'Ссылки VLESS (в том числе XHTTP) и Hysteria2 или подписка провайдера. Поиск, пинг и избранное — сервер выбирается в одно касание.',
       "click('#serverRow');");
     await shot('3-rules.png', 'https://shop.example.org/catalog', 'Свой путь для каждого сайта',
-      'Через VPN, через выбранный сервер или напрямую. Правило для открытого сайта — прямо на главной.',
+      'Через VPN, через выбранный сервер или без VPN. Правило для открытого сайта — прямо на главной.',
       "click('.tabbar .tab[data-tab=\"rules\"]');");
     await shot('4-subscription.png', 'https://shop.example.org/catalog', 'Подписки обновляются сами',
       'Трафик, срок действия и сообщения провайдера видно сразу. Серверы подписки и свои — в одном списке.',

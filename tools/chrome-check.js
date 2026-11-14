@@ -27,6 +27,10 @@
 // удаление текущего сервера → выключение (сайт напрямую,
 // а в конце — сервер XHTTP через второе ядро Xray: запуск только когда нужен, sing-box не трогается;
 // ядро остановлено) → пинг при выключенном VPN (ядро на время проверки) → остановка фона
+// Под конец — «домены сайта» (второй запуск Chrome с копией расширения, где разрешение видеть
+// запросы вкладок обязательное): автосбор, новый PAC не обрывает долгую загрузку в другой вкладке,
+// подсказка «обновите вкладку», экран «Домены сайта», набор, настройка. И третий запуск — вкладка
+// инкогнито: автосбор из неё ничего не привязывает.
 // расширения (всё поднимается само) → закрытие Chrome (ядро завершается). Настоящий перезапуск Chrome так не проверить: расширение,
 // загруженное через DevTools, после перезапуска не сохраняется.
 // Компаньон должен быть собран и зарегистрирован (install); порты 27101–27102 — свободны.
@@ -52,9 +56,11 @@ const expectedId = readFileSync(join(root, 'host', 'extid.go'), 'utf8').match(/e
 const extDir = resolve(process.env.WAYSPLIT_EXTENSION || join(root, 'extension'));
 const hostVersion = readFileSync(join(root, 'host', 'main.go'), 'utf8').match(/const version = "([^"]+)"/)?.[1] || '?';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const FLUSH_WAIT = 6500; // дольше, чем автосбор «доменов сайта» ждёт перед записью (до 5 с)
 const work = mkdtempSync(join(tmpdir(), 'waysplit-check-'));
 const profile = join(work, 'profile');
 const cleanup = [];
+const skipped = []; // что не удалось проверить в этой версии Chrome (не ошибка расширения)
 let failed = false;
 
 function check(ok, text) {
@@ -64,8 +70,42 @@ function check(ok, text) {
 }
 
 // --- тестовые сайты и «VPN-сервер» ---
+// Имена, к которым обращается страница /page (кроме своего): обычный «чужой» домен сайта, общий
+// хостинг и общий сервис — для проверки автосбора «доменов сайта».
+const PAGE_HOSTS = { cdn: 'img.media-cdn.test', cf: 'd1.cloudfront.net', ga: 'www.google-analytics.com' };
+const RU_SITE = 'gorod-primer.ru'; // вымышленный российский сайт — для «Российские сайты — без VPN»
+const SLOW_CHUNKS = 48; // /slow — «большой файл»: кусок 64 КБ каждые 250 мс, всего 12 с
+const SLOW_CHUNK = 64 * 1024;
+
+// Сайт отвечает своей буквой — по ней видно маршрут. /page — страница, которая тянет данные
+// с других доменов (PAGE_HOSTS) и показывает, какой сайт ответил; /slow — долгая загрузка.
 async function startSite(host, port, letter) {
-  const site = http.createServer((req, res) => res.end(`Waysplit-OK ${letter}`));
+  const site = http.createServer((req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (req.url.startsWith('/page')) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.end(`<!doctype html><meta charset="utf-8"><title>Страница</title><p id="me">Waysplit-OK ${letter}</p>
+        ${Object.keys(PAGE_HOSTS).map((k) => `<p id="${k}"></p>`).join('')}
+        <script>for (const [id, host] of Object.entries(${JSON.stringify(PAGE_HOSTS)})) {
+          fetch('http://' + host + ':' + location.port + '/').then((r) => r.text(), () => 'ошибка').then((t) => { document.getElementById(id).textContent = t; });
+        }</script>`);
+    }
+    if (req.url.startsWith('/slow')) {
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Length', String(SLOW_CHUNKS * SLOW_CHUNK));
+      let sent = 0;
+      const timer = setInterval(() => {
+        res.write(Buffer.alloc(SLOW_CHUNK, letter[0]));
+        if (++sent === SLOW_CHUNKS) {
+          clearInterval(timer);
+          res.end();
+        }
+      }, 250);
+      res.on('close', () => clearInterval(timer));
+      return undefined;
+    }
+    return res.end(`Waysplit-OK ${letter}`);
+  });
   await new Promise((r, j) => site.once('error', j).listen(port, host, r));
   cleanup.push(() => site.close());
   return site.address().port;
@@ -132,7 +172,7 @@ async function freePort() {
 async function startVpnServer(uuid) {
   const pa = await freePort();
   const pb = await freePort();
-  const names = ['target.test', 'other.test'];
+  const names = ['target.test', 'other.test', 'page.test', 'files.test', RU_SITE, ...Object.values(PAGE_HOSTS)];
   const hosts = (tag, ip) => ({ type: 'hosts', tag, predefined: Object.fromEntries(names.map((n) => [n, ip])) });
   const cfg = {
     log: { level: 'info', timestamp: false },
@@ -207,11 +247,13 @@ async function waitPort(port, open, ms) {
 }
 
 // --- Chrome и DevTools по трубе (JSON-сообщения через нулевой байт) ---
-function startChrome() {
+// screen — размер экрана: у Chrome без окна он по умолчанию 800×600, а на невысоком экране окно
+// расширения ниже (popup.css: 580 вместо 600) — проверяем обычный случай, экран 1920×1080.
+function startChrome(profileDir = profile, moreHosts = [], screen = '1920x1080') {
   const proc = spawn(chromePath, [
-    '--headless=new', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check',
+    '--headless=new', `--screen-info={${screen}}`, `--user-data-dir=${profileDir}`, '--no-first-run', '--no-default-browser-check',
     '--remote-debugging-pipe', '--enable-unsafe-extension-debugging', '--no-proxy-server',
-    '--host-resolver-rules=MAP *.test 127.0.0.3, MAP free.example 127.0.0.3',
+    `--host-resolver-rules=${['*.test', 'free.example', RU_SITE, ...moreHosts].map((h) => `MAP ${h} 127.0.0.3`).join(', ')}`,
     // Окна расширения в проверке — фоновые вкладки: без этих флагов Chrome замедляет в них таймеры
     // вплоть до раза в минуту, и ожидания по 100 мс растягиваются на десятки минут.
     '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows',
@@ -239,8 +281,10 @@ function startChrome() {
     proc.stdio[3].write(JSON.stringify({ id, method, params, sessionId }) + '\0');
     return new Promise((res, rej) => waiting.set(id, { resolve: res, reject: rej, method }));
   };
-  const page = async (url) => {
-    const { targetId } = await send('Target.createTarget', { url: 'about:blank' });
+  // page(адрес, browserContextId) — новая вкладка; с browserContextId — в окне инкогнито
+  // (Target.createBrowserContext).
+  const page = async (url, browserContextId) => {
+    const { targetId } = await send('Target.createTarget', { url: 'about:blank', ...(browserContextId ? { browserContextId } : {}) });
     const { sessionId } = await send('Target.attachToTarget', { targetId, flatten: true });
     const p = {
       targetId,
@@ -267,7 +311,9 @@ function startChrome() {
         const { data } = await send('Page.captureScreenshot', { format: 'png' }, sessionId);
         writeFileSync(file, Buffer.from(data, 'base64'));
       },
-      size: (width, height) => send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 2, mobile: false }, sessionId),
+      // size(ширина, высота, [ширина экрана, высота экрана]) — размер окна; экран — если нужен не 1920×1080.
+      size: (width, height, screen) => send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 2, mobile: false,
+        ...(screen ? { screenWidth: screen[0], screenHeight: screen[1] } : {}) }, sessionId),
       // inject — свой код до скриптов страницы (при следующей загрузке).
       inject: async (source) => {
         await send('Page.enable', {}, sessionId); // без этого скрипт не подставляется
@@ -290,7 +336,7 @@ const wait = `const wait = async (f, ms = 20000) => { for (let t = 0; t < ms && 
   const $ = (id) => document.getElementById(id);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const tab = (name) => document.querySelector('.tabbar .tab[data-tab="' + name + '"]').click();
-  const toastText = () => ($('toast').hidden ? '' : $('toast').textContent);
+  const toastText = () => ($('toast').hidden ? '' : ($('toast').querySelector('.toast-text') || $('toast')).textContent);
   const clearToast = () => { $('toast').hidden = true; $('toast').textContent = ''; };
   const menuItem = async (anchor, label) => {
     anchor.click();
@@ -304,7 +350,8 @@ const wait = `const wait = async (f, ms = 20000) => { for (let t = 0; t < ms && 
   const ruleLi = (shown) => [...document.querySelectorAll('#rulesList li.rule')].find((x) => x.querySelector('.rule-domain').textContent === shown);
   const siteView = () => ({ hidden: $('site').hidden, vpn: $('siteSwitch').getAttribute('aria-checked') === 'true', text: $('siteSwitchText').textContent,
     why: $('siteWhy').textContent, server: $('siteServer').title, dim: $('siteServer').classList.contains('dim'),
-    warn: $('siteWarn').hidden ? '' : $('siteWarnText').textContent, remove: !$('ruleRemove').hidden, reload: !$('reload').hidden });`;
+    warn: $('siteWarn').hidden ? '' : $('siteWarnText').textContent, fix: $('siteWarnFix').textContent, remove: !$('ruleRemove').hidden, reload: !$('reload').hidden,
+    letter: $('siteIcon').classList.contains('letter') ? $('siteIcon').textContent : '' });`;
 const js = {
   // add — ссылки или подписка: «Серверы» → «+ Добавить» → экран добавления.
   add: (text) => `(async () => { ${wait}
@@ -492,7 +539,8 @@ const js = {
     $('subCheckRun').click();
     await sleep(200);
     await wait(() => !$('subCheckReport').hidden || $('subCheckState').dataset.kind === 'error', 90000);
-    const out = { state: $('subCheckState').textContent, report: $('subCheckReport').textContent };
+    const out = { state: $('subCheckState').textContent, report: $('subCheckReport').textContent,
+      runClass: $('subCheckRun').className, filled: [...document.querySelectorAll('.screen .btn')].map((b) => b.textContent.trim()).join(', ') };
     tab('servers');
     return out; })()`,
   subUpdate: `(async () => { ${wait}
@@ -526,6 +574,83 @@ const js = {
     await wait(() => !$('myIp').disabled, 30000);
     return $('myIpResult').textContent; })()`,
   message: (msg) => `chrome.runtime.sendMessage(${JSON.stringify(msg)})`,
+  // «Домены сайта»: карточка разрешения (на «Главной» и на «Правилах») и её кнопка «Не сейчас».
+  permCard: `(async () => { ${wait}
+    tab('home');
+    await sleep(300);
+    const home = !$('permHome').hidden;
+    const text = $('permHome').innerText;
+    // Окно 400×600: под карточкой должен быть виден хотя бы заголовок блока «Этот сайт».
+    $('content').scrollTop = 0;
+    const box = (node) => node.getBoundingClientRect();
+    const fit = { card: Math.round(box($('permHome')).height), siteShown: !$('site').hidden,
+      label: Math.round(box($('site').querySelector('.row-label')).bottom), view: Math.round(box($('content')).bottom), win: innerWidth + '×' + innerHeight };
+    tab('rules');
+    await sleep(100);
+    const rules = !$('permRules').hidden;
+    tab('home');
+    return { home, rules, text, fit }; })()`,
+  permLater: `(async () => { ${wait}
+    tab('home');
+    clearToast();
+    $('permHome').querySelector('[data-act="later"]').click();
+    await wait(() => $('permHome').hidden && toastText(), 5000);
+    const out = { hidden: $('permHome').hidden, toast: toastText(), asked: (await chrome.storage.local.get('settings')).settings?.siteDomainsAsked,
+      action: $('toast').querySelector('.toast-action')?.textContent || '', sticky: $('toast').dataset.sticky };
+    // Не «включить можно в „Настройках“» словами, а кнопка, которая туда переводит.
+    $('toast').querySelector('.toast-action')?.click();
+    await sleep(300);
+    out.tab = document.querySelector('.tabbar .tab[aria-selected="true"]')?.dataset.tab;
+    out.focus = document.activeElement?.id || '';
+    out.toastGone = $('toast').hidden;
+    return out; })()`,
+  // ruSwitch — «Российские сайты — без VPN» на «Главной»: что показано; click — нажать и дождаться.
+  ruSwitch: (click) => `(async () => { ${wait}
+    tab('home');
+    await wait(() => !$('ruSwitch').hidden, 5000);
+    const b = $('ruSwitch');
+    const before = b.getAttribute('aria-checked');
+    if (${click ? 'true' : 'false'}) {
+      clearToast();
+      b.click();
+      await wait(() => b.getAttribute('aria-checked') !== before, 5000);
+    }
+    $('content').scrollTop = 0;
+    const box = (node) => node.getBoundingClientRect();
+    return { shown: !b.hidden, on: b.getAttribute('aria-checked') === 'true', title: b.querySelector('.ru-title').textContent, sub: b.querySelector('.ru-sub').textContent,
+      toast: toastText(), setting: (await chrome.storage.local.get('settings')).settings?.ruDirect === true,
+      bottom: Math.round(box(b).bottom), label: Math.round(box($('site').querySelector('.row-label')).bottom), view: Math.round(box($('content')).bottom) }; })()`,
+  // siteNew — подсказка «Найдены новые домены сайта» на «Главной».
+  siteNew: `(async () => { ${wait}
+    tab('home');
+    await wait(() => !$('site').hidden && !$('siteNew').hidden, 5000);
+    return { shown: !$('siteNew').hidden, text: $('siteNewText').textContent, domains: $('siteNew').title, why: $('siteWhy').textContent }; })()`,
+  // siteDomains — экран «Домены сайта» у правила (меню «⋯»): что в списке; remove — убрать домен.
+  siteDomains: (shown, remove) => `(async () => { ${wait}
+    tab('rules');
+    await wait(() => ruleLi(${JSON.stringify(shown)}));
+    ruleLi(${JSON.stringify(shown)}).querySelector('[data-action="more"]').click();
+    await wait(() => $('pop').matches(':popover-open'), 3000);
+    const item = [...document.querySelectorAll('#pop .pop-item')].find((x) => x.textContent.trim().startsWith('Домены сайта'));
+    if (!item) { $('pop').hidePopover(); return { error: 'нет пункта' }; }
+    const label = item.textContent.trim();
+    item.click();
+    await wait(() => document.querySelector('.screen.sd-screen'), 3000);
+    const names = () => [...document.querySelectorAll('.sd-screen .sd-name')].map((x) => x.textContent);
+    const out = { label, title: document.querySelector('.sd-screen .screen-title').textContent, sub: document.querySelector('.sd-screen .screen-sub').textContent,
+      before: names(), how: document.querySelector('.sd-screen .hint').textContent, auto: document.querySelector('.sd-screen .sd-auto').textContent };
+    const drop = ${JSON.stringify(remove || '')};
+    if (drop) {
+      clearToast();
+      document.querySelector('.sd-screen button[data-domain="' + drop + '"]').click();
+      await wait(() => !names().includes(drop), 5000);
+      out.after = names();
+      out.removed = document.querySelector('.sd-screen .sd-removed').textContent;
+      out.toast = toastText();
+      out.sticky = $('toast').dataset.sticky;
+      out.restoreH = Math.round(document.querySelector('.sd-screen .sd-removed-row .link').getBoundingClientRect().height);
+    }
+    return out; })()`,
 };
 
 // readUntil — открывать адрес, пока ответ не станет нужным (или не выйдет время); вернёт [текст, мс].
@@ -561,7 +686,7 @@ try {
   check(id === expectedId, `ID расширения в Chrome ${id} совпадает с host/extid.go`);
 
   const popup = await chrome.page(`chrome-extension://${id}/popup/popup.html`);
-  await popup.size(400, 580);
+  await popup.size(400, 600);
   // Окно открывается на «Главной», с данными — быстро; вкладки переключаются (SPEC-POPUP.md).
   const ui0 = await popup.eval(`(async () => { ${wait}
     await wait(() => performance.getEntriesByName('waysplit-ready').length, 5000);
@@ -677,9 +802,13 @@ try {
   let site = await popup.eval(js.site);
   check(site.vpn && site.text === 'Через VPN' && /как у остальных/.test(site.why) && site.server.includes(srvA.name),
     `«Этот сайт» до правила: «${site.text}» — ${site.why}`);
+  let perm = await popup.eval(js.permCard);
+  check(!perm.home && !perm.rules, 'правил «через VPN» ещё нет — карточки разрешения для «доменов сайта» нет');
   site = await popup.eval(js.siteClick('siteSwitch'));
-  check(!site.vpn && site.text === 'Напрямую' && site.why === 'По правилу для target.test · без VPN' && site.remove && site.reload,
-    `переключатель → «Напрямую»: ${site.why}; «Убрать правило» и «Обновить вкладку» на месте`);
+  check(!site.vpn && site.text === 'Без VPN' && site.why === 'По правилу для target.test · без VPN' && site.remove && site.reload && site.letter === 'T',
+    `переключатель → «${site.text}»: ${site.why}; «Убрать правило» и «Обновить вкладку» на месте; буква в кружке — «${site.letter}»`);
+  const links = await popup.eval(`['ruleRemove', 'tdButton'].map((id) => Math.round(document.getElementById(id).getBoundingClientRect().height))`);
+  check(links.every((h) => h >= 24), `ссылки «Убрать правило» и «Домены этой вкладки»: высота области нажатия ${links.join(' и ')} пикс. (не меньше 24)`);
   if (shotsDir) await popup.shot(join(shotsDir, 'popup-site.png'), 'light');
   [text] = await readUntil(tab, target, 'Waysplit-OK DIRECT');
   check(text === 'Waysplit-OK DIRECT', `с правилом «без VPN» target.test идёт напрямую («${text}»)`);
@@ -691,8 +820,80 @@ try {
     `кнопка с флагом: для сайта выбран сервер B — ${site.why}`);
   [text] = await readUntil(tab, target, 'Waysplit-OK B');
   check(text === 'Waysplit-OK B', `target.test идёт через выбранный для него сервер B, хотя текущий — A («${text}»)`);
+  // «Домены сайта»: после первого правила «через VPN» — карточка с объяснением и вопросом о разрешении
+  // (один раз). Само окно разрешения Chrome без окна не показать — нажимаем «Не сейчас».
+  perm = await popup.eval(js.permCard);
+  check(perm.home && perm.rules && /Chrome спросит разрешение один раз/.test(perm.text) && /Разрешить/.test(perm.text) && /Не сейчас/.test(perm.text),
+    'первое правило «через VPN» — на «Главной» и на «Правилах» карточка: зачем разрешение, «Разрешить» и «Не сейчас»');
+  // На «Главной» над блоком «Этот сайт» — сервер, «Российские сайты — без VPN» и эта карточка.
+  // Запас 8 пикс.; строка под статусом во всех обычных состояниях — одна (и при «работают правила»).
+  check(perm.fit.win === '400×600' && perm.fit.siteShown && perm.fit.label + 8 <= perm.fit.view,
+    `окно ${perm.fit.win}, VPN включён: переключатель «Российские сайты — без VPN», карточка (${perm.fit.card} пикс.) и заголовок блока «Этот сайт» помещаются (низ заголовка ${perm.fit.label}, край видимой части ${perm.fit.view})`);
+  // Тот же замер во втором состоянии «Главной»: VPN выключен, работают правила.
+  await popup.eval(js.message({ type: 'toggle', enabled: false }));
+  const fitOff = await popup.eval(`(async () => { ${wait}
+    tab('home');
+    await wait(() => $('status').dataset.state === 'rules', 10000);
+    $('content').scrollTop = 0;
+    const box = (node) => node.getBoundingClientRect();
+    return { state: $('status').dataset.state, status: $('status').textContent, detail: $('detail').textContent, card: !$('permHome').hidden,
+      label: Math.round(box($('site').querySelector('.row-label')).bottom), view: Math.round(box($('content')).bottom) }; })()`);
+  check(fitOff.state === 'rules' && fitOff.card && fitOff.label + 8 <= fitOff.view && /^Через VPN — 1 сайт из правил$/.test(fitOff.detail),
+    `окно 400×600, «${fitOff.status}» («${fitOff.detail}»): переключатель, карточка и заголовок «Этот сайт» помещаются (низ заголовка ${fitOff.label}, край ${fitOff.view})`);
+  await popup.eval(js.message({ type: 'toggle', enabled: true }));
+  await popup.eval(`(async () => { ${wait} await wait(() => $('status').dataset.state === 'on', 15000); return 1; })()`);
+  if (shotsDir) await popup.shot(join(shotsDir, 'popup-site-perm.png'), 'light');
+  const later = await popup.eval(js.permLater);
+  check(later.hidden && later.asked === true && /Настройках/.test(later.toast), `«Не сейчас»: карточка убрана и больше не появится («${later.toast}»)`);
+  check(later.action === 'Открыть настройки' && later.sticky === 'true' && later.tab === 'settings' && later.focus === 'autoSiteDomains' && later.toastGone,
+    `в сообщении — кнопка «${later.action}»: переводит на «Настройки», к галочке «Автоматически добавлять домены сайта»`);
+  // Без карточки разрешения блок «Этот сайт» виден в окне 400×600 целиком, вместе с нижней строкой
+  // ссылок, во всех обычных состояниях «Главной». Окно открываем заново: после нажатий в нём остаётся
+  // строка «Обновите вкладку», а нужен вид, с которым окно открывается.
+  const homeFit = async (states) => {
+    await popup.goto(`chrome-extension://${id}/popup/popup.html`);
+    return popup.eval(`(async () => { ${wait}
+      await wait(() => performance.getEntriesByName('waysplit-ready').length && ${JSON.stringify(states)}.includes($('status').dataset.state) && !$('site').hidden, 15000);
+      await sleep(500); // пинг текущего сервера дописывается в статус
+      $('content').scrollTop = 0;
+      const box = (node) => node.getBoundingClientRect();
+      const links = [...document.querySelectorAll('#site .site-links .link')].filter((x) => !x.hidden);
+      return { state: $('status').dataset.state, status: $('status').textContent, why: $('siteWhy').textContent, card: !$('permHome').hidden, win: innerWidth + '×' + innerHeight,
+        app: Math.round(box(document.querySelector('.app')).height),
+        bottom: Math.round(box($('site')).bottom), view: Math.round(box($('content')).bottom), scroll: $('content').scrollHeight - $('content').clientHeight,
+        links: links.map((x) => x.textContent), linksBottom: Math.max(...links.map((x) => Math.round(box(x).bottom))) }; })()`);
+  };
+  const fits = (f, height = 600) => f.win === `400×${height}` && f.app === height && !f.card && f.bottom <= f.view && f.linksBottom <= f.view;
+  const fitText = (f) => `блок «Этот сайт» виден целиком (низ блока ${f.bottom}, ссылки «${f.links.join('», «')}» — до ${f.linksBottom}, край видимой части ${f.view}, прокрутка ${f.scroll})`;
+  let fit = await homeFit(['on', 'warn']);
+  check(fits(fit) && fit.why.startsWith('По правилу для target.test') && fit.links.length === 2,
+    `окно ${fit.win}, VPN включён, у сайта правило («${fit.why}»): ${fitText(fit)}`);
+  // Невысокий экран (1920×1080 при масштабе 150 % для Chrome — 1280×720): под значком расширения
+  // места меньше 600, поэтому окно там 580 (popup.css) — и блок всё равно виден целиком.
+  await popup.size(400, 580, [1280, 720]);
+  fit = await homeFit(['on', 'warn']);
+  check(fits(fit, 580) && fit.links.length === 2, `экран 1280×720: окно ${fit.win} (высота .app — ${fit.app}), VPN включён, у сайта правило: ${fitText(fit)}`);
+  await popup.size(400, 600);
+  await popup.eval(js.message({ type: 'toggle', enabled: false }));
+  fit = await homeFit(['rules']);
+  check(fits(fit) && fit.state === 'rules', `окно ${fit.win}, «${fit.status}»: ${fitText(fit)}`);
+  await popup.eval(js.message({ type: 'toggle', enabled: true }));
+  await popup.eval(`(async () => { ${wait} await wait(() => ['on', 'warn'].includes($('status').dataset.state), 15000); return 1; })()`);
+
+  await opts.eval(js.tab('settings'));
+  check(await opts.eval(`document.getElementById('autoSiteDomains').checked && !document.getElementById('autoSitePerm').hidden`),
+    'в «Настройках»: «Автоматически добавлять домены сайта» включено, рядом — «нужно разрешение Chrome» и кнопка «Разрешить»');
   site = await popup.eval(js.siteClick('ruleRemove'));
   check(site.vpn && /^Правила нет/.test(site.why) && !site.remove, `«Убрать правило»: ${site.why}`);
+  // Тот же замер у сайта без правила (пояснение — в одну строку) и при выключенном VPN.
+  fit = await homeFit(['on', 'warn']);
+  check(fits(fit) && fit.why === 'Правила нет — как у остальных сайтов: через VPN' && fit.links.join() === 'Домены этой вкладки',
+    `окно ${fit.win}, VPN включён, у сайта нет правила («${fit.why}»): ${fitText(fit)}`);
+  await popup.eval(js.message({ type: 'toggle', enabled: false }));
+  fit = await homeFit(['off']);
+  check(fits(fit) && fit.state === 'off' && fit.why === 'Правила нет — как у остальных сайтов: без VPN', `окно ${fit.win}, «${fit.status}» («${fit.why}»): ${fitText(fit)}`);
+  await popup.eval(js.message({ type: 'toggle', enabled: true }));
+  await popup.eval(`(async () => { ${wait} await wait(() => ['on', 'warn'].includes($('status').dataset.state), 15000); return 1; })()`);
   [text] = await readUntil(tab, target, 'Waysplit-OK A');
   check(text === 'Waysplit-OK A', `правило убрано — target.test снова через текущий сервер A («${text}»)`);
   site = await popup.eval(js.siteClick('siteSwitch')); // снова «без VPN» — для проверок правил ниже
@@ -708,7 +909,7 @@ try {
   const row = await opts.eval(js.ruleRow('пример.рф'));
   check(/^Добавлено 1/.test(added5) && row?.sub === 'xn--e1afmkfd.xn--p1ai' && row.favicon, `кириллический домен: «пример.рф» хранится как ${row?.sub}`);
   added5 = await opts.eval(js.addSet('youtube', 'direct'));
-  check(/добавлено 6/.test(added5), `набор доменов: «${added5}»`);
+  check(/добавлено 7/.test(added5), `набор доменов: «${added5}»`);
   if (shotsDir) {
     await opts.shot(join(shotsDir, 'options-rules-light.png'), 'light');
     await opts.shot(join(shotsDir, 'options-rules-dark.png'), 'dark');
@@ -729,8 +930,8 @@ try {
   await popup.inject(`chrome.tabs.query = async () => [{ id: -1, url: ${JSON.stringify(otherUrl)} }];`);
   await popup.goto(`chrome-extension://${id}/popup/popup.html`);
   site = await popup.eval(js.site);
-  check(/правила при выключенном VPN отключены/.test(site.warn) && site.dim && site.server.includes('Сервер B') && !site.vpn,
-    `«Этот сайт»: правило не действует — «${site.warn}», флаг сервера из правила приглушён`);
+  check(/правила при выключенном VPN отключены/.test(site.warn) && site.dim && site.server.includes('Сервер B') && !site.vpn && site.fix === 'Включить правила',
+    `«Этот сайт»: правило не действует — «${site.warn}», флаг сервера из правила приглушён, кнопка — «${site.fix}»`);
   if (shotsDir) await popup.shot(join(shotsDir, 'popup-site-sleeping.png'), 'light');
   site = await popup.eval(js.siteClick('siteWarnFix'));
   [text] = await readUntil(tab, otherUrl, 'Waysplit-OK B');
@@ -758,6 +959,99 @@ try {
   check(st.state === 'on', `правила убраны, VPN снова включён: ${st.status}`);
   [text] = await readUntil(tab, target, 'Waysplit-OK A');
   check(text === 'Waysplit-OK A', `правила убраны — target.test снова через A («${text}»)`);
+
+  // --- «Российские сайты — без VPN»: настройка, а не правила ---
+  const ruUrl = `http://${RU_SITE}:${sitePort}/`;
+  [text] = await readUntil(tab, ruUrl, 'Waysplit-OK A');
+  check(text === 'Waysplit-OK A', `переключатель выключен (по умолчанию): российский сайт идёт через VPN, как остальные («${text}»)`);
+  await popup.inject(`chrome.tabs.query = async () => [{ id: -1, url: ${JSON.stringify(ruUrl)} }];`);
+  await popup.goto(`chrome-extension://${id}/popup/popup.html`);
+  let ru = await popup.eval(js.ruSwitch(false));
+  check(ru.shown && !ru.on && !ru.setting && ru.title === 'Российские сайты — без VPN' && ru.sub === '.ru, .рф, .su, VK, Яндекс и другие' && ru.bottom < ru.view,
+    `«Главная»: строка «${ru.title}» с подписью «${ru.sub}», выключена`);
+  ru = await popup.eval(js.ruSwitch(true));
+  check(ru.on && ru.setting && /идут без VPN/.test(ru.toast), `переключатель включён: «${ru.toast}»`);
+  [text] = await readUntil(tab, ruUrl, 'Waysplit-OK DIRECT');
+  check(text === 'Waysplit-OK DIRECT', `российский сайт пошёл напрямую, хотя VPN включён («${text}»)`);
+  [text] = await readUntil(tab, target, 'Waysplit-OK A');
+  check(text === 'Waysplit-OK A', `остальные сайты — по-прежнему через VPN («${text}»)`);
+  site = await popup.eval(js.site);
+  check(!site.vpn && site.text === 'Без VPN' && /^Без VPN: российский сайт/.test(site.why) && !site.remove, `«Этот сайт»: ${site.why}`);
+  // Тот же сайт с точкой в конце адреса: для PAC это то же имя — и окно отвечает так же.
+  const dotPop = await chrome.page();
+  await dotPop.inject(`chrome.tabs.query = async () => [{ id: -1, url: ${JSON.stringify(`http://${RU_SITE}.:${sitePort}/`)} }];`);
+  await dotPop.goto(`chrome-extension://${id}/popup/popup.html`);
+  const dotted = await dotPop.eval(js.site);
+  await chrome.send('Target.closeTarget', { targetId: dotPop.targetId });
+  check(dotted.why === site.why && !dotted.vpn, `адрес с точкой в конце (${RU_SITE}.) — тот же сайт: «${dotted.why}»`);
+  const ruNote = await opts.eval(`(async () => { ${wait}
+    tab('rules');
+    await wait(() => !$('rulesRu').hidden, 5000);
+    const rules = $('rulesRu').hidden ? '' : $('rulesRu').textContent;
+    tab('settings');
+    return { rules, settings: $('setRuDirect').checked, count: (await chrome.storage.local.get('rules')).rules.length }; })()`);
+  check(ruNote.rules === 'Российские сайты — без VPN: включено' && ruNote.settings && ruNote.count === 0,
+    `вкладка «Правила»: напоминание «${ruNote.rules}»; в «Настройках» галочка стоит; правил по-прежнему ${ruNote.count} — это настройка, а не правила`);
+  if (shotsDir) await popup.shot(join(shotsDir, 'popup-ru-direct.png'), 'light');
+  // Правило пользователя важнее: «Через VPN» для этого сайта — и он идёт через VPN.
+  site = await popup.eval(js.siteClick('siteSwitch'));
+  [text] = await readUntil(tab, ruUrl, 'Waysplit-OK A');
+  check(site.vpn && site.why.startsWith(`По правилу для ${RU_SITE}`) && text === 'Waysplit-OK A', `правило «через VPN» для российского сайта побеждает переключатель: ${site.why} («${text}»)`);
+  site = await popup.eval(js.siteClick('ruleRemove'));
+  [text] = await readUntil(tab, ruUrl, 'Waysplit-OK DIRECT');
+  check(/^Без VPN: российский сайт/.test(site.why) && text === 'Waysplit-OK DIRECT', `правило убрали — сайт снова напрямую по переключателю («${text}»)`);
+  // «Начало работы»: та же настройка галочкой; выключаем — сайт снова через VPN.
+  const wel = await chrome.page(`chrome-extension://${id}/welcome/welcome.html`);
+  const welRu = await wel.eval(`(async () => { ${wait}
+    await wait(() => $('ruDirect').checked, 5000);
+    const out = { text: $('ruDirect').closest('label').innerText.replace(/\\s+/g, ' ').trim(), wasOn: $('ruDirect').checked };
+    $('ruDirect').click();
+    await sleep(700);
+    out.setting = (await chrome.storage.local.get('settings')).settings?.ruDirect;
+    await wait(() => $('hostState').dataset.kind === 'ok', 10000);
+    out.host = $('hostState').textContent;
+    out.hostColor = getComputedStyle($('hostState')).color;
+    return out; })()`);
+  await chrome.send('Target.closeTarget', { targetId: wel.targetId });
+  [text] = await readUntil(tab, ruUrl, 'Waysplit-OK A');
+  ru = await popup.eval(js.ruSwitch(false));
+  check(welRu.text === 'Российские сайты — без VPN .ru, .рф, .su, VK, Яндекс и другие' && welRu.wasOn && welRu.setting === false && !ru.on && text === 'Waysplit-OK A',
+    `«Начало работы»: галочка «${welRu.text}» — сняли, переключатель на «Главной» выключен, российский сайт снова через VPN («${text}»)`);
+  check(/^Компаньон на связи/.test(welRu.host) && welRu.hostColor === 'rgb(10, 125, 85)', `«Начало работы»: «${welRu.host}» — зелёным, как статус (${welRu.hostColor}; 5,15:1 на карточке)`);
+
+  // Сообщения внизу окна: ошибка остаётся до крестика, короткое об успехе исчезает само.
+  // В меню «⋯» у пункта с фокусом — синяя обводка; в «Настройках» у каждой галочки название и пояснение.
+  const toasts = await opts.eval(`(async () => { ${wait}
+    tab('rules');
+    clearToast();
+    $('ruleInput').value = 'плохой домен!';
+    $('ruleInput').dispatchEvent(new Event('input'));
+    $('ruleForm').requestSubmit();
+    await wait(() => toastText(), 5000);
+    const err = { text: toastText(), kind: $('toast').dataset.kind, sticky: $('toast').dataset.sticky, close: !!$('toast').querySelector('.toast-close') };
+    await sleep(6000);
+    err.stillShown = !$('toast').hidden;
+    $('toast').querySelector('.toast-close')?.click();
+    err.closed = $('toast').hidden;
+    $('ruleInput').value = '';
+    $('ruleInput').dispatchEvent(new Event('input'));
+    tab('servers');
+    $('pingAll').click();
+    await wait(() => /^Проверяю/.test(toastText()), 3000);
+    const short = { text: toastText(), sticky: $('toast').dataset.sticky, close: !!$('toast').querySelector('.toast-close') };
+    await wait(() => /^Ответили/.test(toastText()), 40000);
+    await sleep(5600);
+    short.gone = $('toast').hidden;
+    const css = [...document.styleSheets].flatMap((s) => [...s.cssRules]).find((r) => r.selectorText === '.pop-item:focus-visible');
+    tab('settings');
+    const checks = [...document.querySelectorAll('#panel-settings .check')];
+    return { err, short, focus: css ? css.style.cssText : '',
+      opts: checks.length, named: checks.filter((c) => c.querySelector('.opt-name')?.textContent && c.querySelector('.opt-note')?.textContent).length }; })()`);
+  check(toasts.err.kind === 'error' && toasts.err.sticky === 'true' && toasts.err.close && toasts.err.stillShown && toasts.err.closed,
+    `сообщение об ошибке («${toasts.err.text}») остаётся и через 6 с, закрывается крестиком`);
+  check(toasts.short.sticky === 'false' && !toasts.short.close && toasts.short.gone, `короткое сообщение («${toasts.short.text}») — без крестика, исчезает само`);
+  check(/outline:\s*2px solid var\(--accent\)/.test(toasts.focus), `пункт меню «⋯» с фокусом клавиатуры — синяя обводка, как у остальных элементов («${toasts.focus}»)`);
+  check(toasts.opts >= 6 && toasts.named === toasts.opts, `«Настройки»: у всех ${toasts.opts} галочек и вариантов — название и пояснение отдельно`);
 
   // --- этап 6: защита, другое прокси-расширение, настройки, подписка, диагностика, копия ---
   const rtcOn = await popup.eval(js.webrtc);
@@ -803,6 +1097,17 @@ try {
   check(deadView.state === 'warn' && deadView.status === 'Сервер не отвечает' && /Сайты не откроются/.test(deadView.detail),
     `окно при недоступном сервере: «${deadView.status}» — ${deadView.detail}`);
   if (shotsDir) await popup.shot(join(shotsDir, 'popup-dead.png'), 'light');
+  // Сервер без ответа — словами: в строке сервера на «Серверах» и на «Главной», а не только полосками.
+  const deadMeta = await opts.eval(`(async () => { ${wait}
+    tab('servers');
+    await wait(() => srvRow('Недоступный')?.querySelector('.srv-fail'), 10000);
+    const row = srvRow('Недоступный');
+    const text = row?.querySelector('.srv-meta-text');
+    const cs = text ? getComputedStyle(text) : null;
+    return { meta: row?.querySelector('.srv-meta')?.textContent || '', cut: cs ? cs.textOverflow + ', ' + cs.overflowX + ', ' + cs.whiteSpace : '' }; })()`);
+  const deadLabel = await popup.eval(`document.getElementById('srvLabel').textContent`);
+  check(/^нет ответа · VLESS/.test(deadMeta.meta) && deadLabel === 'Сервер · нет ответа', `сервер без ответа подписан словами: «${deadMeta.meta}»; на «Главной» — «${deadLabel}»`);
+  check(deadMeta.cut === 'ellipsis, hidden, nowrap', `длинный адрес в строке сервера обрезается с многоточием (${deadMeta.cut})`);
   check(!/; DIRECT"/.test(await popup.eval(js.pac)), '«Не открывать сайт» (по умолчанию): запасного DIRECT в PAC нет');
   let deadErr = await tab.goto(target);
   [text] = await readUntil(tab, target, 'Waysplit-OK', 3000);
@@ -841,6 +1146,7 @@ try {
   check(/^Проверка подписки \(адрес скрыт\)/.test(sc.report) && /Waysplit сейчас — 2 \(base64 со ссылками; запустим 2\)/.test(sc.report)
     && /v2rayN 7\.25\.6 — 200, веб-страница/.test(sc.report) && /Заголовки устройства \(x-hwid и др\.\) не отправлялись/.test(sc.report)
     && !/SECRET-TOKEN|127\.0\.0\.1/.test(sc.report), `«Проверить подписку»: ${sc.state}`);
+  check(/\bghost\b/.test(sc.runClass) && sc.filled === 'Обновить', `экран подписки: «Проверить подписку» — контурная, залитая кнопка одна («${sc.filled}»)`);
   if (shotsDir) await opts.shot(join(shotsDir, 'options-subcheck.png'), 'light');
 
   // SPEC-SUBS, шаг 2: подписка, которая отдаёт серверы только устройствам.
@@ -880,8 +1186,11 @@ try {
 
   // Диагностика.
   const diag = await opts.eval(js.diag);
-  check(diag.facts.includes(hostVersion) && /1\.14\.4/.test(diag.facts) && /Xray\s*\d+\.\d+\.\d+/.test(diag.facts) && /запуск из Chrome/.test(diag.hostLog),
-    'диагностика: версии компаньона, sing-box и Xray, журнал компаньона');
+  // Версия компаньона — именно из строки «Компаньон»: у расширения версия та же, и поиск по всему
+  // тексту нашёл бы её в строке «Расширение», даже если компаньон ответил другой.
+  const hostLine = diag.facts.match(/Компаньон\s+([^\n]*)/)?.[1] || '';
+  check(hostLine === hostVersion && /1\.14\.4/.test(diag.facts) && /Xray\s*\d+\.\d+\.\d+/.test(diag.facts) && /запуск из Chrome/.test(diag.hostLog),
+    `диагностика: версия компаньона — «${hostLine}» (в host/main.go — ${hostVersion}), версии sing-box и Xray, журнал компаньона`);
   check(!/SECRET-TOKEN|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.test(diag.hostLog + diag.events), 'в журналах нет uuid и адреса подписки');
   const coreLine = diag.facts.match(/Ядро sing-box\s+([^\n]*)/)?.[1] || '';
   check(/^работает, PID \d+, (меньше минуты|\d+ мин|\d+ ч \d+ мин), портов [1-9]\d*$/.test(coreLine) && !/NaN/.test(diag.facts) && /ID [a-p]{32}/.test(diag.facts),
@@ -979,14 +1288,15 @@ try {
   writeFileSync(bareNative, readFileSync(bareNative, 'utf8').replace("'com.waysplit.host'", "'com.waysplit.absent'"));
   const { id: bareId } = await chrome.send('Extensions.loadUnpacked', { path: bareDir });
   const barePopup = await chrome.page(`chrome-extension://${bareId}/popup/popup.html`);
-  await barePopup.size(400, 580);
+  await barePopup.size(400, 600);
   const bare = await barePopup.eval(`(async () => { ${wait}
     await wait(() => !$('problem').hidden, 10000);
-    return { problem: $('problem').hidden ? '' : $('problemText').textContent, steps: $('steps').children.length,
+    return { problem: $('problem').hidden ? '' : $('problemText').textContent, color: getComputedStyle($('problemText')).color, steps: $('steps').children.length,
       link: $('downloadRow').hidden ? '' : $('download').href, label: $('download').textContent, page: $('releasePage').href }; })()`);
   check(/не установлен/.test(bare.problem) && bare.steps === 3 && bare.label === 'Скачать'
     && /\/releases\/latest\/download\/Waysplit-companion\.zip$/.test(bare.link) && /\/releases\/latest$/.test(bare.page),
   `без компаньона окно сразу показывает шаги установки и кнопку «Скачать» с архивом последнего выпуска («${bare.problem}», шагов ${bare.steps})`);
+  check(bare.color === 'rgb(179, 38, 30)', `текст ошибки в красной рамке на «Главной» — ${bare.color} (5,72:1 на розовой подложке)`);
   if (shotsDir) await barePopup.shot(join(shotsDir, 'popup-no-companion.png'), 'light');
   const bareWelcome = await chrome.page(`chrome-extension://${bareId}/welcome/welcome.html`);
   const bw = await bareWelcome.eval(`(async () => { ${wait}
@@ -1003,6 +1313,297 @@ try {
   await chrome.close();
   check(await waitPort(other.localPort, false, 10000), 'Chrome закрыт: ядро завершилось вместе с ним');
   check(await waitPort(srvX.localPort, false, 10000), 'Chrome закрыт: Xray тоже завершился');
+
+  // --- «домены сайта»: автосбор ---
+  // Автосбору нужно разрешение видеть запросы вкладок, а окно разрешения в Chrome без окна не
+  // нажать. Поэтому — второй запуск Chrome (свой профиль) с копией расширения, где это разрешение
+  // обязательное (ключ и ID те же: компаньон её пускает). Всё остальное в копии — как есть.
+  console.log('\nДомены сайта (копия расширения с разрешением видеть запросы вкладок):');
+  const siteDir = join(work, 'site-ext');
+  cpSync(extDir, siteDir, { recursive: true });
+  const siteManifest = JSON.parse(readFileSync(join(siteDir, 'manifest.json'), 'utf8'));
+  siteManifest.permissions.push('webRequest');
+  siteManifest.host_permissions = ['<all_urls>'];
+  delete siteManifest.optional_permissions;
+  delete siteManifest.optional_host_permissions;
+  writeFileSync(join(siteDir, 'manifest.json'), JSON.stringify(siteManifest));
+  const chrome2 = startChrome(join(work, 'profile2'), [PAGE_HOSTS.cf, PAGE_HOSTS.ga]);
+  const { id: id2 } = await chrome2.send('Extensions.loadUnpacked', { path: siteDir });
+  check(id2 === expectedId, 'копия расширения загружена с тем же ID');
+  const win = await chrome2.page(`chrome-extension://${id2}/popup/popup.html?full`);
+  await win.size(1000, 640);
+  await win.eval(`(async () => { ${wait} await wait(() => performance.getEntriesByName('waysplit-ready').length, 5000); return 'ok'; })()`);
+  const addedS = await win.eval(js.add(linkA));
+  check(/^Добавлено 1/.test(addedS), `сервер A добавлен: «${addedS}»`);
+  const rulesOf = async () => Object.fromEntries((await win.eval(js.local)).rules.map((r) => [r.domain, r]));
+  const pageUrl = `http://page.test:${sitePort}/page`;
+  const pageView = (t) => t.eval(`Object.fromEntries(['me', ...${JSON.stringify(Object.keys(PAGE_HOSTS))}].map((k) => [k, document.getElementById(k)?.textContent || '']))`);
+  // openPage — открыть страницу и дождаться ответов всех её чужих доменов.
+  const openPage = async (t, want, url = pageUrl) => {
+    let v = {};
+    for (let i = 0; i < 40; i++) {
+      if (i % 10 === 0) await t.goto(url);
+      v = await pageView(t);
+      if (v.me === want && v.cdn && v.cf && v.ga) break;
+      await sleep(250);
+    }
+    return v;
+  };
+
+  // VPN выключен; правила «через VPN» для page.test (страница) и files.test (долгая загрузка).
+  const ruleS = await win.eval(js.message({ type: 'addRules', domains: ['page.test', 'files.test'], action: 'proxy', serverId: null }));
+  check(ruleS?.ok && ruleS.result.added === 2, 'правила «через VPN» для page.test и files.test (VPN выключен)');
+  const tab1 = await chrome2.page();
+  const tab2 = await chrome2.page();
+  [text] = await readUntil(tab2, `http://files.test:${sitePort}/`, 'Waysplit-OK A', 10000);
+  check(text === 'Waysplit-OK A', `files.test идёт через VPN по правилу («${text}»)`);
+
+  // Поправка 7: во второй вкладке идёт долгая загрузка через прокси; в первой открывается сайт,
+  // автосбор привязывает его домены — Chrome получает новый PAC. Загрузка не должна оборваться.
+  const pac0 = await win.eval(js.pac);
+  await tab2.eval(`window.dlDone = false; window.dl = fetch('/slow').then((r) => r.arrayBuffer())
+    .then((b) => ({ ok: true, n: b.byteLength, first: String.fromCharCode(new Uint8Array(b)[0]), last: String.fromCharCode(new Uint8Array(b)[b.byteLength - 1]) }), (e) => ({ ok: false, error: String(e) }))
+    .then((r) => { window.dlDone = true; return r; }); 'начато'`);
+  const dlStart = Date.now();
+  let view = await openPage(tab1, 'Waysplit-OK A');
+  check(view.me === 'Waysplit-OK A' && view.cdn === 'Waysplit-OK DIRECT' && view.cf === 'Waysplit-OK DIRECT',
+    `до автосбора: сама страница — через VPN («${view.me}»), её чужие домены — напрямую («${view.cdn}», «${view.cf}»)`);
+  let got = [];
+  let attachMs = 0;
+  for (let i = 0; i < 40 && !got.length; i++) {
+    got = (await rulesOf())['page.test']?.siteDomains || [];
+    attachMs = Date.now() - dlStart;
+    if (!got.length) await sleep(250);
+  }
+  check(got.includes('media-cdn.test') && got.includes(PAGE_HOSTS.cf) && got.length === 2,
+    `автосбор привязал к правилу page.test: ${got.join(', ') || 'ничего'} — «сайт» целиком, общий хостинг полным именем, общий сервис (${PAGE_HOSTS.ga}) не привязан`);
+  let pac1 = '';
+  for (let i = 0; i < 20 && !pac1.includes('media-cdn.test'); i++) {
+    pac1 = await win.eval(js.pac);
+    if (!pac1.includes('media-cdn.test')) await sleep(250);
+  }
+  const stillLoading = (await tab2.eval('window.dlDone')) === false;
+  check(pac1 !== pac0 && pac1.includes('"media-cdn.test"') && pac1.includes(`"${PAGE_HOSTS.cf}"`) && !pac1.includes('google-analytics'),
+    `Chrome получил новый PAC с привязанными доменами (через ${(attachMs / 1000).toFixed(1)} с после начала загрузки)`);
+  check(stillLoading, 'в этот момент долгая загрузка во второй вкладке ещё шла');
+  const dl = await tab2.eval('window.dl');
+  check(dl.ok && dl.n === SLOW_CHUNKS * SLOW_CHUNK && dl.first === 'A' && dl.last === 'A',
+    `смена PAC не оборвала загрузку в другой вкладке: ${dl.ok ? `получено ${dl.n} байт из ${SLOW_CHUNKS * SLOW_CHUNK} через сервер A за ${((Date.now() - dlStart) / 1000).toFixed(1)} с` : dl.error}`);
+
+  // Подсказка на «Главной» для этой вкладки и «Обновить вкладку».
+  const tabs2 = await win.eval(`chrome.tabs.query({}).then((ts) => ts.map((t) => ({ id: t.id, url: t.url })))`);
+  const pageTab = tabs2.find((t) => t.url === pageUrl);
+  const home = await chrome2.page();
+  await home.size(400, 600);
+  await home.inject(`chrome.tabs.query = async () => [{ id: ${pageTab?.id ?? -1}, url: ${JSON.stringify(pageUrl)} }];`);
+  await home.goto(`chrome-extension://${id2}/popup/popup.html`);
+  const hint = await home.eval(js.siteNew);
+  check(!!pageTab && hint.shown && hint.text === 'Найдены новые домены сайта — обновите вкладку' && hint.domains.includes('media-cdn.test') && /\+2 домена сайта/.test(hint.why),
+    `«Главная»: «${hint.text}» (${hint.domains}); строка сайта — ${hint.why}`);
+  if (shotsDir) await home.shot(join(shotsDir, 'popup-site-new.png'), 'light');
+  // Правило удалили — подсказка про его домены не нужна; вернули — нужна снова (вкладку не обновляли).
+  const ruleP = (await rulesOf())['page.test'];
+  await win.eval(js.message({ type: 'removeRules', ids: [ruleP.id] }));
+  const hintGone = await home.eval(`(async () => { ${wait} return wait(() => $('siteNew').hidden, 5000); })()`);
+  await win.eval(js.message({ type: 'restoreRules', rules: [ruleP] }));
+  const hintBack = await home.eval(js.siteNew);
+  check(hintGone && hintBack.shown && hintBack.domains.includes('media-cdn.test'), 'правило удалили — подсказки «обновите вкладку» нет; вернули — она снова на месте');
+  await home.eval(`document.getElementById('siteNewReload').click()`);
+  view = {};
+  for (let i = 0; i < 40 && !(view.cdn === 'Waysplit-OK A' && view.cf === 'Waysplit-OK A' && view.ga); i++) {
+    await sleep(250);
+    try { view = await pageView(tab1); } catch { view = {}; } // вкладка как раз перезагружается
+  }
+  check(view.cdn === 'Waysplit-OK A' && view.cf === 'Waysplit-OK A' && view.ga !== 'Waysplit-OK A',
+    `«Обновить вкладку»: домены сайта пошли через VPN («${view.cdn}», «${view.cf}»), общий сервис — нет («${view.ga}»)`);
+  const hintAfter = await home.eval(`(async () => { ${wait} await wait(() => $('siteNew').hidden, 5000); return { hidden: $('siteNew').hidden, session: (await chrome.storage.session.get('siteNew')).siteNew }; })()`);
+  check(hintAfter.hidden && !hintAfter.session?.[pageTab?.id], 'после обновления вкладки подсказка убрана');
+  // «Домены этой вкладки»: сайты, к которым обращалась вкладка (свой — первым), с пометкой, если
+  // сайт идёт по правилу — своему или по «домену сайта» чужого правила.
+  const tdl = await home.eval(`(async () => { ${wait}
+    $('tdButton').click();
+    await wait(() => $('tdList').children.length > 0, 5000);
+    return { note: $('tdNote').textContent, rows: [...$('tdList').children].map((li) => li.querySelector('.td-name').textContent + (li.querySelector('.td-rule') ? ' — ' + li.querySelector('.td-rule').textContent : '')) }; })()`);
+  check(tdl.rows.join('; ') === 'page.test — через VPN; cloudfront.net; google-analytics.com; media-cdn.test — через VPN' && /^Вкладка обращалась к 4 сайтам/.test(tdl.note),
+    `«Домены этой вкладки»: ${tdl.rows.join('; ')}`);
+  [text] = await readUntil(tab2, `http://free.example:${sitePort}/`, 'Waysplit-OK DIRECT', 5000);
+  check(text === 'Waysplit-OK DIRECT', `сайты без правил по-прежнему напрямую («${text}»)`);
+
+  // Открытое окно не перечитывает данные, когда от запросов вкладок изменился только список доменов
+  // вкладок (фон пишет его в память сеанса через 0,5 с после запроса), а на любое другое изменение —
+  // перечитывает. Считаем перерисовки «Главной»; если в это же время изменилось что-то ещё
+  // (например, сторож раз в минуту обновил состояние) — пробуем ещё раз.
+  await home.eval(`globalThis.__ev = []; globalThis.__renders = 0;
+    chrome.storage.onChanged.addListener((c, area) => { __ev.push(area + ':' + Object.keys(c).sort().join('+')); });
+    new MutationObserver(() => { __renders++; }).observe(document.getElementById('content'), { childList: true, subtree: true, characterData: true }); 1`);
+  let quiet = null;
+  for (let i = 0; i < 3 && !quiet; i++) {
+    await home.eval(`__ev.length = 0; __renders = 0; 1`);
+    await readUntil(tab2, `http://free.example:${sitePort}/?${i}`, 'Waysplit-OK DIRECT', 5000);
+    await sleep(1200);
+    const seen = await home.eval(`({ ev: __ev, renders: __renders })`);
+    if (seen.ev.length && seen.ev.every((e) => /^session:(tabDomains\+tabTops|tabDomains|tabTops)$/.test(e))) quiet = seen;
+  }
+  await home.eval(`__renders = 0; 1`);
+  await win.eval(`chrome.storage.session.set({ probe: 1 })`);
+  const woke = await home.eval(`(async () => { ${wait} await wait(() => __renders > 0, 3000); return __renders; })()`);
+  await win.eval(`chrome.storage.session.remove('probe')`);
+  check(!!quiet && quiet.renders === 0 && woke > 0,
+    `открытое окно: от запросов вкладки (${quiet ? quiet.ev.join(', ') : 'чистого замера не вышло'}) — перерисовок ${quiet?.renders}; от другого изменения в памяти сеанса — перерисовалось`);
+
+  // Строка правила и экран «Домены сайта»: убрать домен — он уходит из PAC и сам не возвращается.
+  const rowS = await win.eval(js.ruleRow('page.test'));
+  check(/\+2 домена сайта/.test(rowS?.sub), `строка правила: «page.test» — «${rowS?.sub}»`);
+  if (shotsDir) await win.shot(join(shotsDir, 'options-rules-site-domains.png'), 'light');
+  const sd = await win.eval(js.siteDomains('page.test', 'media-cdn.test'));
+  check(sd.label === 'Домены сайта (2)…' && sd.title === 'Домены сайта · 2' && sd.sub === 'page.test' && sd.before.join(', ') === `media-cdn.test, ${PAGE_HOSTS.cf}`
+    && /идут так же, как page\.test: через VPN/.test(sd.how) && /добавляются сами/.test(sd.auto),
+  `меню «⋯» → «${sd.label}»: экран «${sd.title}» — ${sd.before?.join(', ')}`);
+  check(sd.after?.join(', ') === PAGE_HOSTS.cf && /media-cdn\.test/.test(sd.removed) && /убран/.test(sd.toast), `убрали media-cdn.test: в списке — ${sd.after?.join(', ')}; «${sd.removed}»`);
+  check(sd.sticky === 'true' && sd.restoreH >= 24, `сообщение с указанием остаётся до закрытия; ссылка «Вернуть убранные» — ${sd.restoreH} пикс. высотой`);
+  if (shotsDir) await win.shot(join(shotsDir, 'options-site-domains.png'), 'light');
+  await win.eval(js.tab('rules'));
+  check(!(await win.eval(js.pac)).includes('media-cdn.test'), 'убранного домена больше нет в PAC');
+  view = await openPage(tab1, 'Waysplit-OK A');
+  await sleep(FLUSH_WAIT);
+  const afterDrop = (await rulesOf())['page.test'];
+  check(view.cdn === 'Waysplit-OK DIRECT' && view.cf === 'Waysplit-OK A' && afterDrop.siteDomains.join(', ') === PAGE_HOSTS.cf && afterDrop.siteDomainsRemoved.join(', ') === 'media-cdn.test',
+    `вкладку обновили: убранный домен снова напрямую («${view.cdn}») и сам не вернулся; остальное — через VPN («${view.cf}»)`);
+
+  // Удаление правила: между корзиной и «⋯» — не меньше 24 пикс.; в сообщении — «Вернуть», и правило
+  // возвращается таким, каким было, вместе с доменами сайта.
+  const beforeDel = (await rulesOf())['page.test'];
+  const undo = await win.eval(`(async () => { ${wait}
+    tab('rules');
+    await wait(() => ruleLi('page.test'));
+    const li = ruleLi('page.test');
+    const glyph = (sel) => li.querySelector(sel + ' svg').getBoundingClientRect();
+    const out = { gap: Math.round(glyph('[data-action="more"]').left - glyph('[data-action="remove"]').right) };
+    clearToast();
+    li.querySelector('[data-action="remove"]').click();
+    await wait(() => /^Правило удалено/.test(toastText()) && !ruleLi('page.test'), 5000);
+    out.toast = toastText();
+    out.action = $('toast').querySelector('.toast-action')?.textContent || '';
+    out.sticky = $('toast').dataset.sticky;
+    out.gone = !ruleLi('page.test') && !(await chrome.storage.local.get('rules')).rules.some((r) => r.domain === 'page.test');
+    $('toast').querySelector('.toast-action')?.click();
+    await wait(() => ruleLi('page.test'), 5000);
+    await sleep(300);
+    out.back = !!ruleLi('page.test');
+    out.after = toastText();
+    return out; })()`);
+  const afterUndo = (await rulesOf())['page.test'];
+  check(undo.gap >= 24, `между значками корзины и «⋯» — ${undo.gap} пикс. (не меньше 24)`);
+  check(undo.gone && undo.toast === 'Правило удалено: page.test' && undo.action === 'Вернуть' && undo.sticky === 'true', `корзина: «${undo.toast}» с кнопкой «${undo.action}»`);
+  check(undo.back && JSON.stringify(afterUndo) === JSON.stringify(beforeDel) && (await win.eval(js.pac)).includes(`"${PAGE_HOSTS.cf}"`),
+    `«Вернуть»: правило вернулось таким же — с доменами сайта (${afterUndo?.siteDomains.join(', ')}) и убранными (${afterUndo?.siteDomainsRemoved.join(', ')}); «${undo.after}»`);
+
+  // Набор: правило на главный домен набора получает его домены — без отдельных правил.
+  const addedY = await win.eval(js.addRule('youtube.com', 'proxy:'));
+  const rowY = await win.eval(js.ruleRow('youtube.com'));
+  const pacY = await win.eval(js.pac);
+  check(/^Добавлено 1/.test(addedY) && /\+6 доменов сайта/.test(rowY?.sub) && pacY.includes('"googlevideo.com"') && pacY.includes('"yt3.googleusercontent.com"')
+    && Object.keys(await rulesOf()).length === 3, `правило youtube.com: «${rowY?.sub}» из набора, в PAC — googlevideo.com и yt3.googleusercontent.com; правил по-прежнему 3`);
+  // Выключили автосбор — новые домены не привязываются.
+  check((await win.eval(js.checkbox('autoSiteDomains'))) === false, '«Автоматически добавлять домены сайта» в «Настройках» сняли');
+  await win.eval(js.message({ type: 'restoreSiteDomains', id: afterDrop.id }));
+  await openPage(tab1, 'Waysplit-OK A');
+  await sleep(FLUSH_WAIT);
+  check(((await rulesOf())['page.test'].siteDomains || []).join(', ') === PAGE_HOSTS.cf, 'автосбор выключен: страницу открыли снова — media-cdn.test не привязан');
+
+  // Три вкладки одного сайта сразу. Новый домен находит та, что обратилась к нему первой, но
+  // «обновите вкладку» нужна всем открытым: две остаются — подсказка у обеих. Третью закрываем,
+  // пока домены ждут записи: домены правилу достаются, а подсказки для закрытой вкладки нет.
+  await win.eval(js.message({ type: 'setSetting', key: 'autoSiteDomains', value: true }));
+  const urls3 = [`${pageUrl}?first`, `${pageUrl}?second`, `${pageUrl}?closed`];
+  const tabs3 = [await chrome2.page(), await chrome2.page(), await chrome2.page()];
+  await Promise.all(tabs3.map((t, i) => openPage(t, 'Waysplit-OK A', urls3[i])));
+  const open3 = await win.eval(`chrome.tabs.query({}).then((ts) => ts.map((t) => ({ id: t.id, url: t.url })))`);
+  const [idFirst, idSecond, idClosed] = urls3.map((u) => open3.find((t) => t.url === u)?.id);
+  await chrome2.send('Target.closeTarget', { targetId: tabs3[2].targetId });
+  await sleep(FLUSH_WAIT);
+  const hintsLeft = await win.eval(`chrome.storage.session.get('siteNew').then((s) => s.siteNew || {})`);
+  check(!!idClosed && ((await rulesOf())['page.test'].siteDomains || []).includes('media-cdn.test') && !(idClosed in hintsLeft),
+    `вкладку закрыли до записи автосбора: media-cdn.test привязан, подсказки для закрытой вкладки нет (в памяти сеанса: ${JSON.stringify(hintsLeft)})`);
+  check(!!idFirst && !!idSecond && [idFirst, idSecond].every((id) => hintsLeft[id]?.includes('media-cdn.test')),
+    'две вкладки одного сайта: подсказка «обновите вкладку» — у обеих');
+
+  await chrome2.close();
+  check(await waitPort(27101, false, 10000), 'второй Chrome закрыт: ядро завершилось');
+
+  // --- вкладка инкогнито: автосбор из неё ничего не привязывает ---
+  // Третий запуск Chrome: той же копии расширения разрешаем работать в инкогнито — как галочкой на
+  // chrome://extensions (без «режима разработчика» Chrome при этом выключил бы распакованное
+  // расширение). Домены сайта хранятся в правилах, то есть на диске, — от вкладки инкогнито там
+  // ничего остаться не должно; «Домены этой вкладки» для неё работают: это только память сеанса.
+  // Галочка перезапускает расширение, поэтому сначала даём ему запуститься (перезапуск поверх
+  // первого запуска оставляет фон без ответа), а после — открываем его страницу заново.
+  // Не получилось подготовить Chrome — шаги пропускаются, и итоговая строка об этом говорит.
+  console.log('\nВкладка инкогнито (копия расширения, которой разрешена работа в инкогнито):');
+  const chrome3 = startChrome(join(work, 'profile3'), [PAGE_HOSTS.cf, PAGE_HOSTS.ga]);
+  const { id: id3 } = await chrome3.send('Extensions.loadUnpacked', { path: siteDir });
+  // answers — фон отвечает странице на команду (ждём не дольше 2 с); ready3 — новая вкладка со
+  // страницей расширения, которой фон отвечает, или null.
+  const answers = (p) => p.eval(`Promise.race([chrome.runtime.sendMessage({ type: 'tabDomains', tabId: 0 }).then((r) => !!(r && r.ok), () => false),
+    new Promise((r) => setTimeout(() => r(false), 2000))])`).catch(() => false);
+  const ready3 = async () => {
+    const p = await chrome3.page();
+    for (let i = 0; i < 15; i++) {
+      await p.goto(`chrome-extension://${id3}/popup/popup.html?full`);
+      if (await answers(p)) return p;
+      await sleep(500);
+    }
+    return null;
+  };
+  let skip3 = (await ready3()) ? '' : 'расширение не запустилось';
+  if (!skip3) {
+    const extPage = await chrome3.page('chrome://extensions/');
+    const allowed = await extPage.eval(`(async () => {
+      if (!chrome.developerPrivate) return false;
+      await new Promise((r) => chrome.developerPrivate.updateProfileConfiguration({ inDeveloperMode: true }, r));
+      await new Promise((r) => chrome.developerPrivate.updateExtensionConfiguration({ extensionId: ${JSON.stringify(id3)}, incognitoAccess: true }, r));
+      await new Promise((r) => setTimeout(r, 1500)); // расширение перезапускается
+      return new Promise((r) => chrome.developerPrivate.getExtensionInfo(${JSON.stringify(id3)}, (i) => r(!!(i && i.incognitoAccess && i.incognitoAccess.isActive) && i.state === 'ENABLED')));
+    })()`).catch(() => false);
+    if (!allowed) skip3 = 'Chrome не дал разрешить расширению работу в инкогнито';
+  }
+  const win3 = skip3 ? null : await ready3();
+  if (!skip3 && !win3) skip3 = 'после разрешения работать в инкогнито фон расширения не отвечает';
+  if (skip3) {
+    skipped.push(`вкладка инкогнито (${skip3})`);
+    console.log(`ПРОПУСК  ${skip3} — шаги про вкладку инкогнито не проверены`);
+  } else {
+    const added3 = await win3.eval(js.add(linkA));
+    const rule3 = await Promise.race([win3.eval(js.message({ type: 'addRules', domains: ['page.test'], action: 'proxy', serverId: null })), sleep(70000).then(() => null)]);
+    const incognito = await chrome3.page(undefined, (await chrome3.send('Target.createBrowserContext')).browserContextId);
+    let seen = {};
+    for (let i = 0; i < 40 && !(seen.me && seen.cdn && seen.cf && seen.ga); i++) {
+      if (i % 10 === 0) await incognito.goto(pageUrl);
+      seen = await pageView(incognito);
+      if (!(seen.me && seen.cdn && seen.cf && seen.ga)) await sleep(250);
+    }
+    await sleep(FLUSH_WAIT);
+    const state3 = () => win3.eval(`(async () => {
+      const inc = (await chrome.tabs.query({})).find((t) => t.incognito);
+      const s = await chrome.storage.session.get(['tabDomains', 'siteNew']);
+      return { inc: inc ? inc.id : null, domains: inc ? (s.tabDomains || {})[inc.id] || [] : [], hints: s.siteNew || {},
+        rule: (await chrome.storage.local.get('rules')).rules.find((r) => r.domain === 'page.test') }; })()`);
+    let s3 = await state3();
+    check(/^Добавлено 1/.test(added3) && !!rule3?.ok && s3.inc !== null && s3.domains.includes(PAGE_HOSTS.cdn) && s3.domains.includes(PAGE_HOSTS.cf),
+      `вкладка инкогнито открыла страницу (${seen.me}); её запросы видны в «Доменах этой вкладки» (только память сеанса): ${s3.domains.join(', ') || 'пусто'}`);
+    check(!!s3.rule && s3.rule.siteDomains.length === 0 && !(s3.inc in s3.hints),
+      `из вкладки инкогнито к правилу page.test ничего не привязано (${JSON.stringify(s3.rule?.siteDomains)}), подсказки «обновите вкладку» для неё нет`);
+    // Та же страница в обычной вкладке: домены привязываются, как раньше, и подсказка — только у неё.
+    await openPage(await chrome3.page(), 'Waysplit-OK A');
+    for (let i = 0; i < 40 && !s3.rule?.siteDomains.length; i++) {
+      await sleep(250);
+      s3 = await state3();
+    }
+    check(s3.rule?.siteDomains.join(', ') === `media-cdn.test, ${PAGE_HOSTS.cf}` && Object.keys(s3.hints).length === 1 && !(s3.inc in s3.hints),
+      `та же страница в обычной вкладке: привязаны ${s3.rule?.siteDomains.join(', ') || 'ничего'}; подсказка — только у обычной вкладки`);
+  }
+  await chrome3.close();
+  check(await waitPort(27101, false, 10000), 'третий Chrome закрыт: ядро завершилось');
 } catch (e) {
   check(false, e.message);
 } finally {
@@ -1010,5 +1611,5 @@ try {
   await sleep(1500);
   try { rmSync(work, { recursive: true, force: true }); } catch { /* Chrome ещё держит файлы — не страшно */ }
 }
-console.log(failed ? '\nЕСТЬ ОШИБКИ' : '\nВсё в порядке');
+console.log(failed ? '\nЕСТЬ ОШИБКИ' : skipped.length ? `\nВсё в порядке; не проверено: ${skipped.join('; ')}` : '\nВсё в порядке');
 process.exit(failed ? 1 : 0);

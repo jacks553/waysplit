@@ -1,13 +1,18 @@
 // Подделки chrome.* и компаньона для тестов Controller (не тест: имя без .test.js).
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { Controller } from '../extension/lib/controller.js';
+
+// SETS — настоящий lib/domain-sets.json (наборы и списки для «доменов сайта»).
+export const SETS = JSON.parse(readFileSync(new URL('../extension/lib/domain-sets.json', import.meta.url), 'utf8'));
 
 export const S1 = { id: 's_1', name: 'NL', link: 'vless://secret@nl.example.com:443', localPort: 27101, key: 'k1', protocol: 'vless' };
 export const S2 = { id: 's_2', name: 'DE', link: 'vless://secret@de.example.com:443', localPort: 27102, key: 'k2', protocol: 'vless' };
 
 // setup собирает Controller с подделками. events — общий журнал порядка действий.
 // extras: true — ещё подделки защиты WebRTC (privacy) и значка (ui); rtc — что вернёт protect().
-export function setup({ local = {}, session = {}, control = 'controlled_by_this_extension', host: handlers = {}, extras = false, rtc = 'on', now = 1000 } = {}) {
+// sets — содержимое domain-sets.json (SETS — настоящее); без него наборов нет.
+export function setup({ local = {}, session = {}, control = 'controlled_by_this_extension', host: handlers = {}, extras = false, rtc = 'on', now = 1000, sets = null } = {}) {
   const events = [];
   const store = {
     local: structuredClone(local),
@@ -65,7 +70,7 @@ export function setup({ local = {}, session = {}, control = 'controlled_by_this_
   const privacy = { protect: async () => { events.push('rtc-on'); return rtc; }, release: async () => { events.push('rtc-off'); } };
   const ui = { icons: [], setIcon: async (state, title) => { ui.icons.push({ state, title }); } };
   const clock = { t: now };
-  const c = new Controller({ store, proxy, host, alarms, timers, now: () => clock.t, ...(extras ? { privacy, ui } : {}) });
+  const c = new Controller({ store, proxy, host, alarms, timers, now: () => clock.t, ...(sets ? { sets: async () => sets } : {}), ...(extras ? { privacy, ui } : {}) });
   return { c, store, proxy, host, alarms, timers, events, ui, clock };
 }
 

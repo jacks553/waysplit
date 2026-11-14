@@ -39,9 +39,9 @@ test('неправильный ввод — понятная причина', ()
     '-bad.com': 'не похоже на домен',
     '1.2.3.4': 'правила — для доменов, а не для IP-адресов',
     '[::1]': 'правила — для доменов, а не для IP-адресов',
-    localhost: 'локальные адреса всегда идут напрямую',
-    'printer.local': 'локальные адреса всегда идут напрямую',
-    'router.lan': 'локальные адреса всегда идут напрямую',
+    localhost: 'локальные адреса всегда идут без VPN',
+    'printer.local': 'локальные адреса всегда идут без VPN',
+    'router.lan': 'локальные адреса всегда идут без VPN',
   };
   for (const [input, want] of Object.entries(cases)) {
     assert.deepEqual(normalizeDomain(input), { error: want }, JSON.stringify(input));

@@ -55,15 +55,29 @@
       <button class="card row-card" id="serverRow" type="button" hidden>
         <span class="flag" id="srvFlag"></span>
         <span class="row-main">
-          <span class="row-label">Сервер</span>
+          <span class="row-label" id="srvLabel">Сервер</span>
           <span class="row-name" id="srvName"></span>
         </span>
-        <span class="bars-slot" id="srvBars"></span>
+        <span id="srvBars"></span>
         <span class="chev" aria-hidden="true"></span>
       </button>
 
+      <button class="card ru-row" id="ruSwitch" type="button" role="switch" aria-checked="false" hidden>
+        <span class="switch" aria-hidden="true"></span>
+        <span class="ru-text">
+          <span class="ru-title">Российские сайты — без VPN</span>
+          <span class="ru-sub">.ru, .рф, .su, VK, Яндекс и другие</span>
+        </span>
+      </button>
+
+      <section class="card perm-card" id="permHome" hidden></section>
+
       <section class="card site" id="site" hidden>
         <span class="row-label">Этот сайт</span>
+        <div class="reload" id="siteNew" role="status" hidden>
+          <span id="siteNewText">Найдены новые домены сайта — обновите вкладку</span>
+          <button class="btn btn-small" id="siteNewReload" type="button">Обновить вкладку</button>
+        </div>
         <div class="site-main">
           <span class="favicon" id="siteIcon" aria-hidden="true"></span>
           <select class="site-domain" id="siteDomain" aria-label="Для какого домена правило"></select>
@@ -71,12 +85,12 @@
         <p class="site-why" id="siteWhy"></p>
         <div class="site-warn" id="siteWarn" hidden>
           <span id="siteWarnText"></span>
-          <button class="btn btn-small" id="siteWarnFix" type="button">Включить</button>
+          <button class="btn btn-small" id="siteWarnFix" type="button">Включить правила</button>
         </div>
         <div class="site-controls" id="siteControls">
           <button class="switch-row" id="siteSwitch" type="button" role="switch" aria-checked="false">
             <span class="switch" aria-hidden="true"></span>
-            <span id="siteSwitchText">Напрямую</span>
+            <span id="siteSwitchText">Без VPN</span>
           </button>
           <button class="flag-btn" id="siteServer" type="button" aria-label="Сервер для этого сайта" title="Сервер для этого сайта">
             <span class="flag" id="siteFlag"></span>
@@ -131,16 +145,18 @@
         <h2>Правила сайтов <span class="count" id="rulesCount"></span></h2>
         <button class="icon-btn" id="rulesMore" type="button" aria-label="Ещё: наборы, импорт, экспорт" aria-haspopup="menu" title="Ещё"></button>
       </div>
+      <p class="rules-ru" id="rulesRu" hidden>Российские сайты — без VPN: включено</p>
       <form class="rule-add" id="ruleForm">
         <textarea class="search rule-input" id="ruleInput" rows="1" spellcheck="false" placeholder="Введите домен" aria-label="Домен или адрес сайта (несколько — по одному на строку); заодно поиск по правилам"></textarea>
-        <select class="select-small rule-action" id="ruleAction" aria-label="Что делать с этими сайтами"></select>
-        <button class="btn plus" id="ruleAddBtn" type="submit" aria-label="Добавить правило" title="Добавить правило">+</button>
+        <select class="select-small" id="ruleAction" aria-label="Что делать с этими сайтами"></select>
+        <button class="btn plus" type="submit" aria-label="Добавить правило" title="Добавить правило">+</button>
       </form>
       <p class="rules-off" id="rulesOff" hidden></p>
+      <section class="card perm-card" id="permRules" hidden></section>
       <ul class="rules" id="rulesList"></ul>
       <div class="empty-box" id="rulesEmpty" hidden>
-        <p><b>Правил пока нет.</b> Правило говорит, как открывать сайт: через VPN (через текущий или выбранный сервер) или напрямую.</p>
-        <p>Например: <code>example.com</code> → «Без VPN» — сайт и все его поддомены (www.example.com, m.example.com) пойдут напрямую, даже когда VPN включён.</p>
+        <p><b>Правил пока нет.</b> Правило говорит, как открывать сайт: через VPN (через текущий или выбранный сервер) или без VPN.</p>
+        <p>Например: <code>example.com</code> → «Без VPN» — сайт и все его поддомены (www.example.com, m.example.com) пойдут без VPN, даже когда VPN включён.</p>
       </div>
       <p class="hint" id="rulesHint">Правило для домена действует и на все поддомены, побеждает самое конкретное. Можно задать целую зону: ru, рф, su.</p>
     </section>
@@ -152,21 +168,35 @@
       <fieldset class="group">
         <legend>Если сервер недоступен</legend>
         <label class="check"><input type="radio" name="onFailure" value="block">
-          <span><b>Не открывать сайт</b> — защита от утечки: без VPN сайт не откроется напрямую</span></label>
+          <span class="opt"><span class="opt-name">Не открывать сайт</span>
+            <span class="opt-note">Защита от утечки: пока сервер недоступен, сайт не откроется</span></span></label>
         <label class="check"><input type="radio" name="onFailure" value="direct">
-          <span><b>Открыть напрямую</b> — сайт откроется, но с вашего настоящего IP</span></label>
+          <span class="opt"><span class="opt-name">Открыть без VPN</span>
+            <span class="opt-note">Сайт откроется, но с вашего настоящего IP</span></span></label>
       </fieldset>
 
       <fieldset class="group">
         <legend>Правила сайтов</legend>
         <label class="check"><input type="checkbox" id="setRulesWhenOff">
-          <span>Правила работают, когда VPN выключен: сайты из правил «через VPN» идут через VPN, остальные — напрямую</span></label>
+          <span class="opt"><span class="opt-name">Правила работают, когда VPN выключен</span>
+            <span class="opt-note">Сайты из правил «через VPN» идут через VPN, остальные — без VPN</span></span></label>
+        <label class="check"><input type="checkbox" id="setRuDirect">
+          <span class="opt"><span class="opt-name">Российские сайты — без VPN</span>
+            <span class="opt-note">.ru, .рф, .su, VK, Яндекс и другие идут без VPN, даже когда VPN включён. Правила для отдельных сайтов важнее</span></span></label>
+        <label class="check"><input type="checkbox" id="autoSiteDomains">
+          <span class="opt"><span class="opt-name">Автоматически добавлять домены сайта</span>
+            <span class="opt-note">Видео, картинки и скрипты сайта из правила «через VPN» лежат на других доменах — пока сайт открыт, Waysplit добавляет их к его правилу</span></span></label>
+        <div class="site-warn" id="autoSitePerm" hidden>
+          <span>Нужно разрешение Chrome видеть запросы вкладок — без него домены сами не добавляются.</span>
+          <button class="btn btn-small" id="autoSitePermBtn" type="button">Разрешить</button>
+        </div>
       </fieldset>
 
       <fieldset class="group">
         <legend>Защита и запуск</legend>
         <label class="check"><input type="checkbox" id="webrtcProtection">
-          <span>Защита WebRTC: пока VPN включён, сайты не узнают настоящий IP через WebRTC (видеозвонки идут через VPN)</span></label>
+          <span class="opt"><span class="opt-name">Защита WebRTC</span>
+            <span class="opt-note">Пока VPN включён, сайты не узнают настоящий IP через WebRTC (видеозвонки идут через VPN)</span></span></label>
         <label class="field"><span>При запуске Chrome</span>
           <select class="select-small" id="autoConnect">
             <option value="restore">восстановить, как было</option>
@@ -213,7 +243,6 @@
         <div class="tools">
           <button class="ghost" id="exportBackup" type="button">Сохранить копию</button>
           <button class="ghost" id="importBackup" type="button">Восстановить из копии</button>
-          <input type="file" id="backupFile" accept=".json,application/json" hidden>
         </div>
       </fieldset>
 
@@ -240,12 +269,12 @@
 
 <div class="pop" id="pop" popover="auto" role="menu"></div>
 <dialog class="dlg" id="dlg">
-  <form method="dialog" class="dlg-form" id="dlgForm">
+  <form method="dialog" class="dlg-form">
     <p class="dlg-title" id="dlgTitle"></p>
     <p class="dlg-text" id="dlgText"></p>
     <input class="search" id="dlgInput" type="text" maxlength="100" hidden>
     <div class="dlg-buttons">
-      <button class="ghost" value="cancel" type="submit" id="dlgCancel">Отмена</button>
+      <button class="ghost" value="cancel" type="submit">Отмена</button>
       <button class="btn" value="ok" type="submit" id="dlgOk">ОК</button>
     </div>
   </form>

@@ -50,7 +50,7 @@ var privateFiles = []string{"PROGRESS.md", "SPEC*.md"}
 
 // forbiddenNames — таких файлов в публичном репозитории быть не должно.
 var forbiddenNames = []string{"*.local.*", "links.local.txt", "*.pem", "*.key", "*backup*.json", "*.bak", "*.log",
-	"*.exe", "*.dll", "*.zip", ".env", "id_rsa*", "device-id", "private-key*"}
+	"*.exe", "*.dll", "*.zip", "*.rar", "*.7z", ".env", "id_rsa*", "device-id", "private-key*"}
 
 const publicMark = ".waysplit-public" // метка папки выгрузки: только её можно стирать перед новой
 

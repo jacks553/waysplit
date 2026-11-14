@@ -1,17 +1,22 @@
 /* Окно расширения (SPEC-POPUP.md). Общие цвета, шрифты и кнопки — lib/common.css.
-   Окно — постоянного размера 400×580: шапка, вкладка (прокручивается), панель вкладок внизу.
-   html.full — тот же интерфейс на всю вкладку браузера. */
+   Окно — постоянного размера 400×600 (выше Chrome окно расширения не делает): шапка, вкладка
+   (прокручивается), панель вкладок внизу. html.full — тот же интерфейс на всю вкладку браузера. */
 
 html, body { margin: 0; }
 .app {
   position: relative;
   width: 400px;
-  height: 580px;
+  height: 600px;
   display: grid;
   grid-template-rows: auto 1fr auto;
   overflow: hidden;
   background: var(--bg);
 }
+/* Невысокий экран (например, 1920×1080 при масштабе 150 % — для Chrome это 1280×720): под значком
+   расширения до панели задач остаётся около 584 пикселей, окно в 600 Chrome обрезал бы и добавил
+   полосу прокрутки. Там окно прежней высоты — 580. (Через vh так не сделать: окно, высота
+   которого зависит от него самого, Chrome схлопывает до 25 пикселей.) */
+@media (max-device-height: 750px) { .app { height: 580px; } }
 html.full body { background: var(--bg-full); min-height: 100vh; }
 html.full .app { width: min(100%, 760px); height: 100vh; margin: 0 auto; box-shadow: 0 0 0 1px var(--line); }
 
@@ -130,12 +135,17 @@ code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font: 1
 .conflict { background: var(--warn-bg); border: 1px solid var(--warn); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
 .conflict strong { display: block; margin-bottom: 4px; font-size: 14px; }
 
-.power-block { display: grid; justify-items: center; gap: 3px; padding: 4px 0 0; text-align: center; }
+.power-block { display: grid; justify-items: center; gap: 3px; padding: 2px 0 0; text-align: center; }
+/* «Главная» плотнее: в окне 400×600 под большой кнопкой помещаются сервер, «Российские сайты —
+   без VPN» и блок «Этот сайт» целиком, вместе с нижней строкой ссылок; с карточкой разрешения
+   виден хотя бы заголовок «Этот сайт». Замер — в tools/chrome-check.js. */
+#panel-home { gap: 8px; padding-top: 10px; padding-bottom: 10px; }
+#serverRow { padding: 6px 12px; }
 .power {
   --ring: var(--idle);
-  width: 104px;
-  height: 104px;
-  margin-bottom: 6px;
+  width: 88px;
+  height: 88px;
+  margin-bottom: 2px;
   border-radius: 50%;
   border: 3px solid var(--ring);
   background: var(--card);
@@ -145,7 +155,7 @@ code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font: 1
   cursor: pointer;
   transition: background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s;
 }
-.power svg { width: 42px; height: 42px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.power svg { width: 38px; height: 38px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
 .power:hover { box-shadow: 0 0 0 7px color-mix(in srgb, var(--ring) 18%, transparent); }
 .power:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .power:disabled { cursor: default; opacity: 0.5; box-shadow: none; }
@@ -164,13 +174,13 @@ code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font: 1
 @media (prefers-reduced-motion: reduce) { .power[data-state="connecting"] { animation: none; } }
 .power-label { font-size: 12px; color: var(--muted); }
 .status { font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
-.status[data-state="on"] { color: var(--ok); }
-.status[data-state="warn"], .status[data-state="rules"] { color: var(--warn); }
+.status[data-state="on"] { color: var(--status-ok); }
+.status[data-state="warn"], .status[data-state="rules"] { color: var(--status-warn); }
 .status[data-state="error"] { color: var(--err); }
 .detail { color: var(--muted); font-size: 12px; min-height: 1em; }
 
 .problem { background: var(--err-bg); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
-.problem-text { color: var(--err); font-weight: 600; }
+.problem-text { color: var(--err-text); font-weight: 600; }
 .problem .hint { color: var(--text); font-size: 13px; }
 .steps { margin: 0; padding-left: 20px; font-size: 12px; display: grid; gap: 3px; }
 .download-row { display: flex; align-items: center; gap: 12px; margin-top: 2px; }
@@ -226,7 +236,7 @@ code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font: 1
 @media (prefers-reduced-motion: reduce) { .bars.pending i { animation: none; } }
 
 /* «Этот сайт» */
-.site { display: grid; gap: 7px; }
+.site { display: grid; gap: 6px; }
 .site-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .favicon { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; flex: none; }
 .favicon img { width: 18px; height: 18px; display: block; }
@@ -234,7 +244,7 @@ code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font: 1
 .site-domain {
   min-width: 0;
   max-width: 100%;
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-line);
   border-radius: 8px;
   background: var(--card);
   color: var(--text);
@@ -244,7 +254,7 @@ code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font: 1
 }
 .site-domain:disabled { border-color: transparent; opacity: 1; appearance: none; padding: 3px 0; }
 .site-why { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
-.site-warn { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--warn); background: var(--warn-bg); border-radius: 8px; padding: 7px 8px 7px 10px; }
+.site-warn { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--warn-text); background: var(--warn-bg); border-radius: 8px; padding: 7px 8px 7px 10px; }
 .site-warn span { flex: 1; }
 .site-warn .btn { flex: none; }
 .site-controls { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 2px; }
@@ -262,7 +272,7 @@ code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font: 1
   border-radius: 8px;
 }
 .switch-row:focus-visible { outline: 2px solid var(--accent); }
-.switch { position: relative; width: 42px; height: 24px; border-radius: 12px; background: var(--idle); transition: background 0.15s; flex: none; }
+.switch { position: relative; width: 42px; height: 24px; border-radius: 12px; background: var(--switch-off); transition: background 0.15s; flex: none; }
 .switch::after {
   content: "";
   position: absolute;
@@ -285,7 +295,7 @@ code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font: 1
   gap: 4px;
   height: 36px;
   padding: 0 6px 0 8px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-line);
   border-radius: 10px;
   background: var(--card);
   cursor: pointer;
@@ -312,7 +322,7 @@ code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font: 1
 
 .select-small {
   min-width: 0;
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-line);
   border-radius: 8px;
   background: var(--card);
   color: var(--text);
@@ -347,8 +357,11 @@ code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font: 1
 @keyframes srv-flash { 0%, 35% { background: color-mix(in srgb, var(--accent) 30%, var(--card)); } }
 .srv-main { min-width: 0; display: grid; }
 .srv-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.srv-meta { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tag { flex: none; font-size: 10px; font-weight: 650; color: var(--teal); border: 1px solid currentColor; border-radius: 99px; padding: 0 6px; line-height: 15px; }
+.srv-meta { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+.srv-meta-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tag { flex: none; font-size: 11px; font-weight: 650; color: var(--teal); border: 1px solid currentColor; border-radius: 99px; padding: 0 6px; line-height: 15px; }
+/* Сервер не ответил на пинг — словами, а не только бледными полосками. */
+.srv-fail { flex: none; color: var(--err-text); font-weight: 600; }
 .srv .bars { margin-left: 2px; }
 .star .ic { width: 19px; height: 19px; }
 .star[aria-pressed="true"] { color: #f5a800; }
@@ -372,7 +385,7 @@ code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font: 1
 .sub-name { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sub-facts { font-size: 12px; color: var(--muted); }
 .sub-note { font-size: 12px; padding: 6px 10px; border-radius: 8px; background: var(--accent-soft); overflow-wrap: anywhere; }
-.sub-note.error { color: var(--err); background: var(--err-bg); }
+.sub-note.error { color: var(--err-text); background: var(--err-bg); }
 #srvGroups { display: grid; gap: 8px; }
 #srvGroups > .srv-list + .group-title { margin-top: 8px; }
 
@@ -382,12 +395,12 @@ code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font: 1
 .rule-input[rows="1"] { height: 36px; }
 .rule-add .select-small { height: 36px; }
 .plus { width: 36px; height: 36px; padding: 0; font-size: 21px; font-weight: 500; line-height: 1; }
-.rules-off { font-size: 12px; color: var(--warn); background: var(--warn-bg); border-radius: 8px; padding: 7px 10px; }
+.rules-off { font-size: 12px; color: var(--warn-text); background: var(--warn-bg); border-radius: 8px; padding: 7px 10px; }
 .rules { list-style: none; margin: 0; padding: 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .rules:empty { display: none; }
 .rule {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) 100px 30px 30px;
+  grid-template-columns: 24px minmax(0, 1fr) 100px 30px 36px; /* последняя шире: «⋯» отодвинуто от корзины */
   align-items: center;
   gap: 8px;
   min-height: 48px;
@@ -399,7 +412,12 @@ code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font: 1
 .rule-main { min-width: 0; display: grid; }
 .rule-domain { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rule-sub { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rule.off .rule-domain, .rule.off .favicon, .rule.off .rule-target { opacity: 0.5; }
+/* Отключённое правило: текст серый, но читаемый (не ниже 4,5:1) — бледнеют только значки. */
+.rule.off .rule-domain { color: var(--muted); }
+.rule.off .rule-target { color: var(--muted); background: var(--card); border-color: var(--field-line); font-weight: 400; }
+.rule.off .favicon, .rule.off .rule-target .flag, .rule.off .rule-target .ic { opacity: 0.5; }
+/* Корзина удаляет сразу — между её значком и «⋯» не меньше 24 пикс. */
+.rule [data-action="more"] { justify-self: end; }
 .rule-target {
   appearance: none;
   justify-self: end;
@@ -409,7 +427,7 @@ code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font: 1
   max-width: 100px;
   height: 28px;
   padding: 0 9px 0 6px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-line);
   border-radius: 99px;
   background: var(--card);
   font-size: 12px;
@@ -432,11 +450,45 @@ code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font: 1
 .set-name { font-weight: 650; }
 .set-count { font-size: 12px; color: var(--muted); }
 
+/* --- «Российские сайты — без VPN»: строка на «Главной» (невысокая — там мало места) и
+   напоминание на «Правилах» --- */
+.ru-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 12px; text-align: left; font: inherit; color: var(--text); cursor: pointer; }
+.ru-row:hover { background: var(--hover); }
+.ru-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ru-text { display: grid; min-width: 0; }
+.ru-title { font-size: 13px; font-weight: 600; line-height: 1.3; }
+.ru-sub { font-size: 11.5px; line-height: 1.3; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ru-row[aria-checked="true"] .switch { background: var(--grad); }
+.ru-row[aria-checked="true"] .switch::after { transform: translateX(18px); }
+.rules-ru { font-size: 12px; color: var(--muted); background: var(--accent-soft); border-radius: 8px; padding: 6px 10px; }
+
+/* --- «домены сайта»: экран со списком и карточка разрешения --- */
+.sd-list { list-style: none; margin: 0; padding: 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.sd-list:empty { display: none; }
+.sd-item { display: grid; grid-template-columns: 24px minmax(0, 1fr) 30px; align-items: center; gap: 8px; min-height: 40px; padding: 4px 4px 4px 10px; border-top: 1px solid var(--line); }
+.sd-item:first-child { border-top: 0; }
+.sd-name { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sd-item .icon-btn { width: 30px; height: 30px; }
+.sd-item .icon-btn .ic { width: 16px; height: 16px; }
+.sd-auto-row, .sd-removed-row { display: grid; gap: 6px; justify-items: start; }
+.sd-removed { overflow-wrap: anywhere; }
+/* Карточка — невысокая: в окне 400×600 под ней должен быть виден заголовок блока «Этот сайт»
+   (с полосой прокрутки строки уже, и статус «работают правила» занимает две строки). */
+.perm-card { display: grid; gap: 4px; padding: 8px 10px; border-color: var(--accent); }
+.perm-title { font-weight: 650; font-size: 13px; line-height: 1.3; }
+.perm-card .hint { font-size: 12px; line-height: 1.35; }
+.perm-card .tools { margin-top: 2px; }
+.perm-card .btn-small, .perm-card .ghost { padding: 4px 10px; font-size: 12.5px; }
+
 /* --- настройки --- */
 .group { margin: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--card); padding: 8px 12px 12px; display: grid; gap: 8px; min-width: 0; }
 legend { float: left; width: 100%; padding: 2px 0 0; font-weight: 650; font-size: 13px; }
 legend + * { clear: both; }
 .check { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; cursor: pointer; }
+/* Галочка или вариант в настройках: название — полужирным, пояснение — обычным, мельче. */
+.opt { display: grid; gap: 1px; min-width: 0; }
+.opt-name { font-weight: 600; }
+.opt-note { font-size: 12px; color: var(--muted); }
 .check input { margin: 3px 0 0; accent-color: var(--accent); flex: none; }
 .field { display: grid; gap: 4px; font-size: 13px; }
 .field .search { font-size: 13px; }
@@ -505,7 +557,8 @@ legend + * { clear: both; }
   font-size: 13.5px;
   cursor: pointer;
 }
-.pop-item:hover, .pop-item:focus-visible { background: var(--hover); outline: none; }
+.pop-item:hover { background: var(--hover); }
+.pop-item:focus-visible { background: var(--hover); outline: 2px solid var(--accent); outline-offset: -2px; }
 .pop-item:disabled { opacity: 0.45; cursor: default; background: none; }
 .pop-item.danger { color: var(--err); }
 .pop-item .tick { width: 16px; height: 16px; visibility: hidden; color: var(--accent); }
@@ -527,6 +580,9 @@ legend + * { clear: both; }
   right: 12px;
   bottom: 68px;
   z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 9px 12px;
   border-radius: 10px;
   background: var(--text);
@@ -535,5 +591,14 @@ legend + * { clear: both; }
   box-shadow: var(--shadow);
   overflow-wrap: anywhere;
 }
-.toast[data-kind="error"] { background: var(--err); color: #fff; }
+.toast[data-kind="error"] { background: var(--err); color: var(--toast-err-text); }
+/* Сообщение, которое само не исчезает (ошибка, причина, указание, кнопка): крестик «закрыть» и,
+   если есть, действие («Вернуть», «Открыть настройки»). Цвета — от самого сообщения. */
+.toast-text { flex: 1; min-width: 0; }
+.toast-action, .toast-close { appearance: none; flex: none; border: 0; background: none; color: inherit; cursor: pointer; border-radius: 6px; }
+.toast-action { min-height: 24px; padding: 2px 8px; font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
+.toast-close { display: grid; place-items: center; width: 24px; height: 24px; margin-right: -4px; padding: 0; }
+.toast-close .ic { width: 16px; height: 16px; }
+.toast-action:hover, .toast-close:hover { background: color-mix(in srgb, currentColor 16%, transparent); }
+.toast-action:focus-visible, .toast-close:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
 .action-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); font-size: 13px; }

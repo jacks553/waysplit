@@ -172,14 +172,19 @@ export async function seed(ctl) {
   await msg({ type: 'setFavorite', id: idOf('Стокгольм'), on: true });
   await msg({ type: 'select', id: idOf('Амстердам') });
   await msg({ type: 'ping', ids: [] });
+  // Карточка «разрешить видеть запросы вкладок» (домены сайта) показывается один раз, до ответа —
+  // на обычных кадрах её нет; кадр с ней — в popup-shots.js.
+  await msg({ type: 'setSetting', key: 'siteDomainsAsked', value: true });
   return { msg, idOf };
 }
 
 // --- Chrome и DevTools по трубе ---
-export function startChrome(profile) {
+// scrollbars — с полосами прокрутки, как в настоящем окне. screen — размер экрана: у Chrome без
+// окна он по умолчанию 800×600, а на невысоком экране окно расширения ниже (popup.css: 580 вместо 600).
+export function startChrome(profile, { scrollbars = false, screen = '1920x1080' } = {}) {
   const proc = spawn(chromePath, [
-    '--headless=new', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check',
-    '--remote-debugging-pipe', '--enable-unsafe-extension-debugging', '--no-proxy-server', '--hide-scrollbars',
+    '--headless=new', `--screen-info={${screen}}`, `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check',
+    '--remote-debugging-pipe', '--enable-unsafe-extension-debugging', '--no-proxy-server', ...(scrollbars ? [] : ['--hide-scrollbars']),
     '--force-color-profile=srgb', '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
     '--disable-backgrounding-occluded-windows', 'about:blank',
   ], { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'] });

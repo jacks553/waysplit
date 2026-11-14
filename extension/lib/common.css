@@ -17,16 +17,25 @@
   --line: #e2e7f0;
   --hover: #f0f3f9;
   --accent: #2563eb;
-  --accent-hover: #1d4ed8;
   --accent-soft: #e8efff;
-  --ok: #0f9d6b;
-  --mid: #b97f04;
   --warn: #b97f04;
   --warn-bg: #fff6dd;
   --err: #d23b3b;
   --err-bg: #fdecec;
   --code-bg: #eef2f8;
   --idle: #c3cad6;
+  /* Цвета, подобранные по контрасту (проверка доступности, ноябрь 2026): текст на цветных
+     подложках и главный статус — не ниже 4,5:1, границы элементов — чтобы читалась форма. */
+  --btn: #2563eb;            /* фон залитой кнопки: белый текст 5,17 */
+  --btn-hover: #1d4ed8;
+  --warn-text: #7a5200;      /* текст на --warn-bg: 6,42 */
+  --err-text: #b3261e;       /* текст на --err-bg: 5,72; на карточке: 6,54 */
+  --status-ok: #0a7d55;      /* главный статус на --bg: 4,76 */
+  --status-warn: #8a5d00;    /* главный статус на --bg: 5,32 */
+  --switch-off: #8c96a8;     /* дорожка выключенного переключателя: 2,98 к карточке */
+  --field-line: #b9c1cf;     /* границы полей и кнопок-контуров: 1,81 к карточке */
+  --placeholder: #757575;    /* подсказка в полях: 4,61 */
+  --toast-err-text: #ffffff; /* текст красного сообщения: 4,74 */
   --brand-1: #2563eb;
   --brand-2: #0d9488;
   --teal: #0d9488;
@@ -53,16 +62,23 @@
     --line: #2a3242;
     --hover: #222a37;
     --accent: #4f86f7;
-    --accent-hover: #6b9af8;
     --accent-soft: #1f2c47;
-    --ok: #2fc48d;
-    --mid: #e0a826;
     --warn: #e0a826;
     --warn-bg: #3a3017;
     --err: #f06a6a;
     --err-bg: #3a1f23;
     --code-bg: #232b38;
     --idle: #4a5568;
+    --btn: #2f6ae6;            /* белый текст 4,86 (на --accent было 3,45) */
+    --btn-hover: #2a5fd3;
+    --warn-text: #e0a826;      /* на --warn-bg: 6,07 */
+    --err-text: #f06a6a;       /* на --err-bg: 4,98; на карточке: 5,43 */
+    --status-ok: #2fc48d;      /* 8,18 */
+    --status-warn: #e0a826;    /* 8,53 */
+    --switch-off: #5f6b80;     /* 3,04 к карточке */
+    --field-line: #414c60;     /* 1,89 к карточке */
+    --placeholder: #9aa6b8;    /* 6,63 (цвет Chrome #757575 давал 3,55) */
+    --toast-err-text: #11151d; /* на --err: 6,07 (белый давал 3,01) */
   --brand-1: #3b74f0;
   --brand-2: #14a597;
   --teal: #2dd4bf;
@@ -86,16 +102,23 @@
   --line: #2a3242;
   --hover: #222a37;
   --accent: #4f86f7;
-  --accent-hover: #6b9af8;
   --accent-soft: #1f2c47;
-  --ok: #2fc48d;
-  --mid: #e0a826;
   --warn: #e0a826;
   --warn-bg: #3a3017;
   --err: #f06a6a;
   --err-bg: #3a1f23;
   --code-bg: #232b38;
   --idle: #4a5568;
+  --btn: #2f6ae6;
+  --btn-hover: #2a5fd3;
+  --warn-text: #e0a826;
+  --err-text: #f06a6a;
+  --status-ok: #2fc48d;
+  --status-warn: #e0a826;
+  --switch-off: #5f6b80;
+  --field-line: #414c60;
+  --placeholder: #9aa6b8;
+  --toast-err-text: #11151d;
   --brand-1: #3b74f0;
   --brand-2: #14a597;
   --teal: #2dd4bf;
@@ -129,19 +152,19 @@ button, input, select, textarea { font: inherit; color: inherit; }
   border: 0;
   border-radius: 8px;
   padding: 9px 14px;
-  background: var(--accent);
+  background: var(--btn);
   color: #fff;
   font-weight: 600;
   cursor: pointer;
 }
-.btn:hover { background: var(--accent-hover); }
+.btn:hover { background: var(--btn-hover); }
 .btn:disabled { opacity: 0.6; cursor: default; }
 .btn:focus-visible, .link:focus-visible, .ghost:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .btn-small { padding: 6px 10px; font-size: 13px; }
 
 .ghost {
   appearance: none;
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-line);
   border-radius: 8px;
   padding: 6px 10px;
   background: var(--card);
@@ -152,7 +175,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .ghost:disabled { opacity: 0.55; cursor: default; }
 .ghost.danger { color: var(--err); }
 
+/* Текстовая ссылка-кнопка: область нажатия — не ниже 24 пикс. (сам текст остаётся как был). */
 .link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
   border: 0;
   background: none;
   padding: 0;
@@ -162,23 +189,18 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .link:hover { text-decoration: underline; }
 
-.label { color: var(--muted); font-size: 12px; }
+/* Подсказка в полях: свой цвет — в тёмной теме цвет Chrome (#757575) слишком бледный. */
+::placeholder { color: var(--placeholder); opacity: 1; }
 
 textarea, .search {
   width: 100%;
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-line);
   border-radius: 8px;
   background: var(--card);
   padding: 7px 9px;
 }
 textarea { resize: vertical; min-height: 64px; font: 12px/1.4 var(--mono); }
 textarea:focus-visible, .search:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
-
-/* Пинг: good < 200 мс, mid < 500, bad — дольше, fail — нет ответа. */
-.ping { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; color: var(--muted); }
-.ping[data-level="good"] { color: var(--ok); }
-.ping[data-level="mid"] { color: var(--mid); }
-.ping[data-level="bad"], .ping[data-level="fail"] { color: var(--err); }
 
 .add-result { font-size: 13px; }
 .add-result[data-kind="error"] { color: var(--err); }

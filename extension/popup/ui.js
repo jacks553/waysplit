@@ -32,6 +32,7 @@ const ICONS = {
   direct: '<circle cx="12" cy="12" r="8"/><path d="M6.4 17.6 17.6 6.4"/>',
   check: '<path d="M5 12.6l4.4 4.4L19 7.4"/>',
   search: '<circle cx="10.8" cy="10.8" r="6"/><path d="M15.3 15.3 20 20"/>',
+  close: '<path d="M6.8 6.8l10.4 10.4M17.2 6.8 6.8 17.2"/>',
 };
 
 export function icon(name, cls = '') {
@@ -149,17 +150,49 @@ export function ask({ title, text = '', ok = 'ОК', danger = false, value = nul
 
 export const dialogOpen = () => $('dlg').open;
 
-// --- короткие сообщения внизу окна ---
+// --- сообщения внизу окна ---
+
+// Короткое сообщение об успехе исчезает само через 5 с. Остаётся до закрытия крестиком (или до
+// следующего сообщения): ошибка (kind 'error'), сообщение с причиной или указанием — «пропущено…»,
+// «обновите вкладку» (kind 'keep'), сообщение с кнопкой (action) и всякое длинное — за 5 секунд
+// его не прочесть. action — { label, run }: «Вернуть», «Открыть настройки».
+const TOAST_SHORT = 70; // длиннее — уже не «короткое»
 
 let toastTimer = null;
-export function toast(text, kind = '') {
+export function toast(text, kind = '', { action = null } = {}) {
   const t = $('toast');
   clearTimeout(toastTimer);
-  t.textContent = text;
-  t.dataset.kind = kind;
-  t.hidden = !text;
-  if (text) toastTimer = setTimeout(() => { t.hidden = true; }, kind === 'error' ? 9000 : 5000);
+  if (!text) {
+    t.hidden = true;
+    t.replaceChildren();
+    return;
+  }
+  const sticky = kind === 'error' || kind === 'keep' || !!action || text.length > TOAST_SHORT;
+  const parts = [el('span', { className: 'toast-text', textContent: text })];
+  if (action) {
+    const b = el('button', { type: 'button', className: 'toast-action', textContent: action.label });
+    b.addEventListener('click', () => {
+      toast('');
+      action.run();
+    });
+    parts.push(b);
+  }
+  if (sticky) {
+    const x = el('button', { type: 'button', className: 'toast-close', title: 'Закрыть сообщение' });
+    x.setAttribute('aria-label', 'Закрыть сообщение');
+    setIcon(x, 'close');
+    x.addEventListener('click', () => toast(''));
+    parts.push(x);
+  }
+  t.replaceChildren(...parts);
+  t.dataset.kind = kind === 'keep' ? '' : kind;
+  t.dataset.sticky = String(sticky);
+  t.hidden = false;
+  if (!sticky) toastTimer = setTimeout(() => { t.hidden = true; }, 5000);
 }
+
+// toastOpen — сообщение показано и само не исчезнет (Esc его закрывает).
+export const toastOpen = () => !$('toast').hidden && $('toast').dataset.sticky === 'true';
 
 // --- значки сайтов: только из памяти самого Chrome (разрешение favicon, адрес /_favicon/) ---
 // Ни одного запроса в интернет: Chrome отдаёт значок, если сайт уже открывался. Незнакомому сайту
@@ -197,9 +230,11 @@ async function lookup(domain) {
   return '';
 }
 
-// faviconEl — значок сайта: сразу буква, значок из памяти Chrome — когда найдётся.
-export function faviconEl(domain) {
-  const shown = toUnicode(domain);
+// faviconEl — значок сайта: сразу буква, значок из памяти Chrome — когда найдётся. label — домен,
+// который показан рядом: буква берётся из него (значок ищем по сайту example.org, а рядом написано
+// shop.example.org — буква «S»).
+export function faviconEl(domain, label = domain) {
+  const shown = toUnicode(label);
   const node = el('span', { className: 'favicon letter', textContent: (shown.replace(/^www\./, '')[0] || '?').toUpperCase() });
   node.setAttribute('aria-hidden', 'true');
   const show = (url) => {

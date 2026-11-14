@@ -24,7 +24,7 @@ export function normalizeDomain(input) {
     if (!/^[a-z0-9-]{1,63}$/.test(label) || label.startsWith('-') || label.endsWith('-')) return { error: 'не похоже на домен' };
   }
   if (host === 'localhost' || /\.(localhost|local|lan)$/.test(host) || host === 'local' || host === 'lan') {
-    return { error: 'локальные адреса всегда идут напрямую' };
+    return { error: 'локальные адреса всегда идут без VPN' };
   }
   return { domain: host };
 }
@@ -41,9 +41,16 @@ export function parents(host) {
   }
 }
 
+// pacHost — имя сайта так, как его сравнивает PAC (lib/pac.js): нижний регистр, без квадратных
+// скобок IPv6 и без точки в конце — «ya.ru.» тот же сайт, что «ya.ru». Через неё проходит всё,
+// что сверяет имя с правилами: окно, «Домены этой вкладки», автосбор.
+export function pacHost(host) {
+  return String(host ?? '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+}
+
 // isLocalHost — то же, что PAC всегда отправляет напрямую (для блока «Этот сайт»).
 export function isLocalHost(host) {
-  const h = host.replace(/^\[|\]$/g, '').toLowerCase();
+  const h = pacHost(host);
   if (h === 'localhost' || /\.(localhost|local|lan)$/.test(h)) return true;
   if (h.includes(':')) {
     if (h === '::1') return true;

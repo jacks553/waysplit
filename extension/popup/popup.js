@@ -5,13 +5,15 @@
 
 import { applyTheme } from '../lib/theme.js';
 import { HELP_URL, ISSUES_URL } from '../lib/companion.js';
-import { $, dialogOpen, el, initMenu, menuOpen, openMenu, setIcon } from './ui.js';
+import { pacHost } from '../lib/domains.js';
+import { $, dialogOpen, el, initMenu, menuOpen, openMenu, setIcon, toast, toastOpen } from './ui.js';
 import { S, closeScreen, loadData, screenOpen, showTab } from './state.js';
 import { checkHost } from './home.js';
 import './servers.js';
 import { rulesActions } from './rules.js';
 import { backupActions } from './settings.js';
 import { openFull } from './full.js';
+import { checkPerm } from './siteperm.js';
 
 applyTheme();
 
@@ -49,7 +51,11 @@ $('expandBtn').addEventListener('click', () => openFull(document.querySelector('
 // Esc — назад (меню и окно вопроса закрываются сами, раньше экрана).
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || e.defaultPrevented || menuOpen() || dialogOpen()) return;
-  if (screenOpen()) {
+  // Сообщение внизу окна, которое само не исчезает, — первым: оно поверх всего.
+  if (toastOpen()) {
+    e.preventDefault();
+    toast('');
+  } else if (screenOpen()) {
     e.preventDefault();
     closeScreen();
   }
@@ -69,7 +75,7 @@ async function loadSite() {
   try {
     const [t] = await chrome.tabs.query({ active: true, currentWindow: true });
     const u = new URL(t?.url || '');
-    if (u.protocol === 'http:' || u.protocol === 'https:') S.site = { host: u.hostname.replace(/^\[|\]$/g, ''), tabId: t.id };
+    if (u.protocol === 'http:' || u.protocol === 'https:') S.site = { host: pacHost(u.hostname), tabId: t.id };
   } catch {
     S.site = null;
   }
@@ -93,13 +99,19 @@ function offerFileAction() {
   $(`panel-${location.hash.slice(1) || 'home'}`)?.prepend(bar);
 }
 
-chrome.storage.onChanged.addListener((_changes, area) => {
+// Список доменов вкладок и сайты вкладок (lib/tabdomains.js) фон пишет в память сеанса от запросов
+// вкладок, а окну они не нужны: изменились только они — данные не перечитываем. Это список
+// исключений: на любое другое изменение окно перечитывает данные.
+const NOT_FOR_WINDOW = ['tabDomains', 'tabTops'];
+chrome.storage.onChanged.addListener((changes, area) => {
+  const keys = Object.keys(changes);
+  if (area === 'session' && keys.length && keys.every((k) => NOT_FOR_WINDOW.includes(k))) return;
   if (area === 'local' || area === 'session') loadData();
 });
 
 // Окно всегда открывается на «Главной»; развёрнутая страница — на вкладке из адреса.
 const first = S.full ? location.hash.slice(1) || 'home' : 'home';
-loadSite().then(loadData).then(() => {
+Promise.all([loadSite(), checkPerm()]).then(loadData).then(() => {
   showTab(first);
   performance.mark('waysplit-ready'); // окно показано с данными — замер в tools/chrome-check.js
   offerFileAction();

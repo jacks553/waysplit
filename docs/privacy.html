@@ -27,14 +27,14 @@
 
   <article id="ru" lang="ru">
     <h1>Политика конфиденциальности Waysplit</h1>
-    <p class="muted">Обновлено 8 ноября 2026 г. Относится к расширению Chrome «Waysplit» и программе-компаньону для Windows (waysplit-host).</p>
+    <p class="muted">Обновлено 14 ноября 2026 г. Относится к расширению Chrome «Waysplit» и программе-компаньону для Windows (waysplit-host).</p>
 
     <p>Waysplit — VPN только для браузера Chrome через серверы, которые добавляете вы сами. <strong>Разработчик Waysplit не получает никаких ваших данных:</strong> у Waysplit нет своего сервера, учётных записей, аналитики, рекламы и телеметрии. Всё, что вы вводите, остаётся на вашем компьютере, а по сети уходит только туда, куда это нужно для работы, — список ниже.</p>
 
     <h2>Что хранится и где</h2>
     <p>Только на вашем компьютере:</p>
     <ul>
-      <li><strong>В Chrome</strong> (хранилище расширения): серверы — ссылки <code>vless://</code> и <code>hysteria2://</code> со всеми параметрами, включая ключи и пароли; адреса подписок и то, что пришло с ними (трафик, срок, сообщение провайдера); правила для сайтов; настройки. Журнал событий для диагностики хранится только до закрытия браузера.</li>
+      <li><strong>В Chrome</strong> (хранилище расширения): серверы — ссылки <code>vless://</code> и <code>hysteria2://</code> со всеми параметрами, включая ключи и пароли; адреса подписок и то, что пришло с ними (трафик, срок, сообщение провайдера); правила для сайтов вместе с их «доменами сайта» (см. «Что расширение видит в браузере»); настройки. Журнал событий для диагностики хранится только до закрытия браузера.</li>
       <li><strong>В папке компаньона</strong> <code>%LOCALAPPDATA%\Waysplit</code>: файлы настроек ядер sing-box и Xray (в них данные серверов), журналы работы (ключи, пароли и адреса подписок в них скрыты), идентификатор устройства (см. ниже).</li>
     </ul>
     <p>Резервную копию («Настройки» → «Резервная копия» → «Сохранить копию») вы делаете сами, и в ней есть ссылки серверов с ключами — храните её как пароль.</p>
@@ -61,11 +61,16 @@
     <h2>Что расширение видит в браузере</h2>
     <ul>
       <li><strong>Адрес открытой вкладки</strong> — только её домен и только когда вы открываете окно Waysplit (разрешение <code>activeTab</code>): чтобы показать, идёт ли этот сайт через VPN, и дать добавить для него правило.</li>
-      <li><strong>«Домены этой вкладки»</strong> — только после вашего разрешения (необязательные разрешения <code>webRequest</code> и доступ к сайтам; Chrome спросит его, когда вы первый раз нажмёте эту кнопку). С этого момента расширение отмечает, к каким доменам обращаются вкладки (картинки, видео и скрипты часто идут с других доменов), чтобы по кнопке показать этот список и дать добавить домены в правила. Запоминаются только имена доменов — не адреса страниц и не содержимое; у каждой вкладки свой список (не больше 300 доменов), он начинается заново на новой странице и хранится только в памяти браузера до его закрытия. Список показывается только вам и никуда не отправляется. Разрешение можно отозвать в настройках Chrome (сведения о расширении → доступ к сайтам).</li>
+      <li><strong>К каким доменам обращаются вкладки</strong> — только после вашего разрешения (необязательные разрешения <code>webRequest</code> и доступ к сайтам). Waysplit спрашивает его один раз, карточкой с объяснением в своём окне, или когда вы первый раз нажимаете «Домены этой вкладки»; без разрешения всё остальное работает. Расширение только смотрит имена доменов в запросах вкладок — не адреса страниц и не содержимое — и ничего в запросах не меняет и не блокирует. Эти имена нужны для двух вещей:
+        <ul>
+          <li><strong>«Домены сайта».</strong> Видео, картинки и скрипты сайта часто лежат на других доменах. Если для сайта есть ваше правило «через VPN» и он открыт во вкладке, Waysplit добавляет к этому правилу домены, к которым обращается эта вкладка, — иначе через VPN шла бы только сама страница. <strong>Эти домены сохраняются в хранилище расширения как часть правила</strong> и остаются, пока вы не уберёте их (в меню «⋯» правила — «Домены сайта») или не удалите правило; они попадают в файл правил и в резервную копию, которые вы сохраняете сами. Запоминаются только домены вкладок с сайтами из ваших правил «через VPN»; общие сервисы (поиск, счётчики, реклама, библиотеки скриптов) и российские сайты не добавляются. Из вкладок в режиме инкогнито (если вы разрешили расширению в нём работать) домены к правилам не добавляются — от таких вкладок в хранилище расширения ничего не остаётся. Автоматическое добавление выключается в «Настройках» («Автоматически добавлять домены сайта»).</li>
+          <li><strong>«Домены этой вкладки».</strong> По кнопке расширение показывает, к каким доменам обращалась вкладка, чтобы вы сами добавили нужные в правила. У каждой вкладки свой список (не больше 300 доменов), он начинается заново на новой странице и хранится только в памяти браузера до его закрытия.</li>
+        </ul>
+        Всё это остаётся на вашем компьютере и никуда не отправляется. Разрешение можно отозвать в настройках Chrome (сведения о расширении → доступ к сайтам).</li>
       <li><strong>Значки сайтов</strong> (разрешение <code>favicon</code>) — у правил и у открытого сайта в окне Waysplit. Значки берутся только из памяти самого Chrome — тех сайтов, что вы уже открывали: Waysplit не делает за ними запросов в интернет и не обращается к сторонним сервисам, поэтому список ваших правил никуда не уходит. Нет значка — показывается первая буква домена.</li>
       <li><strong>Настройки прокси и WebRTC Chrome</strong> (<code>proxy</code>, <code>privacy</code>) — чтобы направлять сайты через VPN и чтобы WebRTC не выдавал ваш настоящий IP-адрес.</li>
     </ul>
-    <p>История браузера, содержимое страниц, вводимые данные и всё остальное не собираются и никуда не передаются.</p>
+    <p>Адреса страниц и история браузера, содержимое страниц, вводимые данные и всё остальное не собираются и никуда не передаются.</p>
 
     <h2>Передача данных</h2>
     <p>Разработчик данные не получает, поэтому ничего не продаёт и никому не передаёт. Данные не используются для рекламы, не передаются брокерам данных, их не читают люди. Использование данных в Waysplit соответствует правилам Chrome Web Store User Data Policy, включая требования Limited Use.</p>
@@ -85,14 +90,14 @@
 
   <article id="en" lang="en">
     <h1>Waysplit privacy policy</h1>
-    <p class="muted">Last updated: November 8, 2026. Applies to the “Waysplit” Chrome extension and its Windows companion program (waysplit-host).</p>
+    <p class="muted">Last updated: November 14, 2026. Applies to the “Waysplit” Chrome extension and its Windows companion program (waysplit-host).</p>
 
     <p>Waysplit is a browser-only VPN for Chrome that uses servers you add yourself. <strong>The Waysplit developer does not receive any of your data:</strong> Waysplit has no server of its own, no accounts, no analytics, no ads and no telemetry. Everything you enter stays on your computer; the only network requests are the ones needed for it to work, listed below.</p>
 
     <h2>What is stored and where</h2>
     <p>Only on your computer:</p>
     <ul>
-      <li><strong>In Chrome</strong> (extension storage): servers — <code>vless://</code> and <code>hysteria2://</code> links with all their parameters, including keys and passwords; subscription URLs and what came with them (traffic, expiry date, provider message); site rules; settings. The diagnostic event log is kept only until the browser is closed.</li>
+      <li><strong>In Chrome</strong> (extension storage): servers — <code>vless://</code> and <code>hysteria2://</code> links with all their parameters, including keys and passwords; subscription URLs and what came with them (traffic, expiry date, provider message); site rules together with their “site domains” (see “What the extension sees in the browser”); settings. The diagnostic event log is kept only until the browser is closed.</li>
       <li><strong>In the companion folder</strong> <code>%LOCALAPPDATA%\Waysplit</code>: configuration files for the sing-box and Xray cores (they contain server details), operation logs (keys, passwords and subscription URLs are masked), and the device identifier (see below).</li>
     </ul>
     <p>A backup (settings → “Резервная копия” → “Сохранить копию”, i.e. Backup → Save copy) is made only by you and contains server links with keys — keep it like a password.</p>
@@ -119,11 +124,16 @@
     <h2>What the extension sees in the browser</h2>
     <ul>
       <li><strong>The address of the open tab</strong> — only its domain and only when you open the Waysplit window (<code>activeTab</code> permission): to show whether this site goes through the VPN and let you add a rule for it.</li>
-      <li><strong>“Домены этой вкладки” (Domains of this tab)</strong> — only after you grant permission (optional <code>webRequest</code> and site access permissions; Chrome asks the first time you press this button). From then on the extension notes which domains the tabs contact (images, video and scripts often come from other domains), so that on request it can show this list and let you add those domains to rules. Only domain names are kept — not page addresses and not content; each tab has its own list (at most 300 domains), which starts over on a new page and is kept only in browser memory until the browser is closed. The list is shown only to you and is not sent anywhere. You can revoke the permission in Chrome’s settings (extension details → site access).</li>
+      <li><strong>Which domains the tabs contact</strong> — only after you grant permission (optional <code>webRequest</code> and site access permissions). Waysplit asks for it once, with an explanation card in its own window, or the first time you press “Домены этой вкладки” (Domains of this tab); everything else works without it. The extension only looks at the domain names in the tabs’ requests — not page addresses and not content — and never modifies or blocks requests. These names are used for two things:
+        <ul>
+          <li><strong>“Домены сайта” (Site domains).</strong> A site’s video, images and scripts are often served from other domains. If you have a “through VPN” rule for a site and the site is open in a tab, Waysplit adds the domains that this tab contacts to that rule — otherwise only the page itself would go through the VPN. <strong>These domains are saved in the extension storage as part of the rule</strong> and stay there until you remove them (rule menu “⋯” → “Домены сайта”) or delete the rule; they are included in the rules file and the backup that you save yourself. Only domains from tabs showing sites that have your “through VPN” rules are remembered; common services (search, analytics, ads, script libraries) and Russian sites are not added. Domains from incognito tabs (if you have allowed the extension to run in incognito) are never added to rules — nothing from such tabs is left in the extension storage. Automatic adding can be turned off in the settings (“Автоматически добавлять домены сайта”, Add site domains automatically).</li>
+          <li><strong>“Домены этой вкладки” (Domains of this tab).</strong> On request the extension shows which domains a tab has contacted, so that you can add the ones you need to rules yourself. Each tab has its own list (at most 300 domains), which starts over on a new page and is kept only in browser memory until the browser is closed.</li>
+        </ul>
+        All of this stays on your computer and is not sent anywhere. You can revoke the permission in Chrome’s settings (extension details → site access).</li>
       <li><strong>Website icons</strong> (<code>favicon</code> permission) — next to your site rules and the open site in the Waysplit window. Icons are read only from Chrome’s own local cache of sites you have already visited: Waysplit makes no network requests for them and uses no third-party services, so your list of rules never leaves the computer. If there is no icon, the first letter of the domain is shown.</li>
       <li><strong>Chrome proxy and WebRTC settings</strong> (<code>proxy</code>, <code>privacy</code>) — to route sites through the VPN and keep WebRTC from exposing your real IP address.</li>
     </ul>
-    <p>Browsing history, page content, form input and anything else are not collected and are not transmitted anywhere.</p>
+    <p>Page addresses and browsing history, page content, form input and anything else are not collected and are not transmitted anywhere.</p>
 
     <h2>Sharing</h2>
     <p>The developer receives no data, so nothing is sold or shared with anyone. Data is not used for advertising, is not transferred to data brokers, and is not read by humans. Waysplit’s use of data complies with the Chrome Web Store User Data Policy, including the Limited Use requirements.</p>

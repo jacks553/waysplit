@@ -42,6 +42,7 @@ async function render() {
   const { status } = await chrome.storage.session.get('status');
   done('step2', st.servers.length > 0);
   done('step3', st.enabled && status?.state === 'on');
+  $('ruDirect').checked = st.settings.ruDirect;
   $('enable').disabled = !st.servers.length;
   $('enable').textContent = st.enabled ? 'Выключить VPN' : 'Включить VPN';
   $('vpnState').textContent = !st.servers.length ? 'Сначала добавьте сервер'
@@ -62,6 +63,11 @@ $('addBtn').addEventListener('click', async () => {
   out.dataset.kind = resp?.ok ? '' : 'error';
   out.textContent = resp?.ok ? addSummary(resp.result) : resp?.error?.message || 'Не получилось';
   if (resp?.ok) $('links').value = '';
+});
+// «Российские сайты — без VPN» — та же настройка, что переключатель на «Главной» окна расширения.
+$('ruDirect').addEventListener('change', async (e) => {
+  const resp = await send({ type: 'setSetting', key: 'ruDirect', value: e.target.checked });
+  if (!resp?.ok) render(); // не сохранилось — вернуть галочку как было
 });
 $('enable').addEventListener('click', async () => {
   const st = normalize(await chrome.storage.local.get(null));

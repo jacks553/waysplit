@@ -241,6 +241,62 @@ func TestParseSubscriptionURL(t *testing.T) {
 	}
 }
 
+// TestHapp — ссылки приложения Happ: зашифрованные (любая версия crypt, любой регистр) и прочие
+// happ:// — в пропущенные с понятной причиной; happ://add/https://… — подписка по этому адресу.
+// В тексте ошибки нет ни шифровки, ни адреса.
+func TestHapp(t *testing.T) {
+	const payload = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo0MjQy"
+	skipped := map[string]string{ // строка → как она видна в ошибке
+		"happ://crypt/" + payload:                          "happ://crypt/…",
+		"happ://crypt2/" + payload:                         "happ://crypt2/…",
+		"happ://crypt3/" + payload + "?x=1#Имя":            "happ://crypt3/…",
+		"happ://crypt4/" + payload:                         "happ://crypt4/…",
+		"HAPP://CRYPT5/" + payload:                         "HAPP://CRYPT5/…",
+		"Happ://Crypt4/" + payload:                         "Happ://Crypt4/…",
+		"happ://add/http://sub.example.com/sub/" + payload: "happ://add/…", // не https
+		"happ://add/https://":                              "happ://add/…", // нет адреса
+		"happ://add/":                                      "happ://add/…",
+		"happ://add/" + payload:                            "happ://add/…",
+		"happ://route/" + payload:                          "happ://route/…",
+		"happ://" + payload + "@x.example.com":             "happ://…",
+	}
+	for line, preview := range skipped {
+		if _, err := Parse(line); !errors.Is(err, ErrHapp) {
+			t.Errorf("Parse(%q): %v, ожидалась ErrHapp", line, err)
+		}
+		r := ParseText(" " + string(rune(0xFEFF)) + line + "\r\n") // BOM и пробел прилипают при копировании
+		if len(r.Servers) != 0 || len(r.Subscriptions) != 0 || len(r.Errors) != 1 {
+			t.Errorf("%q: серверы %d, подписки %v, ошибки %+v", line, len(r.Servers), r.Subscriptions, r.Errors)
+			continue
+		}
+		e := r.Errors[0]
+		if e.Reason != ErrHapp.Error() || !strings.Contains(e.Reason, "открыть её может только Happ") || !strings.Contains(e.Reason, "(https://…)") {
+			t.Errorf("%q: причина %q", line, e.Reason)
+		}
+		if e.Text != preview {
+			t.Errorf("%q: в ошибке %q, ожидалось %q", line, e.Text, preview)
+		}
+		if strings.Contains(e.Text, payload) || strings.Contains(e.Text, "sub.example.com") {
+			t.Errorf("%q: в ошибке видна ссылка: %q", line, e.Text)
+		}
+	}
+
+	// happ://add/https://… — подписка, как будто вставили сам адрес.
+	for line, want := range map[string]string{
+		"happ://add/https://sub.example.com/api/sub/" + payload:          "https://sub.example.com/api/sub/" + payload,
+		"HAPP://ADD/https://sub.example.com/s?token=" + payload + "#Мой": "https://sub.example.com/s?token=" + payload + "#Мой",
+		"happ://add/HTTPS://Sub.Example.com/x":                           "HTTPS://Sub.Example.com/x",
+	} {
+		if _, err := Parse(line); !errors.Is(err, ErrSubscription) {
+			t.Errorf("Parse(%q): %v, ожидалась ErrSubscription", line, err)
+		}
+		r := ParseText("vless://" + uuid + "@a.example.com:443?security=tls#A\n" + line + "\n")
+		if len(r.Errors) != 0 || len(r.Servers) != 1 || !reflect.DeepEqual(r.Subscriptions, []string{want}) {
+			t.Errorf("%q: подписки %v, серверы %d, ошибки %+v", line, r.Subscriptions, len(r.Servers), r.Errors)
+		}
+	}
+}
+
 func TestParseText(t *testing.T) {
 	text := "# мои серверы\r\n" +
 		"vless://" + uuid + "@a.example.com:443?security=tls#A\r\n" +
