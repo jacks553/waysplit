@@ -1,5 +1,17 @@
 # Изменения
 
+## 1.2.1: кнопка языка в шапке
+
+Расширение обновится из Chrome Web Store само, когда Google проверит версию 1.2.1. Компаньон 1.2.1 отличается от 1.2.0 только номером версии. Обновлять его не нужно.
+
+- В шапке окна, слева от "?", появилась кнопка языка: RU или EN. По нажатию открывается меню: Русский, English, как в Chrome. Язык меняется сразу.
+- Такая же кнопка есть на странице "Начало работы", справа вверху.
+- Выбор "Язык" в настройках остался. Кнопка меняет ту же настройку.
+
+### In English
+
+Version 1.2.1 adds a language button to the popup header, to the left of "?". It shows RU or EN and opens a menu: Русский, English, same as Chrome. The same button is on the Getting started page. The companion is unchanged except for its version number.
+
 ## 1.2.0: английский язык
 
 Расширение обновится из Chrome Web Store само, когда Google проверит версию 1.2.0. До этого в магазине будет 1.1.0, она работает и с новым компаньоном.

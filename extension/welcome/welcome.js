@@ -5,6 +5,8 @@ import { normalize } from '../lib/storage.js';
 import { applyTheme } from '../lib/theme.js';
 import { hostText } from '../lib/hostmsg.js';
 import { startPage, t, usePageLanguage } from '../lib/i18n.js';
+import { initMenu } from '../popup/ui.js';
+import { initLangButton } from '../popup/langbtn.js';
 import { DOWNLOAD_URL, DOWNLOAD_ZIP_URL, MIN_HOST_VERSION, installSteps, olderThan, outdatedMessage } from '../lib/companion.js';
 
 applyTheme();
@@ -27,6 +29,7 @@ function done(step, yes) {
 // hostResp — последний ответ компаньона на «hello»: по нему строка состояния собирается заново,
 // когда меняется язык.
 let hostResp;
+let langSetting = 'auto'; // настройка language: для галочки в меню кнопки языка
 
 function renderHost() {
   if (hostResp === undefined) return; // ещё проверяем — в разметке «Проверяю…»
@@ -59,6 +62,7 @@ async function render() {
   const { status } = await chrome.storage.session.get('status');
   // Язык из настроек (его могли сменить в окне расширения): надписи разметки заменяются сами,
   // шаги установки и состояние компаньона — собрать заново.
+  langSetting = st.settings.language;
   if (usePageLanguage(st.settings.language)) {
     renderSteps();
     renderHost();
@@ -99,5 +103,7 @@ $('enable').addEventListener('click', async () => {
 chrome.storage.onChanged.addListener((_c, area) => {
   if (area === 'local' || area === 'session') render();
 });
+initMenu();
+initLangButton($('langBtn'), () => langSetting);
 checkHost();
 render();

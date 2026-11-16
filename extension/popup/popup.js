@@ -14,6 +14,7 @@ import './servers.js';
 import { rulesActions } from './rules.js';
 import { backupActions } from './settings.js';
 import { openFull } from './full.js';
+import { initLangButton } from './langbtn.js';
 import { checkPerm } from './siteperm.js';
 
 applyTheme();
@@ -44,6 +45,7 @@ document.querySelector('.tabbar').addEventListener('keydown', (e) => {
 });
 
 initMenu();
+initLangButton($('langBtn'), () => S.view?.settings?.language || 'auto');
 $('helpBtn').addEventListener('click', () => openMenu($('helpBtn'), [
   { label: t('top.help'), run: () => chrome.tabs.create({ url: helpUrl() }) },
   { label: t('top.report'), run: () => chrome.tabs.create({ url: ISSUES_URL }) },

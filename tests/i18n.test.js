@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LANGS, LANGUAGE_SETTINGS, language, resolveLanguage, setLanguage, t } from '../extension/lib/i18n.js';
+import { LANGS, LANGUAGE_SETTINGS, everyLanguage, language, resolveLanguage, setLanguage, t } from '../extension/lib/i18n.js';
 import { legacyPhrase } from '../extension/lib/i18n/legacy.js';
 import { pingBars, pingError, pingReason } from '../extension/lib/format.js';
 import { validSetting } from '../extension/lib/controller.js';
@@ -342,6 +342,27 @@ test('пинг: причина хранится фразой и показыва
   setLanguage('ru');
   assert.deepEqual(['Сервер не отвечает', 'сервер не запущен в ядре', 'ядро не слушает порт 27105', 'нет ответа', 'другое', ''].map(legacyPhrase),
     [{ msg: 'ping_no_response' }, { msg: 'ping_not_in_core' }, { msg: 'ping_core_port', params: { port: 27105 } }, null, null, null]);
+});
+
+test('кнопка языка в шапке: подпись на всех языках сразу, кнопка и меню есть в окне и на «Начале работы»', () => {
+  // Подсказку должен понять и тот, кто не читает на языке окна: она собирается из всех словарей.
+  assert.equal(everyLanguage('settings.language'), 'Язык / Language');
+  setLanguage('en');
+  assert.equal(everyLanguage('settings.language'), 'Язык / Language', 'от языка окна не зависит');
+  setLanguage('ru');
+  const popup = read('popup/popup.html');
+  const welcome = read('welcome/welcome.html');
+  // В шапке окна кнопка стоит слева от «?».
+  assert.ok(/id="langBtn"[^>]*><\/button>\s*<button class="icon-btn" id="helpBtn"/.test(popup), 'в окне кнопка языка — перед кнопкой «?»');
+  assert.ok(/<header class="hero">[\s\S]*id="langBtn"[\s\S]*<\/header>/.test(welcome), 'на «Начале работы» кнопка языка — в шапке');
+  for (const [name, html] of [['popup.html', popup], ['welcome.html', welcome]]) {
+    assert.ok(html.includes('id="pop" popover="auto" role="menu"'), `${name}: есть всплывающее меню`);
+  }
+  // Стили меню — общие (lib/common.css): страница «Начало работы» не подключает popup.css.
+  assert.ok(read('lib/common.css').includes('.pop-item'), 'стили меню лежат в lib/common.css');
+  assert.ok(!read('popup/popup.css').includes('.pop-item {'), 'и не повторяются в popup.css');
+  const btn = read('popup/langbtn.js');
+  assert.ok(btn.includes("key: 'language'") && btn.includes("type: 'setSetting'"), 'кнопка пишет ту же настройку language, что выбор в «Настройках»');
 });
 
 test('резервная копия: язык — в настройках; копия прежней версии язык не меняет', async () => {

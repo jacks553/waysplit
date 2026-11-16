@@ -18,6 +18,28 @@ body { background: var(--bg-full); }
 .hero h1 { margin: 0 0 6px; font-size: 24px; font-weight: 700; letter-spacing: -0.2px; }
 .hero p { color: rgb(255 255 255 / 0.92); }
 .hero .name-note { font-weight: 600; margin-bottom: 4px; }
+/* Кнопка языка: справа вверху шапки, того же размера, что кнопки в шапке окна. */
+.hero .lang-btn {
+  appearance: none;
+  flex: none;
+  align-self: flex-start;
+  margin-left: auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 0.55);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 0.14);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  line-height: 1;
+  cursor: pointer;
+}
+.hero .lang-btn:hover { background: rgb(255 255 255 / 0.26); }
+.hero .lang-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 
 .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
 .step {

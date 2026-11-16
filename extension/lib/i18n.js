@@ -39,6 +39,9 @@ export function setLanguage(code) {
 }
 
 export const language = () => current.lang;
+// everyLanguage — надпись на всех языках сразу, через « / »: «Язык / Language». Для того, что должен
+// узнать и человек, который не читает на языке окна (кнопка языка в шапке).
+export const everyLanguage = (key) => Object.values(LANGS).map((d) => d.messages[key]).join(' / ');
 export const has = (key) => Object.hasOwn(current.messages, key);
 
 // t — надпись на текущем языке. Нет ключа в словаре — берётся английский, потом русский; нет

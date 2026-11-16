@@ -21,7 +21,6 @@ html.full body { background: var(--bg-full); min-height: 100vh; }
 html.full .app { width: min(100%, 760px); height: 100vh; margin: 0 auto; box-shadow: 0 0 0 1px var(--line); }
 
 /* --- значки и кнопки-значки --- */
-.ic { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 .icon-btn {
   appearance: none;
   border: 0;
@@ -40,6 +39,9 @@ html.full .app { width: min(100%, 760px); height: 100vh; margin: 0 auto; box-sha
 .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
 .icon-btn:disabled { opacity: 0.5; cursor: default; }
 .icon-btn.danger:hover { color: var(--err); }
+/* Кнопка языка в шапке: буквы RU или EN в кнопке того же размера, что соседние. Тонкая рамка
+   (цвет границ полей, он подобран по контрасту в обеих темах) показывает, что это кнопка, а не надпись. */
+.lang-btn { font-size: 12px; font-weight: 700; letter-spacing: 0.3px; line-height: 1; border: 1px solid var(--field-line); }
 .chev { display: inline-grid; color: var(--muted); }
 .chev .ic { width: 18px; height: 18px; }
 .chev.small .ic { width: 15px; height: 15px; }
@@ -530,40 +532,6 @@ legend + * { clear: both; }
 .add-form textarea { min-height: 130px; }
 
 /* --- меню «⋯», окно вопроса, сообщения --- */
-.pop {
-  position: fixed;
-  inset: auto;
-  margin: 0;
-  min-width: 200px;
-  max-width: 300px;
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--card);
-  color: var(--text);
-  box-shadow: var(--shadow);
-}
-.pop hr { border: 0; border-top: 1px solid var(--line); margin: 4px 2px; }
-.pop-item {
-  appearance: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 7px;
-  background: none;
-  text-align: left;
-  font-size: 13.5px;
-  cursor: pointer;
-}
-.pop-item:hover { background: var(--hover); }
-.pop-item:focus-visible { background: var(--hover); outline: 2px solid var(--accent); outline-offset: -2px; }
-.pop-item:disabled { opacity: 0.45; cursor: default; background: none; }
-.pop-item.danger { color: var(--err); }
-.pop-item .tick { width: 16px; height: 16px; visibility: hidden; color: var(--accent); }
-.pop-item[aria-checked="true"] .tick { visibility: visible; }
 
 .dlg { width: min(340px, 90vw); border: 0; border-radius: 14px; padding: 18px; background: var(--card); color: var(--text); box-shadow: var(--shadow); }
 .dlg::backdrop { background: rgb(10 16 28 / 0.4); }

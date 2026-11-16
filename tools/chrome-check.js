@@ -928,6 +928,49 @@ try {
   check(ru1.html === 'ru' && ru1.settings === 'Настройки' && ru1.value === 'ru' && ru2.home === 'Главная' && (await popup.eval(js.title)) === 'Waysplit — подключено',
     `язык Русский: страница, окно и подсказка значка снова по-русски («${ru1.settings}», «${ru2.home}»)`);
 
+  // Кнопка языка в шапке (версия 1.2.1): на кнопке язык окна, в меню три пункта, выбранный отмечен.
+  // Язык меняется сразу, без перезапуска: и в окне, и на развёрнутой странице. Шапка остаётся в одну
+  // строку. С клавиатуры меню ведёт себя как меню «?»: фокус на первом пункте, стрелка вниз — к следующему.
+  const headPick = (label) => `(async () => { ${wait}
+    const b = $('langBtn');
+    const before = b.getAttribute('aria-expanded');
+    b.click();
+    await wait(() => $('pop').matches(':popover-open'), 3000);
+    const items = [...document.querySelectorAll('#pop .pop-item')];
+    const out = { menu: items.map((x) => x.textContent.trim() + (x.getAttribute('aria-checked') === 'true' ? '*' : '')).join(', '),
+      focused: document.activeElement === items[0], before, open: b.getAttribute('aria-expanded'), title: b.title, aria: b.getAttribute('aria-label') };
+    document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    out.moved = document.activeElement === items[1];
+    items.find((x) => x.textContent.trim() === ${JSON.stringify(label)}).click();
+    await sleep(300);
+    out.closed = b.getAttribute('aria-expanded');
+    return out; })()`;
+  const headState = (code) => `(async () => { ${wait}
+    await wait(() => document.documentElement.lang === ${JSON.stringify(code)} && $('langBtn').textContent === ${JSON.stringify(code.toUpperCase())}, 5000);
+    const top = $('top');
+    const rows = new Set([...top.children].filter((c) => c.offsetWidth).map((c) => Math.round((c.getBoundingClientRect().top + c.getBoundingClientRect().bottom) / 2)));
+    return { lang: document.documentElement.lang, btn: $('langBtn').textContent, height: Math.round(top.getBoundingClientRect().height), rows: rows.size,
+      overflow: top.scrollWidth - top.clientWidth, home: document.querySelector('.tabbar .tab[data-tab="home"]').textContent.trim(),
+      setting: (await chrome.storage.local.get('settings')).settings?.language }; })()`;
+  const oneRow = (h) => h.height === 48 && h.rows === 1 && h.overflow === 0;
+  const hp1 = await popup.eval(headPick('English'));
+  const hs1 = await popup.eval(headState('en'));
+  const hf1 = await opts.eval(headState('en'));
+  check(hp1.menu === 'Русский*, English, как в Chrome' && hp1.title === 'Язык / Language' && hp1.aria === hp1.title && hp1.before === 'false' && hp1.open === 'true' && hp1.closed === 'false' && hp1.focused && hp1.moved,
+    `кнопка языка в шапке: подсказка «${hp1.title}», меню «${hp1.menu}» (звёздочка — галочка), фокус на первом пункте: ${hp1.focused}, стрелка вниз ведёт ко второму: ${hp1.moved}`);
+  check(hs1.lang === 'en' && hs1.btn === 'EN' && hs1.home === 'Home' && hs1.setting === 'en' && hf1.lang === 'en' && hf1.btn === 'EN',
+    `выбрали English кнопкой в шапке: окно сразу по-английски («${hs1.home}», на кнопке ${hs1.btn}), развёрнутая страница тоже (${hf1.lang}, ${hf1.btn}), настройка language — ${hs1.setting}`);
+  check(oneRow(hs1) && oneRow(hf1), `шапка в одну строку: окно 400 пикс. — высота ${hs1.height}, строк ${hs1.rows}, сдвиг ${hs1.overflow}; развёрнутая страница — высота ${hf1.height}, строк ${hf1.rows}, сдвиг ${hf1.overflow}`);
+  const hp2 = await popup.eval(headPick('same as Chrome'));
+  const hs2 = await popup.eval(headState('ru'));
+  check(hp2.menu === 'Русский, English*, same as Chrome' && hs2.setting === 'auto' && hs2.btn === 'RU' && hs2.home === 'Главная',
+    `«как в Chrome» (Chrome русский): на кнопке язык, который получился, — ${hs2.btn}, окно «${hs2.home}», настройка language — ${hs2.setting}`);
+  const hp3 = await popup.eval(headPick('Русский'));
+  const hs3 = await popup.eval(headState('ru'));
+  const hf3 = await opts.eval(headState('ru'));
+  check(hp3.menu === 'Русский, English, как в Chrome*' && hs3.setting === 'ru' && hs3.btn === 'RU' && oneRow(hs3) && oneRow(hf3),
+    `выбрали «Русский»: настройка language — ${hs3.setting}, на кнопке ${hs3.btn}, шапка по-русски тоже в одну строку (окно ${hs3.height}, развёрнутая страница ${hf3.height})`);
+
   await opts.eval(js.tab('settings'));
   check(await opts.eval(`document.getElementById('autoSiteDomains').checked && !document.getElementById('autoSitePerm').hidden`),
     'в «Настройках»: «Автоматически добавлять домены сайта» включено, рядом — «нужно разрешение Chrome» и кнопка «Разрешить»');
@@ -1408,6 +1451,26 @@ try {
         label: $('download').textContent, steps: $('installSteps').children.length }; })()`);
     check(e2.html === 'en' && e2.title === 'Waysplit — getting started' && e2.h1 === e2.title && e2.state === 'Companion is not installed' && e2.label === 'Download' && e2.steps === 3,
       `«Начало работы» в английском Chrome: «${e2.title}», «${e2.state}», шагов установки ${e2.steps}`);
+
+    // Та же кнопка языка — на «Начале работы». Chrome английский, язык «как в Chrome»: на кнопке EN.
+    // Выбрали «Русский» — страница сразу по-русски; вернули «как в Chrome» — снова по-английски.
+    const welPick = (label, code) => `(async () => { ${wait}
+      const b = $('langBtn');
+      const out = { was: b.textContent, title: b.title };
+      b.click();
+      await wait(() => $('pop').matches(':popover-open'), 3000);
+      const items = [...document.querySelectorAll('#pop .pop-item')];
+      out.menu = items.map((x) => x.textContent.trim() + (x.getAttribute('aria-checked') === 'true' ? '*' : '')).join(', ');
+      items.find((x) => x.textContent.trim() === ${JSON.stringify(label)}).click();
+      await wait(() => document.documentElement.lang === ${JSON.stringify(code)} && b.textContent === ${JSON.stringify(code.toUpperCase())}, 5000);
+      out.html = document.documentElement.lang; out.btn = b.textContent; out.h1 = document.querySelector('h1').textContent;
+      out.setting = (await chrome.storage.local.get('settings')).settings?.language;
+      return out; })()`;
+    const w1 = await enWelcome.eval(welPick('Русский', 'ru'));
+    const w2 = await enWelcome.eval(welPick('как в Chrome', 'en'));
+    check(w1.was === 'EN' && w1.title === 'Язык / Language' && w1.menu === 'Русский, English, same as Chrome*' && w1.html === 'ru' && w1.btn === 'RU' && w1.setting === 'ru'
+      && w2.menu === 'Русский*, English, как в Chrome' && w2.html === 'en' && w2.btn === 'EN' && w2.setting === 'auto',
+    `кнопка языка на «Начале работы»: была ${w1.was}, меню «${w1.menu}»; «Русский» — «${w1.h1}» (${w1.btn}); «как в Chrome» — «${w2.h1}» (${w2.btn}, настройка ${w2.setting})`);
   } finally {
     await enChrome.close();
   }
