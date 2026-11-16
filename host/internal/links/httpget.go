@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"waysplit/host/internal/msg"
 )
 
 // Request — запрос к адресу подписки.
@@ -32,7 +34,7 @@ type Response struct {
 }
 
 // ErrBadURL — адрес подписки не разобрать.
-var ErrBadURL = errors.New("неверный адрес подписки")
+var ErrBadURL = msg.E("bad_sub_url")
 
 // Get — общее для скачивания подписки (FetchWith) и её проверки (пакет subinfo): запрос,
 // перенаправления (не больше 10; заголовки Go переносит на новый адрес, поэтому идентификатор

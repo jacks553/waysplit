@@ -1,11 +1,11 @@
 package singbox
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 
 	"waysplit/host/internal/links"
+	"waysplit/host/internal/msg"
 )
 
 // OutboundFor переводит разобранную ссылку в outbound sing-box (SPEC, раздел 6).
@@ -17,7 +17,7 @@ func OutboundFor(s *links.Server, tag string) (Outbound, []string, error) {
 	case "hysteria2":
 		return hysteria2Outbound(s, tag)
 	}
-	return Outbound{}, nil, fmt.Errorf("протокол %s не поддерживается sing-box", s.Protocol)
+	return Outbound{}, nil, msg.E("sb_protocol", "proto", s.Protocol)
 }
 
 func vlessOutbound(s *links.Server, tag string) (Outbound, []string, error) {
@@ -26,7 +26,7 @@ func vlessOutbound(s *links.Server, tag string) (Outbound, []string, error) {
 
 	if s.Encryption != "" && s.Encryption != "none" {
 		// Значение не показываем: в новом VLESS Encryption там ключ.
-		return o, nil, errors.New("шифрование VLESS Encryption не поддерживается sing-box")
+		return o, nil, msg.E("sb_vless_encryption")
 	}
 	switch s.Flow {
 	case "":
@@ -35,7 +35,7 @@ func vlessOutbound(s *links.Server, tag string) (Outbound, []string, error) {
 	case "xtls-rprx-vision-udp443":
 		o.Flow = "xtls-rprx-vision" // sing-box такой flow не принимает (проверено: unsupported flow)
 	default:
-		return o, nil, fmt.Errorf("flow=%s не поддерживается sing-box", s.Flow)
+		return o, nil, msg.E("sb_flow", "flow", s.Flow)
 	}
 
 	switch s.Security {
@@ -65,13 +65,13 @@ func vlessOutbound(s *links.Server, tag string) (Outbound, []string, error) {
 			warns = append(warns, "Параметр pqv (дополнительная постквантовая проверка Reality) sing-box не поддерживает: сервер проверяется только по ключу pbk")
 		}
 	default:
-		return o, nil, fmt.Errorf("security=%s не поддерживается sing-box", s.Security)
+		return o, nil, msg.E("sb_security", "security", s.Security)
 	}
 
 	switch s.Transport {
 	case "tcp":
 		if s.HeaderType != "" && s.HeaderType != "none" {
-			return o, nil, fmt.Errorf("TCP с маскировкой headerType=%s не поддерживается sing-box", s.HeaderType)
+			return o, nil, msg.E("sb_tcp_header", "header", s.HeaderType)
 		}
 	case "ws":
 		t := &Transport{Type: "ws", Path: s.Path}
@@ -99,7 +99,7 @@ func vlessOutbound(s *links.Server, tag string) (Outbound, []string, error) {
 		o.Transport = t
 	default:
 		// xhttp не подменяем на httpupgrade: вышло бы «тихо» неработающее подключение.
-		return o, nil, fmt.Errorf("транспорт %s не поддерживается sing-box", s.Transport)
+		return o, nil, msg.E("sb_transport", "transport", s.Transport)
 	}
 	return o, warns, nil
 }
@@ -122,7 +122,7 @@ func hysteria2Outbound(s *links.Server, tag string) (Outbound, []string, error) 
 	case "salamander":
 		o.Obfs = &Obfs{Type: "salamander", Password: s.ObfsPassword}
 	default:
-		return o, nil, fmt.Errorf("obfs=%s не поддерживается", s.Obfs)
+		return o, nil, msg.E("obfs_unsupported", "obfs", s.Obfs)
 	}
 	sni := s.SNI
 	if sni == "" {

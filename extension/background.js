@@ -86,7 +86,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === SUBSCRIPTIONS) controller.init().then(() => controller.updateDueSubscriptions());
 });
 chrome.proxy.onProxyError.addListener((details) => {
-  console.warn('Waysplit: ошибка прокси', details.error, details.details);
+  console.warn('Waysplit: proxy error', details.error, details.details);
   controller.proxyError(details);
 });
 // Прокси Chrome изменился (например, включили Browsec) — проверить, кто им управляет.

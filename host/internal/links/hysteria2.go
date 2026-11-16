@@ -1,8 +1,9 @@
 package links
 
 import (
-	"errors"
 	"strings"
+
+	"waysplit/host/internal/msg"
 )
 
 // parseHysteria2: hysteria2://пароль@host:port/?параметры#имя (hy2:// — то же самое).
@@ -11,7 +12,7 @@ func parseHysteria2(r *rawLink, link string) (*Server, error) {
 	s := &Server{Protocol: "hysteria2", Link: link, Address: r.host, Name: r.name, Transport: "udp", Security: "tls"}
 	s.Password = r.userinfo // при user:pass — вся строка целиком
 	if s.Password == "" {
-		return nil, errors.New("в ссылке нет пароля")
+		return nil, msg.E("no_password")
 	}
 	ports := []PortRange{{443, 443}}
 	if r.ports != "" {
@@ -26,7 +27,7 @@ func parseHysteria2(r *rawLink, link string) (*Server, error) {
 	if m := r.get(seen, "mport"); m != "" {
 		more, err := parsePortList(m)
 		if err != nil {
-			return nil, errors.New("mport: " + err.Error())
+			return nil, msg.E("mport", "error", msg.From(err))
 		}
 		for _, p := range more {
 			dup := false
@@ -53,7 +54,7 @@ func parseHysteria2(r *rawLink, link string) (*Server, error) {
 	s.Ignored = r.unknown(seen)
 
 	if s.Obfs == "salamander" && s.ObfsPassword == "" {
-		return nil, errors.New("obfs=salamander без obfs-password")
+		return nil, msg.E("obfs_no_password")
 	}
 	if s.Insecure {
 		s.Warnings = append(s.Warnings, "Проверка сертификата сервера отключена (insecure=1): соединение можно подменить")

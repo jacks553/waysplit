@@ -18,6 +18,7 @@ import (
 	"waysplit/host/internal/device"
 	"waysplit/host/internal/hostlog"
 	"waysplit/host/internal/links"
+	"waysplit/host/internal/msg"
 	"waysplit/host/internal/nm"
 	"waysplit/host/internal/singbox"
 )
@@ -71,12 +72,12 @@ func fetchSub(ctx context.Context, rawURL, ua string, proxy *url.URL, withDevice
 		case sub.Device.MaxReached:
 			return nil, bound, deviceLimit()
 		case sub.HappCrypt > 0:
-			return nil, bound, &nm.Error{Code: "HAPP_CRYPT", Message: "Подписка зашифрована для приложения Happ. Попросите у провайдера обычную ссылку на подписку"}
+			return nil, bound, nm.Phrased("HAPP_CRYPT", msg.New("happ_sub"))
 		case len(sub.Stubs) > 0:
-			return nil, bound, &nm.Error{Code: "SUBSCRIPTION_STUB", Message: "Вместо серверов провайдер прислал сообщение: «" + strings.Join(sub.Stubs, "», «") + "»"}
+			return nil, bound, nm.Phrased("SUBSCRIPTION_STUB", msg.New("sub_stub", "text", strings.Join(sub.Stubs, "», «")))
 		case sub.Format == links.FormatClash && len(sub.Errors) == 0:
 			// Ссылка для классического Clash: он не умеет VLESS и Hysteria2, и панель кладёт туда пустой список.
-			return nil, bound, &nm.Error{Code: "SUBSCRIPTION_EMPTY", Message: "В подписке для Clash нет ни одного сервера: классический Clash не умеет VLESS и Hysteria2, поэтому провайдер их туда не кладёт. Возьмите у провайдера ссылку для Mihomo (Clash Meta) или обычную ссылку на подписку"}
+			return nil, bound, nm.Phrased("SUBSCRIPTION_EMPTY", msg.New("sub_clash_empty"))
 		}
 		return sub, bound, nil // пустая и с идентификатором — привязкой это не считаем
 	}
@@ -102,9 +103,9 @@ func needsDevice(sub *links.Subscription, err error) string {
 }
 
 func deviceNeedsHTTPS() error {
-	return &nm.Error{Code: "DEVICE_NEEDS_HTTPS", Message: "Провайдер требует идентификатор устройства, а адрес подписки без шифрования (http://): по такому адресу идентификатор не отправляется. Возьмите у провайдера адрес, который начинается с https://"}
+	return nm.Phrased("DEVICE_NEEDS_HTTPS", msg.New("device_needs_https"))
 }
 
 func deviceLimit() error {
-	return &nm.Error{Code: "DEVICE_LIMIT", Message: "Лимит устройств исчерпан: провайдер не отдаёт серверы этому компьютеру. Удалите старое устройство в личном кабинете провайдера или попросите увеличить лимит"}
+	return nm.Phrased("DEVICE_LIMIT", msg.New("device_limit"))
 }

@@ -4,7 +4,8 @@
 // Окно только показывает данные из chrome.storage и шлёт команды фону.
 
 import { applyTheme } from '../lib/theme.js';
-import { HELP_URL, ISSUES_URL } from '../lib/companion.js';
+import { startPage, t } from '../lib/i18n.js';
+import { ISSUES_URL, helpUrl } from '../lib/companion.js';
 import { pacHost } from '../lib/domains.js';
 import { $, dialogOpen, el, initMenu, menuOpen, openMenu, setIcon, toast, toastOpen } from './ui.js';
 import { S, closeScreen, loadData, screenOpen, showTab } from './state.js';
@@ -16,6 +17,7 @@ import { openFull } from './full.js';
 import { checkPerm } from './siteperm.js';
 
 applyTheme();
+startPage(); // надписи разметки — сразу, на языке прошлого раза (настройка читается чуть позже)
 
 const params = new URLSearchParams(location.search);
 S.full = params.has('full');
@@ -27,9 +29,9 @@ setIcon($('helpBtn'), 'help');
 setIcon($('expandBtn'), 'expand');
 $('expandBtn').hidden = S.full;
 const TAB_ICONS = { home: 'home', servers: 'servers', rules: 'rules', settings: 'settings' };
-for (const t of document.querySelectorAll('.tabbar .tab')) {
-  setIcon(t.querySelector('.tab-icon'), TAB_ICONS[t.dataset.tab]);
-  t.addEventListener('click', () => showTab(t.dataset.tab));
+for (const tab of document.querySelectorAll('.tabbar .tab')) {
+  setIcon(tab.querySelector('.tab-icon'), TAB_ICONS[tab.dataset.tab]);
+  tab.addEventListener('click', () => showTab(tab.dataset.tab));
 }
 // Стрелки влево и вправо — по вкладкам (как у обычного списка вкладок).
 document.querySelector('.tabbar').addEventListener('keydown', (e) => {
@@ -43,8 +45,8 @@ document.querySelector('.tabbar').addEventListener('keydown', (e) => {
 
 initMenu();
 $('helpBtn').addEventListener('click', () => openMenu($('helpBtn'), [
-  { label: 'Помощь', run: () => chrome.tabs.create({ url: HELP_URL }) },
-  { label: 'Сообщить об ошибке', run: () => chrome.tabs.create({ url: ISSUES_URL }) },
+  { label: t('top.help'), run: () => chrome.tabs.create({ url: helpUrl() }) },
+  { label: t('top.report'), run: () => chrome.tabs.create({ url: ISSUES_URL }) },
 ]));
 $('expandBtn').addEventListener('click', () => openFull(document.querySelector('.tabbar .tab[aria-selected="true"]')?.dataset.tab));
 
@@ -73,29 +75,30 @@ async function loadSite() {
     return;
   }
   try {
-    const [t] = await chrome.tabs.query({ active: true, currentWindow: true });
-    const u = new URL(t?.url || '');
-    if (u.protocol === 'http:' || u.protocol === 'https:') S.site = { host: pacHost(u.hostname), tabId: t.id };
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const u = new URL(tab?.url || '');
+    if (u.protocol === 'http:' || u.protocol === 'https:') S.site = { host: pacHost(u.hostname), tabId: tab.id };
   } catch {
     S.site = null;
   }
 }
 
 // Действие с файлом, ради которого развернули страницу: кнопка — по нажатию (выбор файла и
-// сохранение Chrome разрешает только в ответ на нажатие).
+// сохранение Chrome разрешает только в ответ на нажатие). Что это за действие и как называется
+// кнопка — ключи словаря.
 const FILE_ACTIONS = {
-  import: ['Импорт правил из файла', 'Выбрать файл', rulesActions.import],
-  export: ['Экспорт правил в файл (секретов в нём нет)', 'Сохранить файл', rulesActions.export],
-  'backup-save': ['Резервная копия: серверы, подписки, правила и настройки. В файле секреты — храните его как пароль.', 'Сохранить копию', backupActions['backup-save']],
-  'backup-restore': ['Восстановить из резервной копии: текущие данные будут заменены.', 'Выбрать файл', backupActions['backup-restore']],
+  import: ['file.import', 'file.choose', rulesActions.import],
+  export: ['file.export', 'file.save', rulesActions.export],
+  'backup-save': ['file.backupSave', 'settings.backup.save', backupActions['backup-save']],
+  'backup-restore': ['file.backupRestore', 'file.choose', backupActions['backup-restore']],
 };
 
 function offerFileAction() {
   const a = FILE_ACTIONS[params.get('do')];
   if (!S.full || !a) return;
-  const bar = el('div', { className: 'action-bar', role: 'status' }, el('span', { textContent: a[0] }),
-    el('button', { type: 'button', className: 'btn btn-small', textContent: a[1], onclick: () => { bar.remove(); a[2](); } }),
-    el('button', { type: 'button', className: 'link', textContent: 'Не нужно', onclick: () => bar.remove() }));
+  const bar = el('div', { className: 'action-bar', role: 'status' }, el('span', { textContent: t(a[0]) }),
+    el('button', { type: 'button', className: 'btn btn-small', textContent: t(a[1]), onclick: () => { bar.remove(); a[2](); } }),
+    el('button', { type: 'button', className: 'link', textContent: t('file.dismiss'), onclick: () => bar.remove() }));
   $(`panel-${location.hash.slice(1) || 'home'}`)?.prepend(bar);
 }
 

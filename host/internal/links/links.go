@@ -8,14 +8,13 @@ package links
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
-	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
 	"unicode"
 
 	"waysplit/host/internal/hostlog"
+	"waysplit/host/internal/msg"
 )
 
 // Server — разобранная ссылка сервера. Поля с json-тегами уходят в расширение,
@@ -101,19 +100,19 @@ var parsers = map[string]parseFunc{
 }
 
 // Протоколы, которые узнаём, но пока не поддерживаем (SPEC, раздел 9).
-var notYet = map[string]string{
+var notYet = map[string]any{
 	"vmess": "VMess", "trojan": "Trojan", "ss": "Shadowsocks", "ssr": "ShadowsocksR",
-	"tuic": "TUIC", "hysteria": "Hysteria (первая версия)", "wireguard": "WireGuard", "wg": "WireGuard",
+	"tuic": "TUIC", "hysteria": msg.New("proto_hysteria1"), "wireguard": "WireGuard", "wg": "WireGuard",
 	"socks": "SOCKS", "socks5": "SOCKS", "anytls": "AnyTLS", "naive+https": "Naive",
 }
 
 // ErrSubscription — строка оказалась адресом подписки, а не ссылкой сервера.
-var ErrSubscription = errors.New("это ссылка на подписку, а не на сервер")
+var ErrSubscription = msg.E("link_subscription")
 
 // ErrHapp — ссылка приложения Happ (код закрыт): зашифрованные happ://crypt… (crypt, crypt2 …
 // crypt5) открывает только Happ, их не расшифровываем. Из ссылок happ:// понимаем только
 // happ://add/https://… (HappSubscription); любая другая — эта причина.
-var ErrHapp = errors.New("Ссылка зашифрована для приложения Happ — открыть её может только Happ. Попросите у провайдера обычную ссылку на подписку (https://…)")
+var ErrHapp = msg.E("happ_link")
 
 // HappSubscription — адрес подписки из ссылки happ://add/<адрес>, если адрес — обычный https://…
 // (такую строку добавляем как подписку, как будто вставили сам адрес); иначе ok = false.
@@ -135,14 +134,14 @@ func HappSubscription(line string) (addr string, ok bool) {
 func Parse(line string) (*Server, error) {
 	link := cleanLine(line)
 	if link == "" {
-		return nil, errors.New("пустая строка")
+		return nil, msg.E("empty_line")
 	}
 	if IsSubscriptionURL(link) {
 		return nil, ErrSubscription
 	}
 	scheme, _, ok := strings.Cut(link, "://")
 	if !ok || scheme == "" {
-		return nil, errors.New("не похоже на ссылку сервера")
+		return nil, msg.E("not_a_link")
 	}
 	if strings.EqualFold(scheme, "happ") {
 		if _, sub := HappSubscription(link); sub {
@@ -153,9 +152,9 @@ func Parse(line string) (*Server, error) {
 	p := parsers[strings.ToLower(scheme)]
 	if p == nil {
 		if name, ok := notYet[strings.ToLower(scheme)]; ok {
-			return nil, fmt.Errorf("протокол %s пока не поддерживается", name)
+			return nil, msg.E("proto_unsupported", "proto", name)
 		}
-		return nil, errors.New("ссылка не распознана")
+		return nil, msg.E("link_unknown")
 	}
 	r, err := splitLink(link)
 	if err != nil {
@@ -182,9 +181,20 @@ func IsSubscriptionURL(s string) bool {
 
 // LineError — строка, которую не удалось добавить, и причина.
 type LineError struct {
-	Line   int    `json:"line"`   // номер строки, с 1
-	Text   string `json:"text"`   // строка без секретов, укороченная
-	Reason string `json:"reason"` // понятная причина по-русски
+	Line   int            `json:"line"`             // номер строки, с 1
+	Text   string         `json:"text"`             // строка без секретов, укороченная
+	Reason string         `json:"reason"`           // понятная причина по-русски
+	Msg    string         `json:"msg,omitempty"`    // она же — код фразы (пакет msg)
+	Params map[string]any `json:"params,omitempty"` // и значения вставок
+}
+
+// NewLineError — строка не стала сервером: причина из ошибки (текст и фраза).
+func NewLineError(line int, text string, err error) LineError {
+	le := LineError{Line: line, Text: text, Reason: err.Error()}
+	if t, ok := msg.Of(err); ok && t.Ru() == le.Reason {
+		le.Msg, le.Params = t.ID, t.Params
+	}
+	return le
 }
 
 // TextResult — итог разбора нескольких строк.
@@ -216,11 +226,11 @@ func ParseText(text string) *TextResult {
 		}
 		s, err := Parse(line)
 		if err != nil {
-			res.Errors = append(res.Errors, LineError{Line: i + 1, Text: Preview(line), Reason: err.Error()})
+			res.Errors = append(res.Errors, NewLineError(i+1, Preview(line), err))
 			continue
 		}
 		if first, dup := seen[s.Key()]; dup {
-			res.Errors = append(res.Errors, LineError{Line: i + 1, Text: Preview(line), Reason: fmt.Sprintf("такой сервер уже есть (строка %d)", first)})
+			res.Errors = append(res.Errors, NewLineError(i+1, Preview(line), msg.E("duplicate_line", "line", first)))
 			continue
 		}
 		seen[s.Key()] = i + 1

@@ -5,13 +5,14 @@ package device
 
 import (
 	"crypto/rand"
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"waysplit/host/internal/msg"
 )
 
 // Device — заголовки устройства, как у панели Remnawave (docs.rw, «HWID device limit»):
@@ -71,7 +72,7 @@ func Load(dir string) (d *Device, created bool, err error) {
 			return nil, false, err
 		}
 		if err := os.WriteFile(path, []byte(id+"\n"), 0o600); err != nil {
-			return nil, false, errors.New("не удалось сохранить идентификатор устройства: " + err.Error())
+			return nil, false, msg.E("device_save", "error", err.Error())
 		}
 		created = true
 	}

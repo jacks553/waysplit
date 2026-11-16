@@ -13,7 +13,7 @@ import (
 	"waysplit/host/internal/singbox"
 )
 
-const version = "1.1.0"
+const version = "1.2.0"
 
 const usage = `waysplit-host %s — компаньон расширения Waysplit.
 
@@ -91,7 +91,7 @@ func main() {
 	}
 	if err != nil {
 		hostlog.Printf("%s: %v", cmd, err)
-		fmt.Fprintln(os.Stderr, "\nОшибка: "+err.Error())
+		fmt.Fprintln(os.Stderr, say("\nОшибка: ", "\nError: ")+err.Error())
 		hostlog.Close()
 		os.Exit(1)
 	}

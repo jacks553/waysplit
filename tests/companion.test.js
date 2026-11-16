@@ -1,7 +1,8 @@
 // Тесты extension/lib/companion.js: сравнение версий компаньона и ссылка на загрузку.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DOWNLOAD_URL, DOWNLOAD_ZIP_URL, INSTALL_STEPS, MIN_HOST_VERSION, REPO_URL, olderThan } from '../extension/lib/companion.js';
+import { DOCS_URL, DOWNLOAD_URL, DOWNLOAD_ZIP_URL, ISSUES_URL, MIN_HOST_VERSION, REPO_URL, docsUrl, helpUrl, installSteps, olderThan } from '../extension/lib/companion.js';
+import { setLanguage } from '../extension/lib/i18n.js';
 
 test('olderThan сравнивает части версии как числа', () => {
   assert.equal(olderThan('0.9.0', '1.0.0'), true);
@@ -21,7 +22,20 @@ test('ссылки на загрузку — последний выпуск н�
   // Имя файла без версии: так его выкладывает .github/workflows/release.yml.
   assert.equal(DOWNLOAD_ZIP_URL, `${REPO_URL}/releases/latest/download/Waysplit-companion.zip`);
   assert.match(MIN_HOST_VERSION, /^\d+\.\d+\.\d+$/);
-  assert.ok(INSTALL_STEPS[0].includes('«Скачать»') && INSTALL_STEPS[0].includes('Waysplit-companion.zip'));
-  assert.ok(INSTALL_STEPS.some((s) => s.includes('Установить.cmd')));
-  assert.ok(INSTALL_STEPS.every((s) => !/powershell|setup\.ps1|папк[еау] проекта/i.test(s)), 'без команд и путей к проекту');
+  const steps = installSteps();
+  assert.ok(steps[0].includes('«Скачать»') && steps[0].includes('Waysplit-companion.zip'));
+  assert.ok(steps.some((s) => s.includes('Установить.cmd')));
+  assert.ok(steps.every((s) => !/powershell|setup\.ps1|папк[еау] проекта/i.test(s)), 'без команд и путей к проекту');
+});
+
+test('«Помощь» и «Частые вопросы» ведут на страницу сайта проекта на языке окна, «Сообщить об ошибке» — на Issues', () => {
+  assert.equal(DOCS_URL, 'https://jacks553.github.io/waysplit');
+  assert.equal(ISSUES_URL, `${REPO_URL}/issues`);
+  setLanguage('ru');
+  assert.equal(helpUrl(), `${DOCS_URL}/ru/help.html`);
+  assert.equal(docsUrl('hint.faq.url'), `${DOCS_URL}/ru/help.html#faq`);
+  setLanguage('en');
+  assert.equal(helpUrl(), `${DOCS_URL}/en/help.html`);
+  assert.equal(docsUrl('hint.faq.url'), `${DOCS_URL}/en/help.html#faq`);
+  setLanguage('ru');
 });

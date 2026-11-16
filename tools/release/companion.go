@@ -4,7 +4,7 @@ package main
 // Имя без номера версии (решение автора): тогда постоянная ссылка
 // https://github.com/<имя>/waysplit/releases/latest/download/Waysplit-companion.zip всегда ведёт
 // на архив последнего выпуска (её открывает кнопка «Скачать» в расширении); версия — внутри
-// («Прочитай меня.txt», waysplit-host.exe version, свойства файла).
+// («Прочитай меня.txt» и README.txt, waysplit-host.exe version, свойства файла).
 //
 // Внутри: собранный waysplit-host.exe (со значком и сведениями о версии — winres.go); ядра
 // sing-box и Xray (cores.go: из официальных выпусков, сверенные по SHA-256, — установщику не нужен
@@ -34,9 +34,12 @@ var archiveFiles = []struct {
 	text, bom bool
 }{
 	{"tools/companion/install.cmd", "Установить.cmd", true, false},
+	{"tools/companion/install.cmd", "Install.cmd", true, false}, // тот же файл с английским именем (версия 1.2.0)
 	{"tools/companion/uninstall.cmd", "Удалить.cmd", true, false},
+	{"tools/companion/uninstall.cmd", "Uninstall.cmd", true, false},
 	{"tools/companion/waysplit-setup.ps1", "waysplit-setup.ps1", true, true},
 	{"tools/companion/README.txt", "Прочитай меня.txt", true, true},
+	{"tools/companion/README.en.txt", "README.txt", true, true}, // инструкция по-английски
 	{"LICENSE", "LICENSE.txt", true, false},
 	{"tools/companion/GPL-3.0.txt", "sing-box-GPL-3.0.txt", true, false}, // в sing-box-LICENSE.txt — только уведомление
 }
@@ -341,7 +344,7 @@ func buildCompanion(root, coresDir string, draft bool) error {
 		if err != nil {
 			return err
 		}
-		if f.name == "Прочитай меня.txt" {
+		if f.name == "Прочитай меня.txt" || f.name == "README.txt" {
 			data = bytes.ReplaceAll(data, []byte("{{VERSION}}"), []byte(version))
 			data = bytes.ReplaceAll(data, []byte("{{REPO_URL}}"), []byte(url))
 			if bytes.Contains(data, []byte("{{")) {

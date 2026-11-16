@@ -3,7 +3,8 @@
 // скопировать ссылку, выше / ниже, удалить), порядок — и перетаскиванием. Экраны: «Добавить»,
 // «Подписка» (сведения, обновить, проверить, переименовать, удалить).
 
-import { SERVER_WORDS, addSummary, fmtBytes, fmtDate, maskUrl, matches, plural, send } from '../lib/format.js';
+import { addSummary, fmtBytes, fmtDate, maskUrl, matches, send, subError } from '../lib/format.js';
+import { fill, slot, t } from '../lib/i18n.js';
 import { $, ask, el, openMenu, setIcon, toast } from './ui.js';
 import { S, defineTab, isFav, openScreen, closeScreen, serverById } from './state.js';
 import { groupsOf, serverItem, toggleFavorite } from './picker.js';
@@ -16,13 +17,13 @@ const subServers = (id) => S.view.servers.filter((s) => s.subscriptionId === id)
 
 // subFacts — коротко о подписке: серверов, трафик, срок.
 function subFacts(sub, long = false) {
-  const facts = [plural(subServers(sub.id).length, SERVER_WORDS)];
+  const facts = [t('n.servers', { n: subServers(sub.id).length })];
   const info = sub.info;
-  if (info?.total > 0) facts.push(`трафик ${fmtBytes(info.upload + info.download)} из ${fmtBytes(info.total)}`);
-  else if (info && info.upload + info.download > 0) facts.push(`трафик ${fmtBytes(info.upload + info.download)}`);
-  if (info?.expire > 0) facts.push(`${info.expire * 1000 < Date.now() ? 'срок истёк' : 'до'} ${fmtDate(info.expire * 1000, false)}`);
-  if (sub.device) facts.push('привязана к этому компьютеру');
-  if (long && sub.updatedAt) facts.push(`обновлена ${fmtDate(sub.updatedAt)}`);
+  if (info?.total > 0) facts.push(t('sub.fact.trafficOf', { used: fmtBytes(info.upload + info.download), total: fmtBytes(info.total) }));
+  else if (info && info.upload + info.download > 0) facts.push(t('sub.fact.traffic', { used: fmtBytes(info.upload + info.download) }));
+  if (info?.expire > 0) facts.push(t(info.expire * 1000 < Date.now() ? 'sub.fact.expired' : 'sub.fact.until', { date: fmtDate(info.expire * 1000, false) }));
+  if (sub.device) facts.push(t('sub.fact.device'));
+  if (long && sub.updatedAt) facts.push(t('sub.fact.updated', { date: fmtDate(sub.updatedAt) }));
   return facts.join(' · ');
 }
 
@@ -55,26 +56,26 @@ function render() {
     }));
     parts.push(ul);
   }
-  if (q && !found.length) parts.push(el('p', { className: 'empty', textContent: 'Ничего не найдено' }));
+  if (q && !found.length) parts.push(el('p', { className: 'empty', textContent: t('common.nothingFound') }));
   $('srvGroups').replaceChildren(...parts);
 }
 
 // subHead — заголовок группы подписки: имя, факты, сообщение провайдера, ошибка, «⋯».
 function subHead(sub) {
-  const more = el('button', { type: 'button', className: 'icon-btn more', title: 'Действия с подпиской' });
+  const more = el('button', { type: 'button', className: 'icon-btn more', title: t('sub.actions') });
   more.dataset.action = 'subMore';
-  more.setAttribute('aria-label', `Действия с подпиской ${sub.name}`);
+  more.setAttribute('aria-label', t('sub.actions.aria', { name: sub.name }));
   more.setAttribute('aria-haspopup', 'menu');
   setIcon(more, 'more');
-  const open = el('button', { type: 'button', className: 'sub-open', title: 'Сведения о подписке' },
+  const open = el('button', { type: 'button', className: 'sub-open', title: t('sub.details') },
     el('span', { className: 'sub-name', textContent: sub.name }),
     el('span', { className: 'sub-facts', textContent: subFacts(sub) }));
   open.dataset.action = 'subOpen';
   const head = el('div', { className: 'sub-head' }, open, more);
   head.dataset.sub = sub.id;
   const notes = [];
-  if (sub.lastError) notes.push(el('p', { className: 'sub-note error', textContent: `Не обновилась: ${sub.lastError}` }));
-  if (sub.announce) notes.push(el('p', { className: 'sub-note', textContent: `Сообщение провайдера: ${sub.announce}` }));
+  if (sub.lastError) notes.push(el('p', { className: 'sub-note error', textContent: t('sub.failed', { error: subError(sub) }) }));
+  if (sub.announce) notes.push(el('p', { className: 'sub-note', textContent: t('sub.announce', { text: sub.announce }) }));
   return el('div', { className: 'sub-block' }, head, ...notes);
 }
 
@@ -83,7 +84,7 @@ function subHead(sub) {
 async function run(msg, okText) {
   const resp = await send(msg);
   if (!resp?.ok) {
-    toast(resp?.error?.message || 'Не получилось', 'error');
+    toast(resp?.error?.message || t('common.failed'), 'error');
     return null;
   }
   if (okText) toast(typeof okText === 'function' ? okText(resp.result) : okText);
@@ -97,30 +98,30 @@ function serverMenu(anchor, s) {
   const at = mates.indexOf(s.id);
   const filtered = $('srvSearch').value.trim() !== '';
   openMenu(anchor, [
-    { label: 'Проверить пинг', run: () => run({ type: 'ping', ids: [s.id] }, (r) => (r[0]?.ms ? `${s.name}: ${r[0].ms} мс` : `${s.name}: нет ответа — ${r[0]?.error || ''}`)) },
-    { label: 'Переименовать', run: () => startRename(s.id) },
-    { label: 'Скопировать ссылку', run: () => copyLink(s) },
-    { label: isFav(s) ? 'Убрать из избранного' : 'В избранное', run: () => toggleFavorite(s.id) },
+    { label: t('servers.menu.ping'), run: () => run({ type: 'ping', ids: [s.id] }, (r) => (r[0]?.ms ? t('servers.ping.ok', { name: s.name, ms: r[0].ms }) : t('servers.ping.failed', { name: s.name, error: r[0]?.error || '' }))) },
+    { label: t('common.rename'), run: () => startRename(s.id) },
+    { label: t('servers.menu.copy'), run: () => copyLink(s) },
+    { label: t(isFav(s) ? 'fav.remove' : 'fav.add'), run: () => toggleFavorite(s.id) },
     '-',
-    { label: 'Выше', disabled: filtered || at <= 0, run: () => move(ids, mates, at, at - 1) },
-    { label: 'Ниже', disabled: filtered || at < 0 || at >= mates.length - 1, run: () => move(ids, mates, at, at + 1) },
+    { label: t('servers.menu.up'), disabled: filtered || at <= 0, run: () => move(ids, mates, at, at - 1) },
+    { label: t('servers.menu.down'), disabled: filtered || at < 0 || at >= mates.length - 1, run: () => move(ids, mates, at, at + 1) },
     '-',
-    { label: 'Удалить', danger: true, run: () => removeServer(s) },
+    { label: t('common.delete'), danger: true, run: () => removeServer(s) },
   ]);
 }
 
 async function copyLink(s) {
   try {
     await navigator.clipboard.writeText(s.link);
-    toast('Ссылка скопирована. В ней секреты сервера — не пересылайте её чужим.', 'keep');
+    toast(t('servers.copied'), 'keep');
   } catch (err) {
-    toast(`Не удалось скопировать: ${err.message}`, 'error');
+    toast(t('common.copyFailed', { error: err.message }), 'error');
   }
 }
 
 async function removeServer(s) {
-  if (!(await ask({ title: `Удалить сервер «${s.name}»?`, text: 'Правила, которые шли через него, перейдут на текущий сервер.', ok: 'Удалить', danger: true }))) return;
-  await run({ type: 'remove', id: s.id }, (r) => `Сервер «${s.name}» удалён.${r.rulesMoved ? ` Правил, переключённых на текущий сервер: ${r.rulesMoved}.` : ''}`);
+  if (!(await ask({ title: t('servers.remove.title', { name: s.name }), text: t('servers.remove.text'), ok: t('common.delete'), danger: true }))) return;
+  await run({ type: 'remove', id: s.id }, (r) => (r.rulesMoved ? t('servers.removedMoved', { name: s.name, n: r.rulesMoved }) : t('servers.removed', { name: s.name })));
 }
 
 // move — порядок внутри группы: группа — это места её серверов в общем списке.
@@ -149,7 +150,7 @@ function startRename(id) {
   editing = id;
   li.draggable = false;
   const input = el('input', { className: 'rename', value: s.name, maxLength: 100 });
-  input.setAttribute('aria-label', 'Новое имя сервера');
+  input.setAttribute('aria-label', t('servers.rename.aria'));
   li.querySelector('.srv-name').replaceWith(input);
   input.focus();
   input.select();
@@ -157,7 +158,7 @@ function startRename(id) {
     if (editing !== id) return;
     editing = null;
     const name = input.value.trim();
-    if (save && name && name !== s.name) await run({ type: 'rename', id, name }, 'Имя сохранено');
+    if (save && name && name !== s.name) await run({ type: 'rename', id, name }, t('servers.renamed'));
     render();
   };
   input.addEventListener('keydown', (e) => {
@@ -182,7 +183,7 @@ $('srvGroups').addEventListener('click', (e) => {
   if (!s) return;
   if (action === 'star') toggleFavorite(s.id);
   else if (action === 'more') serverMenu(e.target.closest('button'), s);
-  else if (s.id !== S.view.currentServerId) run({ type: 'select', id: s.id }, `Текущий сервер: ${s.name}`);
+  else if (s.id !== S.view.currentServerId) run({ type: 'select', id: s.id }, t('servers.selected', { name: s.name }));
 });
 $('srvGroups').addEventListener('keydown', (e) => {
   if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('li[data-id]')) {
@@ -240,15 +241,15 @@ $('srvSearch').addEventListener('input', render);
 
 $('pingAll').addEventListener('click', async () => {
   $('pingAll').disabled = true;
-  toast(S.view.enabled ? 'Проверяю пинг всех серверов…' : 'Проверяю пинг всех серверов (ядро запускается на время проверки)…');
-  await run({ type: 'ping' }, (r) => `Ответили ${r.filter((x) => x.ms).length} из ${r.length}`);
+  toast(t(S.view.enabled ? 'servers.pinging' : 'servers.pingingOff'));
+  await run({ type: 'ping' }, (r) => t('servers.pinged', { ok: r.filter((x) => x.ms).length, all: r.length }));
   $('pingAll').disabled = false;
 });
 
 $('fastest').addEventListener('click', async () => {
   $('fastest').disabled = true;
-  toast('Проверяю пинг и выбираю самый быстрый…');
-  await run({ type: 'fastest' }, (r) => `Выбран самый быстрый: ${serverById(r.id)?.name || r.id} (${r.ms} мс)`);
+  toast(t('servers.fastest.run'));
+  await run({ type: 'fastest' }, (r) => t('servers.fastest.done', { name: serverById(r.id)?.name || r.id, ms: r.ms }));
   $('fastest').disabled = false;
 });
 
@@ -256,17 +257,17 @@ $('fastest').addEventListener('click', async () => {
 
 function openAdd() {
   openScreen({
-    title: 'Добавить серверы',
+    title: t('add.title'),
     className: 'add-screen',
     build(sc) {
-      const links = el('textarea', { id: 'addLinks', rows: 6, spellcheck: false, placeholder: 'vless://…\nhysteria2://…\nhttps://… — подписка' });
-      links.setAttribute('aria-label', 'Ссылки серверов или адрес подписки');
-      const btn = el('button', { id: 'addBtn', type: 'submit', className: 'btn', textContent: 'Добавить' });
+      const links = el('textarea', { id: 'addLinks', rows: 6, spellcheck: false, placeholder: t('add.placeholder') });
+      links.setAttribute('aria-label', t('add.aria'));
+      const btn = el('button', { id: 'addBtn', type: 'submit', className: 'btn', textContent: t('common.add') });
       const out = el('p', { id: 'addResult', className: 'add-result', hidden: true });
       const form = el('form', { className: 'add-form' },
-        el('label', { className: 'row-label', textContent: 'Вставьте ссылки серверов или адрес подписки — можно несколько, по одной на строку' }),
+        el('label', { className: 'row-label', textContent: t('add.label') }),
         links, btn, out,
-        el('p', { className: 'hint', textContent: 'Подойдут ссылки vless:// и hysteria2:// и адрес подписки https:// от вашего провайдера — в любом формате: список ссылок (в том числе base64), Xray JSON, sing-box JSON, Clash / Mihomo YAML.' }));
+        el('p', { className: 'hint', textContent: t('add.hint') }));
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const text = links.value.trim();
@@ -274,12 +275,12 @@ function openAdd() {
         btn.disabled = true;
         out.hidden = false;
         out.dataset.kind = '';
-        out.textContent = 'Разбираю ссылки…';
+        out.textContent = t('add.parsing');
         const resp = await send({ type: 'addLinks', text });
         btn.disabled = false;
         if (!resp?.ok) {
           out.dataset.kind = 'error';
-          out.textContent = resp?.error?.message || 'Не получилось';
+          out.textContent = resp?.error?.message || t('common.failed');
           return;
         }
         const ok = resp.result.added + resp.result.subscriptions.length;
@@ -302,28 +303,32 @@ const SUB_FORMATS = { 'xray-json': 'Xray JSON', 'singbox-json': 'sing-box JSON',
 
 function subMenu(anchor, sub) {
   openMenu(anchor, [
-    { label: 'Обновить', run: () => updateSub(sub) },
-    { label: 'Сведения и проверка', run: () => openSub(sub.id) },
-    { label: 'Переименовать', run: () => renameSub(sub) },
+    { label: t('sub.update'), run: () => updateSub(sub) },
+    { label: t('sub.menu.details'), run: () => openSub(sub.id) },
+    { label: t('common.rename'), run: () => renameSub(sub) },
     '-',
-    { label: 'Удалить', danger: true, run: () => removeSub(sub) },
+    { label: t('common.delete'), danger: true, run: () => removeSub(sub) },
   ]);
 }
 
 async function updateSub(sub) {
-  toast(`Обновляю подписку «${sub.name}»…`);
-  await run({ type: 'updateSubscription', id: sub.id }, (r) => `Подписка «${r.name}» обновлена: новых ${r.added}, удалено ${r.removed}, без изменений ${r.kept}, пропущено ${r.skipped.length}${r.rulesMoved ? `; правил переключено на текущий сервер: ${r.rulesMoved}` : ''}${r.viaVpn ? ' (напрямую не скачалась — скачана через VPN)' : ''}${r.device ? '; подписка привязана к этому компьютеру как устройство' : ''}`);
+  toast(t('sub.updating', { name: sub.name }));
+  // Итог одной строкой: основное, потом уточнения — через «; » и в скобках.
+  await run({ type: 'updateSubscription', id: sub.id }, (r) => t('sub.updated', { name: r.name, added: r.added, removed: r.removed, kept: r.kept, skipped: r.skipped.length })
+    + (r.rulesMoved ? `; ${t('sub.rulesMoved', { n: r.rulesMoved })}` : '')
+    + (r.viaVpn ? ` (${t('sub.updated.viaVpn')})` : '')
+    + (r.device ? `; ${t('sub.updated.device')}` : ''));
 }
 
 async function renameSub(sub) {
-  const name = await ask({ title: 'Имя подписки', value: sub.name, ok: 'Сохранить' });
-  if (name !== null && name.trim() && name.trim() !== sub.name) await run({ type: 'renameSubscription', id: sub.id, name }, 'Имя подписки сохранено');
+  const name = await ask({ title: t('sub.rename.title'), value: sub.name, ok: t('common.save') });
+  if (name !== null && name.trim() && name.trim() !== sub.name) await run({ type: 'renameSubscription', id: sub.id, name }, t('sub.renamed'));
 }
 
 async function removeSub(sub) {
   const count = subServers(sub.id).length;
-  if (!(await ask({ title: `Удалить подписку «${sub.name}»?`, text: `Вместе с ней удалятся её серверы (${count}).`, ok: 'Удалить', danger: true }))) return false;
-  const r = await run({ type: 'removeSubscription', id: sub.id }, (x) => `Подписка удалена, серверов удалено: ${x.removed}${x.rulesMoved ? `; правил переключено на текущий сервер: ${x.rulesMoved}` : ''}`);
+  if (!(await ask({ title: t('sub.remove.title', { name: sub.name }), text: t('sub.remove.text', { n: count }), ok: t('common.delete'), danger: true }))) return false;
+  const r = await run({ type: 'removeSubscription', id: sub.id }, (x) => t('sub.removed', { n: x.removed }) + (x.rulesMoved ? `; ${t('sub.rulesMoved', { n: x.rulesMoved })}` : ''));
   return !!r;
 }
 
@@ -334,20 +339,20 @@ function fact(name, value, cls = '') {
 // openSub — «сведения о подписке»: всё о ней, действия и проверка (SPEC-SUBS.md, шаг 1).
 function openSub(id) {
   openScreen({
-    title: subOf(id)?.name || 'Подписка',
+    title: subOf(id)?.name || t('sub.title'),
     className: 'sub-screen',
     build(sc) {
       const facts = el('dl', { id: 'subFacts', className: 'facts' });
       const notes = el('div', { className: 'sub-notes' });
       const actions = el('div', { className: 'tools' },
-        el('button', { type: 'button', className: 'btn btn-small', textContent: 'Обновить', onclick: () => updateSub(subOf(id)) }),
-        el('button', { type: 'button', className: 'ghost', textContent: 'Переименовать', onclick: () => renameSub(subOf(id)) }),
-        el('button', { type: 'button', className: 'ghost danger', textContent: 'Удалить', onclick: async () => { if (await removeSub(subOf(id))) closeScreen(); } }));
+        el('button', { type: 'button', className: 'btn btn-small', textContent: t('sub.update'), onclick: () => updateSub(subOf(id)) }),
+        el('button', { type: 'button', className: 'ghost', textContent: t('common.rename'), onclick: () => renameSub(subOf(id)) }),
+        el('button', { type: 'button', className: 'ghost danger', textContent: t('common.delete'), onclick: async () => { if (await removeSub(subOf(id))) closeScreen(); } }));
       // Проверка подписки: отчёт компаньона без секретов.
       const device = el('input', { id: 'subCheckDevice', type: 'checkbox' });
       // Залитая кнопка на экране одна — «Обновить»; проверка — контурная.
-      const runBtn = el('button', { id: 'subCheckRun', type: 'button', className: 'ghost', textContent: 'Проверить подписку' });
-      const copyBtn = el('button', { id: 'subCheckCopy', type: 'button', className: 'ghost', textContent: 'Скопировать отчёт', hidden: true });
+      const runBtn = el('button', { id: 'subCheckRun', type: 'button', className: 'ghost', textContent: t('sub.check.run') });
+      const copyBtn = el('button', { id: 'subCheckCopy', type: 'button', className: 'ghost', textContent: t('sub.check.copy'), hidden: true });
       const state = el('p', { id: 'subCheckState', className: 'note', hidden: true });
       const report = el('pre', { id: 'subCheckReport', className: 'log report', hidden: true });
       const say = (text, kind = '') => {
@@ -356,32 +361,35 @@ function openSub(id) {
         state.dataset.kind = kind;
       };
       runBtn.addEventListener('click', async () => {
-        if (device.checked && !(await ask({ title: 'Отправить провайдеру идентификатор устройства?', text: 'Провайдер может засчитать этот компьютер как ещё одно устройство.', ok: 'Отправить' }))) return;
+        if (device.checked && !(await ask({ title: t('sub.check.ask.title'), text: t('sub.check.ask.text'), ok: t('sub.check.ask.ok') }))) return;
         runBtn.disabled = true;
         report.hidden = copyBtn.hidden = true;
-        say('Проверяю: подписка скачивается разными способами, это до минуты…');
+        say(t('sub.check.running'));
         const resp = await send({ type: 'checkSubscription', id, device: device.checked });
         runBtn.disabled = false;
         if (!resp?.ok) {
-          say(resp?.error?.message || 'Проверить не получилось', 'error');
+          say(resp?.error?.message || t('sub.check.failed'), 'error');
           return;
         }
         const r = resp.result;
-        say(`Готово${r.device ? ', с идентификатором устройства' : ''}${r.viaVpn ? ' (напрямую сервер подписки не ответил — проверено через VPN)' : ''}. Итог — в начале отчёта.`);
+        // Сам отчёт пока составляет компаньон и только по-русски: в окне на другом языке — пометка
+        // об этом (в русском словаре она пустая).
+        say([`${t('sub.check.done')}${r.device ? `, ${t('sub.check.done.device')}` : ''}${r.viaVpn ? ` (${t('sub.check.done.viaVpn')})` : ''}.`,
+          t('sub.check.done.summary'), t('sub.check.reportLang')].filter(Boolean).join(' '));
         report.textContent = r.report;
         report.hidden = copyBtn.hidden = false;
       });
       copyBtn.addEventListener('click', async () => {
         try {
           await navigator.clipboard.writeText(report.textContent);
-          say('Отчёт скопирован — в нём нет адреса подписки, ссылок серверов и паролей.');
+          say(t('sub.check.copied'));
         } catch (e) {
-          say(`Не удалось скопировать: ${e.message}`, 'error');
+          say(t('common.copyFailed', { error: e.message }), 'error');
         }
       });
-      const check = el('fieldset', { className: 'group' }, el('legend', { textContent: 'Проверка подписки' }),
-        el('p', { className: 'hint', textContent: 'Если подписка не даёт серверов или даёт не те: Waysplit скачает её так, как это делают разные приложения (v2rayN, Happ, v2rayNG, Hiddify, sing-box, Clash), и покажет, что пришло. В отчёте нет адреса подписки, ссылок серверов и паролей — его можно переслать.' }),
-        el('label', { className: 'check' }, device, el('span', { innerHTML: 'Попробовать и с идентификатором устройства — <b>провайдер может засчитать его как ещё одно устройство</b> в вашем лимите.' })),
+      const check = el('fieldset', { className: 'group' }, el('legend', { textContent: t('sub.check.legend') }),
+        el('p', { className: 'hint', textContent: t('sub.check.hint') }),
+        el('label', { className: 'check' }, device, fill(el('span', {}, slot('strong', el('b', { textContent: t('sub.check.device.strong') }))), t('sub.check.device'))),
         el('div', { className: 'tools' }, runBtn, copyBtn), state, report);
       sc.body.append(facts, notes, actions, check);
       sc.facts = facts;
@@ -394,23 +402,26 @@ function openSub(id) {
         return;
       }
       sc.setTitle(sub.name);
-      sc.setSub(plural(subServers(id).length, SERVER_WORDS));
+      sc.setSub(t('n.servers', { n: subServers(id).length }));
       const info = sub.info;
       const rows = [
-        ...fact('Адрес', maskUrl(sub.url)),
-        ...fact('Обновлена', sub.updatedAt ? fmtDate(sub.updatedAt) : 'ещё не обновлялась'),
-        ...fact('Автообновление', `раз в ${sub.intervalHours} ч`),
+        ...fact(t('sub.f.url'), maskUrl(sub.url)),
+        ...fact(t('sub.f.updated'), sub.updatedAt ? fmtDate(sub.updatedAt) : t('sub.f.never')),
+        ...fact(t('sub.f.auto'), t('sub.f.every', { h: sub.intervalHours })),
       ];
-      if (info?.total > 0) rows.push(...fact('Трафик', `${fmtBytes(info.upload + info.download)} из ${fmtBytes(info.total)}`));
-      else if (info && info.upload + info.download > 0) rows.push(...fact('Трафик', fmtBytes(info.upload + info.download)));
-      if (info?.expire > 0) rows.push(...fact('Срок', `${info.expire * 1000 < Date.now() ? 'истёк' : 'до'} ${fmtDate(info.expire * 1000, false)}`, info.expire * 1000 < Date.now() ? 'error' : ''));
-      if (SUB_FORMATS[sub.format]) rows.push(...fact('Формат', SUB_FORMATS[sub.format]));
-      if (sub.viaVpn) rows.push(...fact('Скачана', 'через VPN (напрямую сервер подписки не ответил)'));
-      if (sub.device) rows.push(...fact('Устройство', 'подписка привязана к этому компьютеру как устройство'));
+      if (info?.total > 0) rows.push(...fact(t('sub.f.traffic'), t('sub.f.trafficOf', { used: fmtBytes(info.upload + info.download), total: fmtBytes(info.total) })));
+      else if (info && info.upload + info.download > 0) rows.push(...fact(t('sub.f.traffic'), fmtBytes(info.upload + info.download)));
+      if (info?.expire > 0) {
+        const expired = info.expire * 1000 < Date.now();
+        rows.push(...fact(t('sub.f.term'), t(expired ? 'sub.f.expired' : 'sub.fact.until', { date: fmtDate(info.expire * 1000, false) }), expired ? 'error' : ''));
+      }
+      if (SUB_FORMATS[sub.format]) rows.push(...fact(t('sub.f.format'), SUB_FORMATS[sub.format]));
+      if (sub.viaVpn) rows.push(...fact(t('sub.f.fetched'), t('sub.f.viaVpn')));
+      if (sub.device) rows.push(...fact(t('sub.f.device'), t('sub.f.deviceText')));
       sc.facts.replaceChildren(...rows);
       const notes = [];
-      if (sub.announce) notes.push(el('p', { className: 'sub-note', textContent: `Сообщение провайдера: ${sub.announce}` }));
-      if (sub.lastError) notes.push(el('p', { className: 'sub-note error', textContent: `Не обновилась: ${sub.lastError}` }));
+      if (sub.announce) notes.push(el('p', { className: 'sub-note', textContent: t('sub.announce', { text: sub.announce }) }));
+      if (sub.lastError) notes.push(el('p', { className: 'sub-note error', textContent: t('sub.failed', { error: subError(sub) }) }));
       sc.notes.replaceChildren(...notes);
     },
   });

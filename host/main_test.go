@@ -291,7 +291,7 @@ func TestNativeMessagingVPN(t *testing.T) {
 		t.Errorf("status: %v", res)
 	}
 	res, code, _ = c.call("ping", map[string]any{"serverIds": []string{"s_a1", "нет"}, "url": "http://192.0.2.1/", "timeoutMs": 2000})
-	if code != "" || fmt.Sprint(res["results"]) != "[map[error:Сервер не отвечает id:s_a1] map[error:сервер не запущен в ядре id:нет]]" {
+	if code != "" || fmt.Sprint(res["results"]) != "[map[error:Сервер не отвечает id:s_a1 msg:ping_no_response] map[error:сервер не запущен в ядре id:нет msg:ping_not_in_core]]" {
 		t.Errorf("ping: %v %s", res, code)
 	}
 	if _, code, msg = c.call("apply", map[string]any{"servers": []map[string]any{{"id": "bad", "link": "vless://" + uuid + "@x.example.com:443?type=xhttp&mode=turbo", "localPort": port}}}); code != "SERVER_INVALID" || !strings.Contains(msg, "mode=turbo") {
@@ -558,5 +558,17 @@ func TestExtensionIDs(t *testing.T) {
 	}
 	if !validExtID(storeExtensionID) || storeExtensionID == extensionID || len(ids) != 2 {
 		t.Errorf("ID магазина %q, разрешены %v", storeExtensionID, ids)
+	}
+}
+
+// Язык сообщений install и uninstall задаёт установщик переменной WAYSPLIT_LANG.
+func TestCliLanguage(t *testing.T) {
+	t.Setenv("WAYSPLIT_LANG", "en")
+	if !cliEnglish() || say("да", "yes") != "yes" {
+		t.Error("WAYSPLIT_LANG=en: ждали английский")
+	}
+	t.Setenv("WAYSPLIT_LANG", "RU")
+	if cliEnglish() || say("да", "yes") != "да" {
+		t.Error("WAYSPLIT_LANG=RU: ждали русский")
 	}
 }

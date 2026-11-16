@@ -1,5 +1,7 @@
-// Скриншоты для Chrome Web Store (SPEC-STORE.md, 2.5; SPEC-POPUP.md): node tools/store-shots.js [папка]
-// По умолчанию — store/screenshots: пять картинок 1280×800 (PNG).
+// Скриншоты для Chrome Web Store (SPEC-STORE.md, 2.5; SPEC-POPUP.md): node tools/store-shots.js [--lang=en] [папка]
+// По умолчанию — store/screenshots: пять картинок 1280×800 (PNG). С --lang=en — те же кадры
+// по-английски (окно, подписи и вымышленные данные) в store/screenshots-en: для английского
+// языка карточки магазина (версия 1.2.0).
 //
 // Настоящее окно расширения на вымышленных данных — копия расширения с подделкой компаньона
 // (tools/shots-lib.js). Окно показано на фоне в цветах значка с подписью — как его видно на панели
@@ -11,13 +13,33 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { prepareExtension, root, seed, sleep, startChrome } from './shots-lib.js';
 
-const outDir = resolve(process.argv[2] || join(root, 'store', 'screenshots'));
+const args = process.argv.slice(2);
+const LANG = args.includes('--lang=en') ? 'en' : 'ru';
+const outDir = resolve(args.find((a) => !a.startsWith('--')) || join(root, 'store', LANG === 'en' ? 'screenshots-en' : 'screenshots'));
+
+// Подписи к кадрам: заголовок и текст слева от окна.
+const CAPTIONS = {
+  ru: [
+    ['VPN только для Chrome', 'Нужные сайты — через ваш сервер, остальные — без VPN. Другие программы на компьютере VPN не затрагивает.'],
+    ['Ваши серверы под рукой', 'Ссылки VLESS (в том числе XHTTP) и Hysteria2 или подписка провайдера. Поиск, пинг и избранное — сервер выбирается в одно касание.'],
+    ['Свой путь для каждого сайта', 'Через VPN, через выбранный сервер или без VPN. Правило для открытого сайта — прямо на главной.'],
+    ['Подписки обновляются сами', 'Трафик, срок действия и сообщения провайдера видно сразу. Серверы подписки и свои — в одном списке.'],
+    ['Светлая и тёмная тема', 'Как в системе или на ваш выбор. Всё управление — прямо в окне расширения.'],
+  ],
+  en: [
+    ['VPN for Chrome only', 'The sites you choose go through your server, the rest go without VPN. Other programs on your computer are not affected.'],
+    ['Your servers at hand', 'VLESS links (including XHTTP) and Hysteria2, or a subscription from your provider. Search, ping and favorites: pick a server in one click.'],
+    ['A route for every site', 'Through VPN, through a server you choose, or without VPN. The rule for the open site is right on the Home tab.'],
+    ['Subscriptions update automatically', 'Traffic, expiry date and provider messages at a glance. Subscription servers and your own in one list.'],
+    ['Light and dark theme', 'Follows the system theme or your choice. Everything is controlled from the extension popup.'],
+  ],
+}[LANG];
 const work = mkdtempSync(join(tmpdir(), 'waysplit-shots-'));
 
 // Сцена: окно расширения (popup.html во фрейме, 400×600 — как на панели) на фоне в цветах значка,
 // слева — подпись.
 const stageHtml = `<!doctype html>
-<html lang="ru"><head><meta charset="utf-8"><title>Waysplit</title>
+<html lang="${LANG}"><head><meta charset="utf-8"><title>Waysplit</title>
 <link rel="stylesheet" href="stage.css"><script src="stage.js" defer></script></head>
 <body><main class="stage">
   <section class="caption"><img src="../icons/icon128.png" alt="" width="112" height="112"><h1 id="title"></h1><p id="text"></p></section>
@@ -47,7 +69,7 @@ async function main() {
     writeFileSync(join(dir, 'shots', 'stage.html'), stageHtml);
     writeFileSync(join(dir, 'shots', 'stage.css'), stageCss);
     writeFileSync(join(dir, 'shots', 'stage.js'), stageJs);
-  });
+  }, LANG);
   mkdirSync(outDir, { recursive: true });
   const chrome = startChrome(join(work, 'profile'));
   try {
@@ -55,7 +77,7 @@ async function main() {
     const base = `chrome-extension://${id}`;
     const ctl = await chrome.page(400, 600);
     await ctl.goto(`${base}/popup/popup.html?full`);
-    const { msg } = await seed(ctl);
+    const { msg } = await seed(ctl, LANG);
     // «Домены сайта» (новое в 1.1.0): у правила video.example.com — четыре привязанных домена
     // (вымышленные), в строке правила видно «+4 домена сайта». Привязка — как при импорте правил.
     await msg({ type: 'importRules', data: { type: 'rules', rules: [{ domain: 'video.example.com', action: 'proxy', server: null, enabled: true,
@@ -85,20 +107,12 @@ async function main() {
       console.log('снимок', join(outDir, file));
     };
 
-    await shot('1-popup.png', 'https://www.bank.example.net/login', 'VPN только для Chrome',
-      'Нужные сайты — через ваш сервер, остальные — без VPN. Другие программы на компьютере VPN не затрагивает.');
-    await shot('2-servers.png', 'https://shop.example.org/catalog', 'Ваши серверы под рукой',
-      'Ссылки VLESS (в том числе XHTTP) и Hysteria2 или подписка провайдера. Поиск, пинг и избранное — сервер выбирается в одно касание.',
-      "click('#serverRow');");
-    await shot('3-rules.png', 'https://shop.example.org/catalog', 'Свой путь для каждого сайта',
-      'Через VPN, через выбранный сервер или без VPN. Правило для открытого сайта — прямо на главной.',
-      "click('.tabbar .tab[data-tab=\"rules\"]');");
-    await shot('4-subscription.png', 'https://shop.example.org/catalog', 'Подписки обновляются сами',
-      'Трафик, срок действия и сообщения провайдера видно сразу. Серверы подписки и свои — в одном списке.',
-      "click('.tabbar .tab[data-tab=\"servers\"]');");
+    await shot('1-popup.png', 'https://www.bank.example.net/login', ...CAPTIONS[0]);
+    await shot('2-servers.png', 'https://shop.example.org/catalog', ...CAPTIONS[1], "click('#serverRow');");
+    await shot('3-rules.png', 'https://shop.example.org/catalog', ...CAPTIONS[2], "click('.tabbar .tab[data-tab=\"rules\"]');");
+    await shot('4-subscription.png', 'https://shop.example.org/catalog', ...CAPTIONS[3], "click('.tabbar .tab[data-tab=\"servers\"]');");
     await msg({ type: 'setSetting', key: 'theme', value: 'dark' });
-    await shot('5-dark.png', 'https://news.example.org/today', 'Светлая и тёмная тема',
-      'Как в системе или на ваш выбор. Всё управление — прямо в окне расширения.');
+    await shot('5-dark.png', 'https://news.example.org/today', ...CAPTIONS[4]);
     await msg({ type: 'setSetting', key: 'theme', value: 'system' });
   } finally {
     await chrome.close();

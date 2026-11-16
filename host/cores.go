@@ -11,6 +11,7 @@ import (
 
 	"waysplit/host/internal/hostlog"
 	"waysplit/host/internal/links"
+	"waysplit/host/internal/msg"
 	"waysplit/host/internal/nm"
 	"waysplit/host/internal/singbox"
 	"waysplit/host/internal/xray"
@@ -68,7 +69,7 @@ func (h *nmHost) apply(req *nm.Request) (*applyResult, error) {
 		Need     *[]string       `json:"need"` // нет поля (старое расширение) — нужны все
 	}
 	if err := json.Unmarshal(req.Raw, &p); err != nil {
-		return nil, &nm.Error{Code: "BAD_REQUEST", Message: "apply: неверный список серверов"}
+		return nil, nm.Phrased("BAD_REQUEST", msg.New("bad_request_apply"))
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -131,9 +132,9 @@ func (h *nmHost) apply(req *nm.Request) (*applyResult, error) {
 			errs = append(errs, newXBuilt.Errors...)
 		}
 		if len(p.Servers) == 1 && len(errs) == 1 {
-			return nil, &nm.Error{Code: "SERVER_INVALID", Message: errs[0].Message}
+			return nil, &nm.Error{Code: "SERVER_INVALID", Message: errs[0].Message, Msg: errs[0].Msg, Params: errs[0].Params}
 		}
-		return nil, &singbox.Error{Code: "NO_SERVERS", Message: "нет ни одного сервера, который можно запустить"}
+		return nil, singbox.NewError("NO_SERVERS", msg.New("no_servers"))
 	}
 
 	// Шаг 2 — запустить, перезапустить или остановить то, что изменилось.
@@ -161,7 +162,7 @@ func (h *nmHost) apply(req *nm.Request) (*applyResult, error) {
 	case !(h.xr.Status().Running && h.xrStarted == xrKey):
 		data, err := h.xbuilt.Config.JSON()
 		if err != nil {
-			return nil, &singbox.Error{Code: "START_FAILED", Message: "не удалось собрать конфиг Xray: " + err.Error()}
+			return nil, singbox.NewError("START_FAILED", msg.New("config_build_xray", "error", err.Error()))
 		}
 		if err := h.xr.StartData(data, h.xbuilt.Config.PortsOf()); err != nil {
 			h.xrStarted = ""
@@ -204,7 +205,7 @@ func (h *nmHost) start() (*applyResult, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.built == nil && h.xbuilt == nil {
-		return nil, &nm.Error{Code: "NO_CONFIG", Message: "нет конфига: сначала нужен apply со списком серверов"}
+		return nil, nm.Phrased("NO_CONFIG", msg.New("no_config"))
 	}
 	restarted := false
 	if h.sbRunnable() && !h.sb.Status().Running {
@@ -270,9 +271,9 @@ func (h *nmHost) statusLocked() hostStatus {
 	case xr.Running:
 		st.PID, st.Uptime, st.Ports = xr.PID, xr.Uptime, xr.Ports
 	}
-	st.LastError = sb.LastError
+	st.LastError, st.LastErrorMsg = sb.LastError, sb.LastErrorMsg
 	if st.LastError == "" {
-		st.LastError = xr.LastError
+		st.LastError, st.LastErrorMsg = xr.LastError, xr.LastErrorMsg
 	}
 	return st
 }

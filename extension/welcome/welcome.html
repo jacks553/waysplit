@@ -1,21 +1,24 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Waysplit — начало работы</title>
+  <title data-i18n="welcome.title">Waysplit</title>
   <link rel="icon" href="../icons/icon32.png">
   <link rel="stylesheet" href="../lib/common.css">
   <link rel="stylesheet" href="welcome.css">
   <script type="module" src="welcome.js"></script>
 </head>
+<!-- Надписей в разметке нет: data-i18n="ключ" — текст элемента, сами тексты — в словарях
+     lib/i18n/ (их подставляет lib/i18n.js). Вложенный элемент с data-slot="имя" остаётся в тексте
+     на месте {имя}. -->
 <body>
   <main class="wrap">
     <header class="hero">
       <img src="../icons/icon128.png" alt="" width="80" height="80">
       <div>
-        <h1>Waysplit — начало работы</h1>
-        <p class="name-note">Waysplit — развилка: часть сайтов через VPN, часть напрямую.</p>
-        <p>VPN только для Chrome: VLESS (в том числе XHTTP) и Hysteria2 через ваши серверы. Серверов Waysplit не даёт — нужны свои ссылки или подписка. Три шага — и готово.</p>
+        <h1 data-i18n="welcome.title"></h1>
+        <p class="name-note" data-i18n="welcome.nameNote"></p>
+        <p data-i18n="welcome.intro"></p>
       </div>
     </header>
 
@@ -23,50 +26,50 @@
       <li class="step" id="step1" data-done="false">
         <div class="mark" aria-hidden="true">1</div>
         <div class="body">
-          <h2>Установите компаньон</h2>
-          <p>Расширение само не подключается к серверам: это делает программа-компаньон для Windows 10 и 11 с ядрами sing-box и Xray. Её запускает Chrome — открывать её не нужно.</p>
-          <p class="state" id="hostState">Проверяю…</p>
+          <h2 data-i18n="welcome.s1.title"></h2>
+          <p data-i18n="welcome.s1.text"></p>
+          <p class="state" id="hostState" data-i18n="welcome.checking"></p>
           <div class="howto" id="howto" hidden>
             <ol class="install" id="installSteps"></ol>
             <div class="row">
-              <a class="btn" id="download" href="#" target="_blank" rel="noopener">Скачать</a>
-              <a class="release-link" id="releasePage" href="#" target="_blank" rel="noopener">страница выпуска: что нового и контрольная сумма</a>
+              <a class="btn" id="download" href="#" target="_blank" rel="noopener" data-i18n="common.download"></a>
+              <a class="release-link" id="releasePage" href="#" target="_blank" rel="noopener" data-i18n="welcome.releasePage"></a>
             </div>
-            <p class="note">Права администратора и интернет для установки не нужны: ядра sing-box и Xray уже в архиве. Windows может предупредить, потому что программа не подписана платным сертификатом; сверить архив можно по контрольной сумме SHA-256 на странице выпуска. Когда установщик закончит, нажмите «Проверить ещё раз».</p>
+            <p class="note" data-i18n="welcome.s1.note"></p>
           </div>
-          <button class="ghost" id="recheck" type="button">Проверить ещё раз</button>
+          <button class="ghost" id="recheck" type="button" data-i18n="welcome.recheck"></button>
         </div>
       </li>
 
       <li class="step" id="step2" data-done="false">
         <div class="mark" aria-hidden="true">2</div>
         <div class="body">
-          <h2>Вставьте ссылку</h2>
-          <p>Ссылка сервера <code>vless://…</code> или <code>hysteria2://…</code>, можно несколько — по одной на строку. Или адрес подписки <code>https://…</code>.</p>
+          <h2 data-i18n="welcome.s2.title"></h2>
+          <p data-i18n="welcome.s2.text"><code data-slot="vless">vless://…</code><code data-slot="hy2">hysteria2://…</code><code data-slot="sub">https://…</code></p>
           <textarea id="links" rows="3" spellcheck="false" placeholder="vless://…"></textarea>
           <div class="row">
-            <button class="btn" id="addBtn" type="button">Добавить</button>
+            <button class="btn" id="addBtn" type="button" data-i18n="common.add"></button>
             <p class="add-result" id="addResult" hidden></p>
           </div>
           <label class="option"><input type="checkbox" id="ruDirect">
-            <span><b>Российские сайты — без VPN</b><span class="option-sub">.ru, .рф, .su, VK, Яндекс и другие</span></span></label>
+            <span><b data-i18n="ru.title"></b><span class="option-sub" data-i18n="ru.sub"></span></span></label>
         </div>
       </li>
 
       <li class="step" id="step3" data-done="false">
         <div class="mark" aria-hidden="true">3</div>
         <div class="body">
-          <h2>Включите VPN</h2>
-          <p>Кнопка ниже — то же, что большая кнопка в окне расширения (значок Waysplit на панели; закрепите его через значок пазла).</p>
+          <h2 data-i18n="welcome.s3.title"></h2>
+          <p data-i18n="welcome.s3.text"></p>
           <div class="row">
-            <button class="btn" id="enable" type="button">Включить VPN</button>
+            <button class="btn" id="enable" type="button" data-i18n="home.power.turnOn"></button>
             <p class="state" id="vpnState"></p>
           </div>
         </div>
       </li>
     </ol>
 
-    <p class="foot">Серверы, правила для отдельных сайтов, подписки и настройки — в окне Waysplit (значок на панели Chrome), на вкладках внизу. То же самое на всю вкладку браузера — <a href="../popup/popup.html?full#rules">открыть</a>.</p>
+    <p class="foot" data-i18n="welcome.foot"><a href="../popup/popup.html?full#rules" data-slot="open" data-i18n="welcome.foot.open"></a></p>
   </main>
 </body>
 </html>

@@ -1,11 +1,11 @@
 package links
 
 import (
-	"errors"
-	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
+
+	"waysplit/host/internal/msg"
 )
 
 // rawLink — ссылка, разрезанная на части. Части уже раскодированы из %XX.
@@ -27,7 +27,7 @@ type param struct{ key, value string }
 func splitLink(s string) (*rawLink, error) {
 	i := strings.Index(s, "://")
 	if i <= 0 {
-		return nil, errors.New("не похоже на ссылку сервера")
+		return nil, msg.E("not_a_link")
 	}
 	r := &rawLink{scheme: strings.ToLower(s[:i])}
 	rest := s[i+3:]
@@ -51,18 +51,18 @@ func splitLink(s string) (*rawLink, error) {
 	if strings.HasPrefix(rest, "[") {
 		end := strings.IndexByte(rest, ']')
 		if end < 0 {
-			return nil, errors.New("IPv6-адрес без закрывающей скобки «]»")
+			return nil, msg.E("ipv6_no_bracket")
 		}
 		r.host, rest = rest[1:end], rest[end+1:]
 		if rest != "" {
 			if rest[0] != ':' {
-				return nil, fmt.Errorf("после адреса [%s] ожидается «:порт»", r.host)
+				return nil, msg.E("ipv6_port_expected", "host", r.host)
 			}
 			r.ports = rest[1:]
 		}
 	} else {
 		if strings.Count(rest, ":") > 1 && !strings.Contains(rest, ",") {
-			return nil, errors.New("IPv6-адрес нужно писать в квадратных скобках: [2001:db8::1]:443")
+			return nil, msg.E("ipv6_brackets")
 		}
 		if c := strings.IndexByte(rest, ':'); c >= 0 {
 			r.host, r.ports = rest[:c], rest[c+1:]
@@ -72,10 +72,10 @@ func splitLink(s string) (*rawLink, error) {
 	}
 	r.host = strings.ToLower(strings.TrimSpace(r.host))
 	if r.host == "" {
-		return nil, errors.New("нет адреса сервера")
+		return nil, msg.E("no_address")
 	}
 	if strings.ContainsAny(r.host, " \t/\\?#@%") {
-		return nil, fmt.Errorf("неверный адрес сервера «%s»", r.host)
+		return nil, msg.E("bad_address", "host", r.host)
 	}
 	return r, nil
 }
@@ -130,7 +130,7 @@ func parsePort(s string) (int, error) {
 	s = strings.TrimSpace(s)
 	n, err := strconv.Atoi(s)
 	if err != nil || n < 1 || n > 65535 || strings.HasPrefix(s, "+") {
-		return 0, fmt.Errorf("неверный порт «%s»", s)
+		return 0, msg.E("bad_port", "port", s)
 	}
 	return n, nil
 }
@@ -157,13 +157,13 @@ func parsePortList(s string) ([]PortRange, error) {
 				return nil, err
 			}
 			if b < a {
-				return nil, fmt.Errorf("неверный диапазон портов «%s»", part)
+				return nil, msg.E("bad_port_range", "range", part)
 			}
 		}
 		out = append(out, PortRange{From: a, To: b})
 	}
 	if len(out) == 0 {
-		return nil, errors.New("не указан порт")
+		return nil, msg.E("no_port_given")
 	}
 	return out, nil
 }

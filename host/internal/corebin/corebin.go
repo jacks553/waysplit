@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"waysplit/host/internal/hostlog"
+	"waysplit/host/internal/msg"
 )
 
 // Find ищет программу ядра: путь из переменной окружения envVar (для отладки) или файл name
@@ -38,7 +39,7 @@ func Find(envVar, name string) string {
 }
 
 // ErrUnclear — программа ответила на «version» не так, как ждали.
-var ErrUnclear = errors.New("непонятный ответ на «version»")
+var ErrUnclear = msg.E("version_unclear")
 
 type versionInfo struct {
 	size    int64

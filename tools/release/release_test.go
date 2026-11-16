@@ -70,6 +70,67 @@ func TestCheckManifest(t *testing.T) {
 	if bad := checkManifest(m); len(bad) != 1 {
 		t.Errorf("версия из пяти чисел: %v", bad)
 	}
+	// Описание из _locales: длину на каждом языке проверяет localeProblems.
+	m["version"] = "1.2.0"
+	m["description"] = "__MSG_extDescription__"
+	if bad := checkManifest(m); len(bad) > 0 {
+		t.Errorf("описание из _locales: %v", bad)
+	}
+}
+
+func TestLocaleProblems(t *testing.T) {
+	msgs := func(text string) []byte {
+		b, _ := json.Marshal(map[string]any{"extDescription": map[string]string{"message": text}})
+		return b
+	}
+	m := map[string]any{"description": "__MSG_extDescription__", "default_locale": "en"}
+	ok := []entry{{"_locales/en/messages.json", msgs("VPN for Chrome")}, {"_locales/ru/messages.json", msgs("VPN для Chrome")}}
+	if bad := localeProblems(ok, m); len(bad) > 0 {
+		t.Errorf("лишние ошибки: %v", bad)
+	}
+	cases := []struct {
+		name  string
+		files []entry
+		m     map[string]any
+		want  string
+	}{
+		{"длинное на одном языке", []entry{ok[0], {"_locales/ru/messages.json", msgs(strings.Repeat("я", 133))}}, m, "description (ru): 133"},
+		{"пустое", []entry{{"_locales/en/messages.json", msgs("")}}, m, "description (en): 0"},
+		{"нет файла языка по умолчанию", []entry{ok[1]}, m, `default_locale "en"`},
+		{"нет текста у языка по умолчанию", []entry{{"_locales/en/messages.json", []byte(`{"other": {"message": "x"}}`)}}, m, "нет текста extDescription"},
+		{"нет default_locale", ok, map[string]any{"description": "Waysplit"}, "нет default_locale"},
+		{"не JSON", []entry{{"_locales/en/messages.json", []byte("{")}}, m, "не JSON"},
+	}
+	for _, c := range cases {
+		bad := strings.Join(localeProblems(c.files, c.m), "\n")
+		if !strings.Contains(bad, c.want) {
+			t.Errorf("%s: нет ошибки «%s» в:\n%s", c.name, c.want, bad)
+		}
+	}
+	// Имена текстов в Chrome без учёта регистра.
+	if bad := localeProblems([]entry{{"_locales/en/messages.json", []byte(`{"EXTDESCRIPTION": {"message": "VPN"}}`)}}, m); len(bad) > 0 {
+		t.Errorf("регистр имени текста: %v", bad)
+	}
+}
+
+// Настоящее расширение: тексты из _locales проходят проверку магазина на обоих языках.
+func TestLocalesRealExtension(t *testing.T) {
+	files, m, err := extensionFiles(filepath.Join("..", ".."), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bad := append(checkManifest(m), localeProblems(files, m)...); len(bad) > 0 {
+		t.Errorf("manifest.json и _locales: %v", bad)
+	}
+	langs := 0
+	for _, f := range files {
+		if strings.HasPrefix(f.name, "_locales/") {
+			langs++
+		}
+	}
+	if langs < 2 {
+		t.Errorf("языков в _locales: %d, нужно не меньше двух (ru, en)", langs)
+	}
 }
 
 func TestRemoteCode(t *testing.T) {

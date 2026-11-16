@@ -3,6 +3,7 @@
 
 import { pingBars, splitFlag } from '../lib/format.js';
 import { toUnicode } from '../lib/domains.js';
+import { t } from '../lib/i18n.js';
 
 export const $ = (id) => document.getElementById(id);
 
@@ -57,7 +58,7 @@ export function barsEl(server) {
   const node = el('span', { className: 'bars', title: b.title });
   node.dataset.n = String(b.n);
   node.setAttribute('role', 'img');
-  node.setAttribute('aria-label', `Задержка: ${b.title}`);
+  node.setAttribute('aria-label', t('ui.bars.aria', { title: b.title }));
   for (let i = 1; i <= 4; i++) node.append(el('i', { className: i <= b.n ? 'on' : '' }));
   return node;
 }
@@ -122,7 +123,7 @@ export const menuOpen = () => pop().matches(':popover-open');
 // --- окно вопроса (вместо confirm/prompt: в окне расширения они неудобны) ---
 
 // ask({ title, text, ok, danger, value }) → true / строка (если задан value — поле ввода) / null.
-export function ask({ title, text = '', ok = 'ОК', danger = false, value = null }) {
+export function ask({ title, text = '', ok = t('common.ok'), danger = false, value = null }) {
   const dlg = $('dlg');
   $('dlgTitle').textContent = title;
   $('dlgText').textContent = text;
@@ -160,11 +161,11 @@ const TOAST_SHORT = 70; // длиннее — уже не «короткое»
 
 let toastTimer = null;
 export function toast(text, kind = '', { action = null } = {}) {
-  const t = $('toast');
+  const box = $('toast');
   clearTimeout(toastTimer);
   if (!text) {
-    t.hidden = true;
-    t.replaceChildren();
+    box.hidden = true;
+    box.replaceChildren();
     return;
   }
   const sticky = kind === 'error' || kind === 'keep' || !!action || text.length > TOAST_SHORT;
@@ -178,17 +179,17 @@ export function toast(text, kind = '', { action = null } = {}) {
     parts.push(b);
   }
   if (sticky) {
-    const x = el('button', { type: 'button', className: 'toast-close', title: 'Закрыть сообщение' });
-    x.setAttribute('aria-label', 'Закрыть сообщение');
+    const x = el('button', { type: 'button', className: 'toast-close', title: t('ui.toast.close') });
+    x.setAttribute('aria-label', t('ui.toast.close'));
     setIcon(x, 'close');
     x.addEventListener('click', () => toast(''));
     parts.push(x);
   }
-  t.replaceChildren(...parts);
-  t.dataset.kind = kind === 'keep' ? '' : kind;
-  t.dataset.sticky = String(sticky);
-  t.hidden = false;
-  if (!sticky) toastTimer = setTimeout(() => { t.hidden = true; }, 5000);
+  box.replaceChildren(...parts);
+  box.dataset.kind = kind === 'keep' ? '' : kind;
+  box.dataset.sticky = String(sticky);
+  box.hidden = false;
+  if (!sticky) toastTimer = setTimeout(() => { box.hidden = true; }, 5000);
 }
 
 // toastOpen — сообщение показано и само не исчезнет (Esc его закрывает).

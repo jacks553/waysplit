@@ -3,9 +3,10 @@ package links
 import (
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"strconv"
 	"strings"
+
+	"waysplit/host/internal/msg"
 )
 
 // parseVLESS: vless://uuid@host:port?параметры#имя
@@ -13,10 +14,10 @@ func parseVLESS(r *rawLink, link string) (*Server, error) {
 	s := &Server{Protocol: "vless", Link: link, Address: r.host, Name: r.name}
 	s.UUID = strings.TrimSpace(r.userinfo)
 	if s.UUID == "" {
-		return nil, errors.New("в ссылке нет uuid")
+		return nil, msg.E("no_uuid")
 	}
 	if r.ports == "" {
-		return nil, errors.New("в ссылке нет порта")
+		return nil, msg.E("no_port")
 	}
 	port, err := parsePort(r.ports)
 	if err != nil {
@@ -63,7 +64,7 @@ func parseVLESS(r *rawLink, link string) (*Server, error) {
 		s.Mode = strings.ToLower(r.get(seen, "mode"))
 		s.Extra = strings.TrimSpace(r.get(seen, "extra"))
 		if s.Extra != "" && !isJSONObject(s.Extra) {
-			return nil, errors.New("xhttp: параметр extra — не JSON-объект")
+			return nil, msg.E("xhttp_extra")
 		}
 	}
 	r.get(seen, "mode", "authority", "packetencoding") // знаем, но не используем
@@ -78,19 +79,19 @@ func parseVLESS(r *rawLink, link string) (*Server, error) {
 		}
 	case "reality":
 		if s.PublicKey == "" {
-			return nil, errors.New("Reality: в ссылке нет ключа pbk")
+			return nil, msg.E("reality_no_pbk")
 		}
 		pbk, ok := normalizePBK(s.PublicKey)
 		if !ok {
-			return nil, errors.New("Reality: неверный ключ pbk")
+			return nil, msg.E("reality_bad_pbk")
 		}
 		s.PublicKey = pbk
 		if !validShortID(s.ShortID) {
-			return nil, errors.New("Reality: неверный sid (нужно до 16 символов 0–9, a–f, чётное количество)")
+			return nil, msg.E("reality_bad_sid")
 		}
 		if s.SNI == "" {
 			if !IsDomain(s.Address) {
-				return nil, errors.New("Reality: в ссылке нет sni")
+				return nil, msg.E("reality_no_sni")
 			}
 			s.SNI = s.Address
 			s.Warnings = append(s.Warnings, "Reality: в ссылке нет sni, взят адрес сервера")

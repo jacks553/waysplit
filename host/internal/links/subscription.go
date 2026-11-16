@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -15,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"waysplit/host/internal/hostlog"
+	"waysplit/host/internal/msg"
 )
 
 // DefaultUserAgent — с ним панели (Marzban, Remnawave) отдают список ссылок, а не веб-страницу.
@@ -24,7 +24,7 @@ const DefaultUserAgent = "v2rayN/7.0"
 const maxBody = 10 << 20
 
 // ErrDeviceInsecure — идентификатор устройства не отправляется по адресу без шифрования.
-var ErrDeviceInsecure = errors.New("идентификатор устройства по адресу без шифрования (http://) не отправляется")
+var ErrDeviceInsecure = msg.E("device_insecure")
 
 // SecureForDevice — можно ли слать по этому адресу идентификатор устройства: только по https
 // (правила Chrome Web Store: данные пользователя — по защищённому соединению) или на этот же
@@ -90,8 +90,11 @@ type HTTPError struct {
 	Device DeviceState
 }
 
-func (e *HTTPError) Error() string {
-	return fmt.Sprintf("подписка не скачалась: сервер ответил «%s»", e.Status)
+func (e *HTTPError) Error() string { return e.Phrase().Ru() }
+
+// Phrase — фраза ошибки (пакет msg).
+func (e *HTTPError) Phrase() msg.Text {
+	return msg.New("sub_http_status", "status", e.Status)
 }
 
 // IsStubAddr — адрес «сервера»-заглушки: 0.0.0.0, ::, пусто или порт 0–1. 127.0.0.1 — не
@@ -119,13 +122,13 @@ func FetchWith(ctx context.Context, rawURL, userAgent string, proxy *url.URL, ex
 		return nil, err
 	case err != nil:
 		hostlog.Printf("подписка %s: %v", hostlog.MaskURL(rawURL), err)
-		return nil, fmt.Errorf("подписка не скачалась: %s", shortNetError(err))
+		return nil, &msg.Error{Text: msg.New("sub_net", "reason", netText(err))}
 	case resp.Status != http.StatusOK:
 		return nil, &HTTPError{Status: resp.StatusLine, Device: deviceState(resp.Header)}
 	case resp.ReadErr != nil:
-		return nil, fmt.Errorf("подписка не скачалась: %s", shortNetError(resp.ReadErr))
+		return nil, &msg.Error{Text: msg.New("sub_net", "reason", netText(resp.ReadErr))}
 	case resp.TooBig:
-		return nil, errors.New("подписка слишком большая (больше 10 МБ)")
+		return nil, msg.E("sub_too_big")
 	}
 	body := resp.Body
 	text := DecodeBody(body)
@@ -254,18 +257,21 @@ func DecodeTitle(h string) string {
 func NetError(err error) string { return shortNetError(err) }
 
 // shortNetError — причина по-русски вместо «dial tcp: lookup …: no such host».
-func shortNetError(err error) string {
+func shortNetError(err error) string { return netText(err).Ru() }
+
+// netText — та же причина фразой (пакет msg).
+func netText(err error) msg.Text {
 	var dnsErr *net.DNSError
 	var ue *url.Error
 	switch {
 	case errors.As(err, &dnsErr):
-		return "адрес сервера подписки не найден (" + dnsErr.Name + ")"
+		return msg.New("net_dns", "host", dnsErr.Name)
 	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &ue) && ue.Timeout():
-		return "сервер подписки не ответил вовремя"
+		return msg.New("net_timeout")
 	case errors.Is(err, syscall.ECONNREFUSED), strings.Contains(err.Error(), "refused"):
-		return "сервер подписки не принимает подключения"
+		return msg.New("net_refused")
 	case strings.Contains(err.Error(), "certificate"):
-		return "у сервера подписки неверный сертификат"
+		return msg.New("net_cert")
 	}
-	return hostlog.Mask(err.Error())
+	return msg.New("raw", "error", hostlog.Mask(err.Error()))
 }

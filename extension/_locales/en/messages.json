@@ -1,0 +1,6 @@
+{
+  "extDescription": {
+    "message": "VPN for Chrome via your own VLESS, XHTTP and Hysteria2 servers: some sites through VPN, some without. Needs a Windows companion.",
+    "description": "Short description of the extension: the Chrome Web Store listing and chrome://extensions (132 characters at most)."
+  }
+}

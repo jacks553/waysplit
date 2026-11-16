@@ -4,7 +4,8 @@
 
 import { send } from '../lib/format.js';
 import { PORT_RANGE } from '../lib/storage.js';
-import { HELP_URL, ISSUES_URL } from '../lib/companion.js';
+import { LANGS, language, t } from '../lib/i18n.js';
+import { DOWNLOAD_URL, ISSUES_URL, PHRASES_HOST_VERSION, helpUrl, olderThan } from '../lib/companion.js';
 import { $, ask, el, setIcon, toast } from './ui.js';
 import { S, defineTab } from './state.js';
 import { openDiag } from './diag.js';
@@ -13,74 +14,95 @@ import { permGranted, requestPerm } from './siteperm.js';
 
 let hello = null; // версии компаньона и ядер — спрашиваем один раз, когда вкладку открыли
 
+// fillLanguages — варианты языка: «как в Chrome» и языки из словарей, каждый — своим названием
+// («Русский», «English»): его узнают и те, кто не читает на языке окна.
+let languagesFor = '';
+function fillLanguages(chosen) {
+  if (languagesFor === language()) return;
+  languagesFor = language();
+  const opt = (value, text) => el('option', { value, textContent: text });
+  $('language').replaceChildren(opt('auto', t('settings.language.auto')), ...Object.values(LANGS).map((d) => opt(d.lang, d.name)));
+  $('language').value = chosen; // список собран заново — вернуть выбранное
+}
+
 function render() {
   const settings = S.view.settings;
+  fillLanguages(settings.language);
+  $('helpLink').href = helpUrl(); // у каждого языка своя страница помощи
   for (const r of document.querySelectorAll('input[name="onFailure"]')) r.checked = r.value === settings.onFailure;
   $('webrtcProtection').checked = settings.webrtcProtection;
   $('setRulesWhenOff').checked = settings.rulesWhenOff;
   $('setRuDirect').checked = settings.ruDirect;
   $('autoSiteDomains').checked = settings.autoSiteDomains;
   $('autoSitePerm').hidden = !settings.autoSiteDomains || permGranted();
-  for (const id of ['autoConnect', 'subscriptionUA', 'subscriptionIntervalHours', 'portRangeStart', 'logLevel', 'theme']) {
+  for (const id of ['autoConnect', 'subscriptionUA', 'subscriptionIntervalHours', 'portRangeStart', 'logLevel', 'theme', 'language']) {
     if (document.activeElement !== $(id)) $(id).value = settings[id];
   }
-  $('portRangeEnd').textContent = `(по ${settings.portRangeStart + PORT_RANGE - 1})`;
+  $('portRangeEnd').textContent = t('settings.portsEnd', { port: settings.portRangeStart + PORT_RANGE - 1 });
   renderVersions();
   if (!hello) {
     hello = { pending: true };
     send({ type: 'hello' }).then((resp) => {
-      hello = resp?.ok ? resp.result : { error: resp?.error?.message || 'нет ответа' };
+      hello = resp?.ok ? resp.result : { error: resp?.error?.message || t('common.noAnswer') };
       renderVersions();
     });
   }
 }
 
 function renderVersions() {
-  const parts = [`Расширение ${chrome.runtime.getManifest().version}`];
+  const parts = [t('settings.ver.ext', { version: chrome.runtime.getManifest().version })];
   if (hello?.hostVersion) {
-    parts.push(`компаньон ${hello.hostVersion}`);
+    parts.push(t('settings.ver.host', { version: hello.hostVersion }));
     if (hello.singboxVersion) parts.push(`sing-box ${hello.singboxVersion}`);
     if (hello.xrayVersion) parts.push(`Xray ${hello.xrayVersion}`);
-  } else if (hello?.error) parts.push('компаньон не отвечает');
+  } else if (hello?.error) parts.push(t('settings.ver.hostDown'));
   $('versions').textContent = parts.join(' · ');
+  // Компаньон старее 1.2.0 пишет свои сообщения только по-русски. В английском окне — строка о том,
+  // что его стоит обновить (в русском словаре она пустая, и строки нет).
+  const hint = hello?.hostVersion && olderThan(hello.hostVersion, PHRASES_HOST_VERSION) ? t('settings.ver.hostLang') : '';
+  $('hostLang').hidden = !hint;
+  $('hostLangLink').textContent = hint;
+  $('hostLangLink').href = DOWNLOAD_URL;
 }
 
-async function save(key, value, okText = 'Сохранено') {
+// save — записать настройку; okKey — ключ словаря для сообщения об успехе.
+async function save(key, value, okKey = 'common.saved') {
   const resp = await send({ type: 'setSetting', key, value });
-  if (resp?.ok) toast(okText);
+  if (resp?.ok) toast(t(okKey));
   else {
-    toast(resp?.error?.message || 'Не получилось', 'error');
+    toast(resp?.error?.message || t('common.failed'), 'error');
     render(); // вернуть прежнее значение
   }
 }
 
 for (const r of document.querySelectorAll('input[name="onFailure"]')) {
-  r.addEventListener('change', () => save('onFailure', r.value,
-    r.value === 'block' ? 'Сервер недоступен — сайты не откроются' : 'Сервер недоступен — сайты откроются без VPN'));
+  r.addEventListener('change', () => save('onFailure', r.value, `settings.onFailure.${r.value}.toast`));
 }
 $('webrtcProtection').addEventListener('change', (e) => save('webrtcProtection', e.target.checked));
 // Та же настройка — и в меню «⋯» вкладки «Правила».
-$('setRulesWhenOff').addEventListener('change', (e) => save('rulesWhenOff', e.target.checked, e.target.checked
-  ? 'Правила работают и при выключенном VPN: сайты из правил «через VPN» идут через VPN, остальные — без VPN'
-  : 'При выключенном VPN правила не действуют: все сайты идут без VPN'));
+$('setRulesWhenOff').addEventListener('change', (e) => save('rulesWhenOff', e.target.checked, e.target.checked ? 'rules.whenOff.on' : 'rules.whenOff.off'));
 // «Российские сайты — без VPN» — тот же переключатель, что на «Главной».
-$('setRuDirect').addEventListener('change', (e) => save('ruDirect', e.target.checked, e.target.checked
-  ? 'Российские сайты идут без VPN, даже когда VPN включён. Правила для отдельных сайтов важнее'
-  : 'Российские сайты снова идут как остальные'));
+$('setRuDirect').addEventListener('change', (e) => save('ruDirect', e.target.checked, e.target.checked ? 'settings.ru.on' : 'settings.ru.off'));
 // «Домены сайта»: автосбор для правил «через VPN». Нужно разрешение Chrome видеть запросы вкладок.
-$('autoSiteDomains').addEventListener('change', (e) => save('autoSiteDomains', e.target.checked, e.target.checked
-  ? 'Домены сайта из правил «через VPN» будут добавляться к правилу сами'
-  : 'Новые домены сами не добавляются; уже добавленные остаются — убрать их можно в меню «⋯» правила'));
+$('autoSiteDomains').addEventListener('change', (e) => save('autoSiteDomains', e.target.checked, e.target.checked ? 'settings.autoSite.on' : 'settings.autoSite.off'));
 $('autoSitePermBtn').addEventListener('click', async () => {
-  toast(await requestPerm() ? 'Разрешение получено. Обновите вкладки с сайтами из правил.' : 'Разрешение не дано — работают только готовые наборы.', 'keep');
+  toast(t(await requestPerm() ? 'settings.perm.granted' : 'settings.perm.denied'), 'keep');
 });
 $('autoConnect').addEventListener('change', (e) => save('autoConnect', e.target.value));
-$('logLevel').addEventListener('change', (e) => save('logLevel', e.target.value, 'Сохранено (ядро перезапустится с новым журналом)'));
+$('logLevel').addEventListener('change', (e) => save('logLevel', e.target.value, 'settings.logLevel.saved'));
 $('theme').addEventListener('change', (e) => save('theme', e.target.value));
+// Язык меняется сразу, без перезапуска: окно перечитывает настройки и заменяет надписи (state.js),
+// фон — подсказку значка на панели и свои сообщения. Сообщения «Сохранено» нет: перемену видно и так.
+$('language').addEventListener('change', async (e) => {
+  const resp = await send({ type: 'setSetting', key: 'language', value: e.target.value });
+  if (!resp?.ok) {
+    toast(resp?.error?.message || t('common.failed'), 'error');
+    render();
+  }
+});
 $('subscriptionUA').addEventListener('change', (e) => save('subscriptionUA', e.target.value.trim()));
 $('subscriptionIntervalHours').addEventListener('change', (e) => save('subscriptionIntervalHours', Number(e.target.value)));
-$('portRangeStart').addEventListener('change', (e) => save('portRangeStart', Number(e.target.value),
-  'Сохранено: серверы получили порты из нового диапазона, ядро перезапустилось'));
+$('portRangeStart').addEventListener('change', (e) => save('portRangeStart', Number(e.target.value), 'settings.ports.saved'));
 
 // Резервная копия: в файле секреты — ссылки серверов и адреса подписок. С файлами — на
 // развёрнутой странице: в окне расширения окно выбора файла закрывает окно.
@@ -88,7 +110,7 @@ async function saveBackup() {
   if (!S.full) return openFull('settings', 'backup-save');
   const resp = await send({ type: 'exportBackup' });
   if (!resp?.ok) {
-    toast(resp?.error?.message || 'Не получилось', 'error');
+    toast(resp?.error?.message || t('common.failed'), 'error');
     return;
   }
   const a = el('a', {
@@ -97,7 +119,7 @@ async function saveBackup() {
   });
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  toast(`Копия сохранена: серверов ${resp.result.servers.length}, подписок ${resp.result.subscriptions.length}, правил ${resp.result.rules.length}. В файле секреты — храните его как пароль.`);
+  toast(t('backup.saved', { servers: resp.result.servers.length, subs: resp.result.subscriptions.length, rules: resp.result.rules.length }));
 }
 
 function restoreBackup() {
@@ -110,15 +132,15 @@ function restoreBackup() {
     try {
       data = JSON.parse(await file.text());
     } catch {
-      toast('Файл не читается: это не JSON', 'error');
+      toast(t('file.notJson'), 'error');
       return;
     }
-    if (!(await ask({ title: 'Восстановить из копии?', text: 'Текущие серверы, подписки, правила и настройки будут заменены.', ok: 'Восстановить', danger: true }))) return;
-    toast('Восстанавливаю…');
+    if (!(await ask({ title: t('backup.ask.title'), text: t('backup.ask.text'), ok: t('backup.ask.ok'), danger: true }))) return;
+    toast(t('backup.restoring'));
     const resp = await send({ type: 'importBackup', data });
     toast(resp?.ok
-      ? `Восстановлено: серверов ${resp.result.servers}${resp.result.skipped ? ` (не распознано ${resp.result.skipped})` : ''}, подписок ${resp.result.subscriptions}, правил ${resp.result.rules}. Подписки обновятся сами.`
-      : resp?.error?.message || 'Не получилось', resp?.ok ? '' : 'error');
+      ? t(resp.result.skipped ? 'backup.restoredSkipped' : 'backup.restored', { servers: resp.result.servers, skipped: resp.result.skipped, subs: resp.result.subscriptions, rules: resp.result.rules })
+      : resp?.error?.message || t('common.failed'), resp?.ok ? '' : 'error');
   });
   input.click();
 }
@@ -128,7 +150,6 @@ export const backupActions = { 'backup-save': saveBackup, 'backup-restore': rest
 $('exportBackup').addEventListener('click', saveBackup);
 $('importBackup').addEventListener('click', restoreBackup);
 $('openDiag').addEventListener('click', openDiag);
-$('helpLink').href = HELP_URL;
 $('issuesLink').href = ISSUES_URL;
 setIcon(document.querySelector('#openDiag .chev'), 'chev');
 for (const x of document.querySelectorAll('.list-row .ext')) setIcon(x, 'ext');

@@ -12,7 +12,8 @@ export const S2 = { id: 's_2', name: 'DE', link: 'vless://secret@de.example.com:
 // setup собирает Controller с подделками. events — общий журнал порядка действий.
 // extras: true — ещё подделки защиты WebRTC (privacy) и значка (ui); rtc — что вернёт protect().
 // sets — содержимое domain-sets.json (SETS — настоящее); без него наборов нет.
-export function setup({ local = {}, session = {}, control = 'controlled_by_this_extension', host: handlers = {}, extras = false, rtc = 'on', now = 1000, sets = null } = {}) {
+// chromeLang — язык интерфейса Chrome для настройки языка «как в Chrome»: тесты идут по-русски.
+export function setup({ local = {}, session = {}, control = 'controlled_by_this_extension', host: handlers = {}, extras = false, rtc = 'on', now = 1000, sets = null, chromeLang = 'ru' } = {}) {
   const events = [];
   const store = {
     local: structuredClone(local),
@@ -70,7 +71,7 @@ export function setup({ local = {}, session = {}, control = 'controlled_by_this_
   const privacy = { protect: async () => { events.push('rtc-on'); return rtc; }, release: async () => { events.push('rtc-off'); } };
   const ui = { icons: [], setIcon: async (state, title) => { ui.icons.push({ state, title }); } };
   const clock = { t: now };
-  const c = new Controller({ store, proxy, host, alarms, timers, now: () => clock.t, ...(sets ? { sets: async () => sets } : {}), ...(extras ? { privacy, ui } : {}) });
+  const c = new Controller({ store, proxy, host, alarms, timers, now: () => clock.t, uiLanguage: () => chromeLang, ...(sets ? { sets: async () => sets } : {}), ...(extras ? { privacy, ui } : {}) });
   return { c, store, proxy, host, alarms, timers, events, ui, clock };
 }
 

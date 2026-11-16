@@ -1,7 +1,14 @@
-// Подписи для окна и настроек: протокол, защита, адрес, пинг.
+// Подписи для окна и настроек: протокол, защита, адрес, пинг. Тексты — из словаря (lib/i18n.js).
+
+import { t } from './i18n.js';
+import { NO_ANSWER } from './i18n/legacy.js';
+import { hostPhrase, hostText } from './hostmsg.js';
 
 export const PROTOCOLS = { vless: 'VLESS', hysteria2: 'HY2' };
-export const SECURITY = { none: 'без TLS', tls: 'TLS', reality: 'Reality' };
+const SECURITY = { tls: 'TLS', reality: 'Reality' };
+
+// securityText — «TLS», «Reality», «без TLS».
+export const securityText = (security) => (security === 'none' ? t('fmt.noTls') : SECURITY[security] || security);
 
 // hostPort — «адрес:порт», IPv6 в квадратных скобках.
 export function hostPort(s) {
@@ -11,10 +18,25 @@ export function hostPort(s) {
 // serverMeta — «VLESS · Reality · nl1.example.com:443». У серверов, которые запускает Xray
 // (XHTTP, VLESS Encryption — SPEC-XRAY.md), в конце — «Xray».
 export function serverMeta(s) {
-  const parts = [PROTOCOLS[s.protocol] || s.protocol, SECURITY[s.security] || s.security, hostPort(s)];
+  const parts = [PROTOCOLS[s.protocol] || s.protocol, securityText(s.security), hostPort(s)];
   if (s.core === 'xray') parts.push('Xray');
   return parts.join(' · ');
 }
+
+// pingReason — код фразы, почему сервер не ответил на пинг (ping_no_response…): записанной
+// вместе с ошибкой (lastPingMsg) или узнанной по тексту старого компаньона; незнакома — пусто.
+export const pingReason = (s) => (s?.lastPingError ? hostPhrase(s.lastPingMsg, s.lastPingError)?.msg || '' : '');
+
+// pingError — почему сервер не ответил, на языке окна: по фразе, а если она незнакома — текст,
+// как он записан.
+export function pingError(s) {
+  if (!s?.lastPingError) return '';
+  if (!s.lastPingMsg && s.lastPingError === NO_ANSWER) return t('common.noAnswer');
+  return hostText(s.lastPingMsg, s.lastPingError);
+}
+
+// subError — почему подписка не скачалась, на языке окна ('' — скачалась).
+export const subError = (sub) => (sub?.lastError ? hostText(sub.lastErrorMsg, sub.lastError) : '');
 
 // pingBars — полоски задержки в окне (SPEC-POPUP.md): n от 1 до 4 (больше — лучше), 0 — нет ответа,
 // -1 — ещё не меряли. Пинг меряется запросом через сам сервер (соединение, TLS, ответ сайта),
@@ -22,10 +44,10 @@ export function serverMeta(s) {
 export function pingBars(s) {
   if (s?.lastPingMs > 0) {
     const ms = s.lastPingMs;
-    return { n: ms < 600 ? 4 : ms < 1000 ? 3 : ms < 1600 ? 2 : 1, title: `${ms} мс` };
+    return { n: ms < 600 ? 4 : ms < 1000 ? 3 : ms < 1600 ? 2 : 1, title: t('fmt.ms', { ms }) };
   }
-  if (s?.lastPingError) return { n: 0, title: `нет ответа: ${s.lastPingError}` };
-  return { n: -1, title: 'пинг ещё не проверялся' };
+  if (s?.lastPingError) return { n: 0, title: t('fmt.ping.failed', { error: pingError(s) }) };
+  return { n: -1, title: t('fmt.ping.never') };
 }
 
 // splitFlag — флаг страны из имени сервера: «🇳🇱 Амстердам» → { flag: '🇳🇱', name: 'Амстердам' }.
@@ -38,20 +60,6 @@ export function splitFlag(name) {
   return { flag: any ? any[0] : '', name: text.trim() };
 }
 
-// plural — «1 сервер», «2 сервера», «5 серверов».
-export function plural(n, [one, few, many]) {
-  const a = Math.abs(n) % 100;
-  const b = a % 10;
-  if (a > 10 && a < 20) return `${n} ${many}`;
-  if (b === 1) return `${n} ${one}`;
-  if (b >= 2 && b <= 4) return `${n} ${few}`;
-  return `${n} ${many}`;
-}
-
-// Слова для plural — одни на всё окно.
-export const SERVER_WORDS = ['сервер', 'сервера', 'серверов'];
-export const DOMAIN_WORDS = ['домен', 'домена', 'доменов'];
-
 // PING_FRESH_MS — сколько пинг сервера считается свежим: моложе — окно расширения не меряет его
 // заново при каждом открытии (меньше запросов через сервер; число в статусе — не старше минуты).
 export const PING_FRESH_MS = 60_000;
@@ -60,7 +68,7 @@ export const PING_FRESH_MS = 60_000;
 export function freshPing(s, now = Date.now()) {
   if (!s?.lastPingAt || now - s.lastPingAt >= PING_FRESH_MS || now < s.lastPingAt) return null;
   if (s.lastPingMs > 0) return { ms: s.lastPingMs, error: '' };
-  if (s.lastPingError) return { ms: null, error: s.lastPingError };
+  if (s.lastPingError) return { ms: null, error: pingError(s) };
   return null;
 }
 
@@ -75,7 +83,7 @@ export async function send(msg) {
   try {
     return await chrome.runtime.sendMessage(msg);
   } catch (e) {
-    return { ok: false, error: { code: 'NO_BACKGROUND', message: `Фоновая часть расширения не отвечает: ${e.message}` } };
+    return { ok: false, error: { code: 'NO_BACKGROUND', message: t('err.NO_BACKGROUND', { error: e.message }) } };
   }
 }
 
@@ -86,9 +94,9 @@ export const parseAction = (v) => (v === 'direct' ? { action: 'direct', serverId
 export function fillActions(select, servers, value) {
   const opt = (v, text) => Object.assign(document.createElement('option'), { value: v, textContent: text });
   select.replaceChildren(
-    opt('direct', 'Без VPN'),
-    opt('proxy:', 'Через VPN — текущий сервер'),
-    ...servers.map((s) => opt(`proxy:${s.id}`, `Через VPN — ${s.name}`)),
+    opt('direct', t('action.direct')),
+    opt('proxy:', t('action.proxyCurrent')),
+    ...servers.map((s) => opt(`proxy:${s.id}`, t('action.proxyServer', { server: s.name }))),
   );
   select.value = [...select.options].some((o) => o.value === value) ? value : 'proxy:';
 }
@@ -101,43 +109,45 @@ export function maskUrl(u) {
 
 // fmtBytes — «12,3 ГБ» / «512 МБ».
 export function fmtBytes(n) {
-  if (n >= 1 << 30) return `${(n / (1 << 30)).toFixed(1).replace('.', ',')} ГБ`;
-  return `${Math.round(n / (1 << 20))} МБ`;
+  if (n >= 1 << 30) return t('fmt.gb', { n: (n / (1 << 30)).toFixed(1).replace('.', t('fmt.decimal')) });
+  return t('fmt.mb', { n: Math.round(n / (1 << 20)) });
 }
 
 // fmtUptime — сколько работает ядро (секунды от компаньона): «меньше минуты», «12 мин», «3 ч 5 мин»;
 // нет числа — «—».
 export function fmtUptime(sec) {
   if (typeof sec !== 'number' || !Number.isFinite(sec) || sec < 0) return '—';
-  if (sec < 60) return 'меньше минуты';
+  if (sec < 60) return t('fmt.uptime.lessMinute');
   const min = Math.floor(sec / 60);
-  return min < 60 ? `${min} мин` : `${Math.floor(min / 60)} ч ${min % 60} мин`;
+  return min < 60 ? t('fmt.uptime.min', { min }) : t('fmt.uptime.hours', { h: Math.floor(min / 60), min: min % 60 });
 }
 
 // coreText — состояние ядра для диагностики; idle — что сказать, если оно не запущено и ошибки нет.
 // Компаньон отдаёт uptime в секундах и ports — локальные порты серверов этого ядра; чего нет — «—».
-export function coreText(c, idle = 'не запущено') {
+export function coreText(c, idle = t('fmt.core.idle')) {
   if (!c) return '—';
-  if (c.running) return `работает, PID ${c.pid ?? '—'}, ${fmtUptime(c.uptime)}, портов ${Array.isArray(c.ports) ? c.ports.length : '—'}`;
-  return c.lastError ? `не запущено (${c.lastError})` : idle;
+  if (c.running) return t('fmt.core.running', { pid: c.pid ?? '—', uptime: fmtUptime(c.uptime), ports: Array.isArray(c.ports) ? c.ports.length : '—' });
+  return c.lastError ? t('fmt.core.failed', { error: hostText(c.lastErrorMsg, c.lastError) }) : idle;
 }
 
-// fmtDate — «07.11.2026 14:20» (или без времени).
+// fmtDate — «07.11.2026 14:20» (или без времени); порядок частей — из словаря.
 export function fmtDate(ms, withTime = true) {
   const d = new Date(ms);
   const p = (x) => String(x).padStart(2, '0');
-  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}${withTime ? ` ${p(d.getHours())}:${p(d.getMinutes())}` : ''}`;
+  return t(withTime ? 'fmt.dateTime' : 'fmt.date', {
+    dd: p(d.getDate()), mm: p(d.getMonth() + 1), yyyy: d.getFullYear(), hh: p(d.getHours()), min: p(d.getMinutes()),
+  });
 }
 
 // addSummary — итог добавления ссылок: «Добавлено 2, пропущено 1: …; подписка «X»: новых 34, …».
 export function addSummary({ added, skipped, subscriptions = [] }) {
   const reasons = [...new Set(skipped.map((s) => s.reason))];
   const parts = [];
-  if (added || skipped.length || !subscriptions.length) parts.push(`Добавлено ${added}, пропущено ${skipped.length}${reasons.length ? `: ${reasons.join('; ')}` : ''}`);
+  if (added || skipped.length || !subscriptions.length) parts.push(`${t('add.summary', { added, skipped: skipped.length })}${reasons.length ? `: ${reasons.join('; ')}` : ''}`);
   for (const s of subscriptions) {
     const why = [...new Set(s.skipped.map((x) => x.reason))];
-    parts.push(`Подписка «${s.name}»: серверов ${s.added + s.kept}, новых ${s.added}, пропущено ${s.skipped.length}${why.length ? ` (${why.join('; ')})` : ''}` +
-      (s.device ? '; привязана к этому компьютеру как устройство' : ''));
+    parts.push(`${t('add.sub', { name: s.name, servers: s.added + s.kept, added: s.added, skipped: s.skipped.length })}${why.length ? ` (${why.join('; ')})` : ''}` +
+      (s.device ? `; ${t('add.sub.device')}` : ''));
   }
   return parts.join('. ');
 }

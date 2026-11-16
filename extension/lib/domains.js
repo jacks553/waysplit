@@ -3,28 +3,30 @@
 // Chrome передаёт в PAC имена в punycode и нижнем регистре, поэтому правила хранятся так же:
 // «пример.рф» → «xn--e1afmkfd.xn--p1ai», зона «рф» → «xn--p1ai».
 
+import { t } from './i18n.js';
+
 // normalizeDomain принимает адрес или домен: убирает схему, путь, порт, «www.», «*.» и точку
 // в начале (зона «.ru» → «ru»), переводит кириллицу в punycode (это делает new URL).
-// Ответ: { domain } или { error } с причиной по-русски.
+// Ответ: { domain } или { error } с причиной на текущем языке.
 export function normalizeDomain(input) {
   let s = String(input ?? '').trim().toLowerCase();
-  if (!s) return { error: 'пустая строка' };
+  if (!s) return { error: t('domain.empty') };
   s = s.replace(/^\*\./, '').replace(/^\.+/, '');
   let host;
   try {
     host = new URL(/^[a-z][a-z0-9+.-]*:\/\//.test(s) ? s : `http://${s}`).hostname;
   } catch {
-    return { error: 'не похоже на домен' };
+    return { error: t('domain.bad') };
   }
   host = host.replace(/\.$/, '');
   if (host.startsWith('www.') && host.length > 4) host = host.slice(4);
-  if (host.startsWith('[') || /^\d+(\.\d+){3}$/.test(host)) return { error: 'правила — для доменов, а не для IP-адресов' };
-  if (!host || host.length > 253) return { error: 'не похоже на домен' };
+  if (host.startsWith('[') || /^\d+(\.\d+){3}$/.test(host)) return { error: t('domain.ip') };
+  if (!host || host.length > 253) return { error: t('domain.bad') };
   for (const label of host.split('.')) {
-    if (!/^[a-z0-9-]{1,63}$/.test(label) || label.startsWith('-') || label.endsWith('-')) return { error: 'не похоже на домен' };
+    if (!/^[a-z0-9-]{1,63}$/.test(label) || label.startsWith('-') || label.endsWith('-')) return { error: t('domain.bad') };
   }
   if (host === 'localhost' || /\.(localhost|local|lan)$/.test(host) || host === 'local' || host === 'lan') {
-    return { error: 'локальные адреса всегда идут без VPN' };
+    return { error: t('domain.local') };
   }
   return { domain: host };
 }
@@ -105,14 +107,14 @@ function decodeLabel(input) {
     const oldi = i;
     let w = 1;
     for (let k = BASE; ; k += BASE) {
-      if (idx >= input.length) throw new Error('обрыв');
+      if (idx >= input.length) throw new Error('truncated');
       const c = input.charCodeAt(idx++);
       const digit = c >= 48 && c <= 57 ? c - 22 : c >= 97 && c <= 122 ? c - 97 : BASE; // 0–9 → 26–35, a–z → 0–25
-      if (digit >= BASE) throw new Error('не цифра');
+      if (digit >= BASE) throw new Error('not a digit');
       i += digit * w;
-      const t = k <= bias ? TMIN : k >= bias + TMAX ? TMAX : k - bias;
-      if (digit < t) break;
-      w *= BASE - t;
+      const threshold = k <= bias ? TMIN : k >= bias + TMAX ? TMAX : k - bias;
+      if (digit < threshold) break;
+      w *= BASE - threshold;
     }
     const len = out.length + 1;
     bias = adapt(i - oldi, len, oldi === 0);

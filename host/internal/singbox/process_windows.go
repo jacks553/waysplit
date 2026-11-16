@@ -2,7 +2,6 @@ package singbox
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"os"
@@ -18,6 +17,7 @@ import (
 
 	"waysplit/host/internal/corebin"
 	"waysplit/host/internal/hostlog"
+	"waysplit/host/internal/msg"
 )
 
 // Engine — чем отличаются ядра при запуске (sing-box, Xray): имя, файлы, команда запуска.
@@ -54,16 +54,17 @@ type Core struct {
 	done    chan struct{}
 	started time.Time
 	ports   []int
-	lastErr string
+	lastErr *msg.Text // последняя ошибка ядра
 }
 
 // Status — состояние ядра для расширения.
 type Status struct {
-	Running   bool   `json:"running"`
-	PID       int    `json:"pid,omitempty"`
-	Uptime    int64  `json:"uptime"` // секунды
-	Ports     []int  `json:"ports,omitempty"`
-	LastError string `json:"lastError,omitempty"`
+	Running      bool      `json:"running"`
+	PID          int       `json:"pid,omitempty"`
+	Uptime       int64     `json:"uptime"` // секунды
+	Ports        []int     `json:"ports,omitempty"`
+	LastError    string    `json:"lastError,omitempty"`
+	LastErrorMsg *msg.Text `json:"lastErrorMsg,omitempty"` // она же фразой (пакет msg)
 }
 
 // StartTimeout — сколько ждать, пока ядро откроет все порты.
@@ -86,7 +87,7 @@ func (c *Core) pidPath() string    { return filepath.Join(c.DataDir, c.eng().PID
 func (c *Core) Start(cfg *Config) error {
 	data, err := cfg.JSON()
 	if err != nil {
-		return &Error{Code: "START_FAILED", Message: "не удалось собрать конфиг: " + err.Error()}
+		return NewError("START_FAILED", msg.New("config_build", "error", err.Error()))
 	}
 	var ports []int
 	for _, in := range cfg.Inbounds {
@@ -102,9 +103,10 @@ func (c *Core) StartData(data []byte, ports []int) error {
 	defer c.mu.Unlock()
 	c.stopLocked()
 	err := c.startLocked(data, ports)
-	c.lastErr = ""
+	c.lastErr = nil
 	if err != nil {
-		c.lastErr = err.Error()
+		t := msg.From(err)
+		c.lastErr = &t
 		hostlog.Printf("запуск %s: %v", c.eng().Name, err)
 	}
 	return err
@@ -132,7 +134,10 @@ func (c *Core) Close() {
 func (c *Core) Status() Status {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	st := Status{Running: c.cmd != nil, LastError: c.lastErr}
+	st := Status{Running: c.cmd != nil}
+	if c.lastErr != nil {
+		st.LastError, st.LastErrorMsg = c.lastErr.Ru(), c.lastErr
+	}
 	if c.cmd != nil {
 		st.PID = c.cmd.Process.Pid
 		st.Uptime = int64(time.Since(c.started).Seconds())
@@ -144,7 +149,7 @@ func (c *Core) Status() Status {
 func (c *Core) startLocked(data []byte, ports []int) error {
 	e := c.eng()
 	if err := os.MkdirAll(c.DataDir, 0o755); err != nil {
-		return &Error{Code: "START_FAILED", Message: "не удалось создать папку " + c.DataDir}
+		return NewError("START_FAILED", msg.New("dir_create", "dir", c.DataDir))
 	}
 	KillOrphan(c.Bin, c.pidPath())
 
@@ -152,12 +157,12 @@ func (c *Core) startLocked(data []byte, ports []int) error {
 		return err
 	}
 	if err := writeAtomic(c.ConfigPath(), data); err != nil {
-		return &Error{Code: "START_FAILED", Message: "не удалось записать конфиг: " + err.Error()}
+		return NewError("START_FAILED", msg.New("config_write", "error", err.Error()))
 	}
 
 	logf, err := openLog(c.LogPath())
 	if err != nil {
-		return &Error{Code: "START_FAILED", Message: "не удалось открыть " + e.LogFile + ": " + err.Error()}
+		return NewError("START_FAILED", msg.New("log_open", "file", e.LogFile, "error", err.Error()))
 	}
 	cmd := exec.Command(c.Bin, e.RunArgs(c.ConfigPath(), c.DataDir)...)
 	cmd.Dir = c.DataDir
@@ -166,13 +171,13 @@ func (c *Core) startLocked(data []byte, ports []int) error {
 	err = cmd.Start()
 	logf.Close() // у ядра своя копия дескриптора
 	if err != nil {
-		return &Error{Code: "START_FAILED", Message: e.Name + " не запустился: " + hostlog.Mask(err.Error())}
+		return NewError("START_FAILED", msg.New("core_start", "core", e.Name, "error", hostlog.Mask(err.Error())))
 	}
 	pid := cmd.Process.Pid
 	if err := c.attachJob(pid); err != nil {
 		cmd.Process.Kill()
 		cmd.Wait()
-		return &Error{Code: "START_FAILED", Message: "не удалось привязать " + e.Name + " к компаньону (Job Object): " + err.Error()}
+		return NewError("START_FAILED", msg.New("core_job", "core", e.Name, "error", err.Error()))
 	}
 	os.WriteFile(c.pidPath(), []byte(strconv.Itoa(pid)), 0o644)
 	hostlog.Printf("%s запущен, PID %d, порты %v", e.Name, pid, ports)
@@ -189,7 +194,9 @@ func (c *Core) startLocked(data []byte, ports []int) error {
 			case <-done:
 				c.cmd = nil
 				os.Remove(c.pidPath())
-				return &Error{Code: "START_FAILED", Message: e.Name + " сразу завершился: " + lastLogLine(c.LogPath()), Detail: Tail(c.LogPath(), 20)}
+				err := NewError("START_FAILED", msg.New("core_exited", "core", e.Name, "line", lastLogLine(c.LogPath())))
+				err.Detail = Tail(c.LogPath(), 20)
+				return err
 			default:
 			}
 			conn, err := net.DialTimeout("tcp", addr, 300*time.Millisecond)
@@ -199,7 +206,9 @@ func (c *Core) startLocked(data []byte, ports []int) error {
 			}
 			if time.Now().After(deadline) {
 				c.stopLocked()
-				return &Error{Code: "START_TIMEOUT", Message: fmt.Sprintf("%s не открыл порт %d за %d секунд", e.Name, p, int(StartTimeout.Seconds())), Detail: Tail(c.LogPath(), 20)}
+				err := NewError("START_TIMEOUT", msg.New("start_timeout", "core", e.Name, "port", p, "sec", int(StartTimeout.Seconds())))
+				err.Detail = Tail(c.LogPath(), 20)
+				return err
 			}
 			time.Sleep(50 * time.Millisecond)
 		}
@@ -218,8 +227,9 @@ func (c *Core) watch(cmd *exec.Cmd, done chan struct{}) {
 	}
 	c.cmd = nil
 	os.Remove(c.pidPath())
-	c.lastErr = c.eng().Name + " неожиданно завершился: " + lastLogLine(c.LogPath())
-	hostlog.Printf("%s (%v)", c.lastErr, err)
+	t := msg.New("core_died", "core", c.eng().Name, "line", lastLogLine(c.LogPath()))
+	c.lastErr = &t
+	hostlog.Printf("%s (%v)", t.Ru(), err)
 }
 
 func (c *Core) stopLocked() {
@@ -309,9 +319,9 @@ func waitPortsFree(ports []int, wait time.Duration) error {
 			}
 			if time.Now().After(deadline) {
 				if errors.Is(err, windows.WSAEACCES) {
-					return &Error{Code: "PORT_BUSY", Message: fmt.Sprintf("Порт %d зарезервирован Windows — выберите другой диапазон портов", p)}
+					return NewError("PORT_BUSY", msg.New("port_reserved", "port", p))
 				}
-				return &Error{Code: "PORT_BUSY", Message: fmt.Sprintf("Порт %d занят другой программой", p)}
+				return NewError("PORT_BUSY", msg.New("port_busy", "port", p))
 			}
 			time.Sleep(100 * time.Millisecond)
 		}
@@ -348,12 +358,13 @@ func Tail(path string, n int) string {
 	return strings.Join(lines, "\n")
 }
 
-func lastLogLine(path string) string {
+// lastLogLine — последняя строка журнала ядра (строка) или фраза «причина неизвестна».
+func lastLogLine(path string) any {
 	lines := strings.Split(Tail(path, 5), "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
 		if l := firstLine(lines[i]); l != "" {
 			return l
 		}
 	}
-	return "причина неизвестна, см. " + filepath.Base(path)
+	return msg.New("unknown_reason", "file", filepath.Base(path))
 }

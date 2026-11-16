@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,34 +10,37 @@
   <script type="module" src="popup.js"></script>
 </head>
 <!-- Окно расширения (SPEC-POPUP.md): вкладки внизу, вложенные экраны поверх вкладки. Та же
-     страница открывается и на всю вкладку браузера (?full — «Развернуть», страница настроек). -->
+     страница открывается и на всю вкладку браузера (?full — «Развернуть», страница настроек).
+     Надписей в разметке нет: data-i18n="ключ" — текст элемента, data-i18n-title, -aria-label,
+     -placeholder — его атрибуты; сами тексты — в словарях lib/i18n/ (их подставляет lib/i18n.js).
+     Вложенный элемент с data-slot="имя" остаётся в тексте на месте {имя}. -->
 <body>
 <div class="app" id="app">
   <header class="top" id="top">
     <img class="logo" src="../icons/icon48.png" alt="" width="24" height="24">
     <span class="brand">Waysplit</span>
-    <button class="icon-btn" id="helpBtn" type="button" aria-label="Помощь" aria-haspopup="menu" title="Помощь"></button>
-    <button class="icon-btn" id="expandBtn" type="button" aria-label="Развернуть на всю вкладку" title="Развернуть на всю вкладку"></button>
+    <button class="icon-btn" id="helpBtn" type="button" data-i18n-aria-label="top.help" aria-haspopup="menu" data-i18n-title="top.help"></button>
+    <button class="icon-btn" id="expandBtn" type="button" data-i18n-aria-label="top.expand" data-i18n-title="top.expand"></button>
   </header>
 
   <main class="content" id="content">
     <!-- Главная -->
     <section class="panel" id="panel-home" role="tabpanel" aria-labelledby="tab-home">
       <div class="conflict" id="conflict" role="alert" hidden>
-        <strong>Прокси сейчас управляет другое расширение.</strong>
-        Отключите его: пока оно включено, Waysplit не может направить трафик через свой сервер.
+        <strong data-i18n="home.conflict.title"></strong>
+        <span data-i18n="home.conflict.text"></span>
       </div>
       <div class="conflict" id="webrtcWarn" role="alert" hidden>
-        <strong>Защита WebRTC не включилась.</strong>
-        Этой настройкой управляет другое расширение — сайты могут узнать ваш настоящий IP через WebRTC.
+        <strong data-i18n="home.webrtc.title"></strong>
+        <span data-i18n="home.webrtc.text"></span>
       </div>
 
       <section class="power-block">
         <button class="power" id="power" type="button" aria-pressed="false" data-state="off">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5v8"/><path d="M6.6 6.9a7.6 7.6 0 1 0 10.8 0"/></svg>
         </button>
-        <p class="power-label">VPN для всех сайтов</p>
-        <p class="status" id="status" aria-live="polite">Выключено</p>
+        <p class="power-label" data-i18n="home.powerLabel"></p>
+        <p class="status" id="status" aria-live="polite" data-i18n="home.status.off"></p>
         <p class="detail" id="detail"></p>
       </section>
 
@@ -47,15 +50,15 @@
         <button class="link small-link" id="problemGo" type="button" hidden></button>
         <ol class="steps" id="steps" hidden></ol>
         <div class="download-row" id="downloadRow" hidden>
-          <a class="btn btn-small" id="download" href="#" target="_blank" rel="noopener">Скачать</a>
-          <a class="release-link" id="releasePage" href="#" target="_blank" rel="noopener">страница выпуска</a>
+          <a class="btn btn-small" id="download" href="#" target="_blank" rel="noopener" data-i18n="common.download"></a>
+          <a class="release-link" id="releasePage" href="#" target="_blank" rel="noopener" data-i18n="home.releasePage"></a>
         </div>
       </div>
 
       <button class="card row-card" id="serverRow" type="button" hidden>
         <span class="flag" id="srvFlag"></span>
         <span class="row-main">
-          <span class="row-label" id="srvLabel">Сервер</span>
+          <span class="row-label" id="srvLabel" data-i18n="home.server"></span>
           <span class="row-name" id="srvName"></span>
         </span>
         <span id="srvBars"></span>
@@ -65,60 +68,60 @@
       <button class="card ru-row" id="ruSwitch" type="button" role="switch" aria-checked="false" hidden>
         <span class="switch" aria-hidden="true"></span>
         <span class="ru-text">
-          <span class="ru-title">Российские сайты — без VPN</span>
-          <span class="ru-sub">.ru, .рф, .su, VK, Яндекс и другие</span>
+          <span class="ru-title" data-i18n="ru.title"></span>
+          <span class="ru-sub" data-i18n="ru.sub"></span>
         </span>
       </button>
 
       <section class="card perm-card" id="permHome" hidden></section>
 
       <section class="card site" id="site" hidden>
-        <span class="row-label">Этот сайт</span>
+        <span class="row-label" data-i18n="home.thisSite"></span>
         <div class="reload" id="siteNew" role="status" hidden>
-          <span id="siteNewText">Найдены новые домены сайта — обновите вкладку</span>
-          <button class="btn btn-small" id="siteNewReload" type="button">Обновить вкладку</button>
+          <span id="siteNewText" data-i18n="home.siteNew"></span>
+          <button class="btn btn-small" id="siteNewReload" type="button" data-i18n="common.reloadTab"></button>
         </div>
         <div class="site-main">
           <span class="favicon" id="siteIcon" aria-hidden="true"></span>
-          <select class="site-domain" id="siteDomain" aria-label="Для какого домена правило"></select>
+          <select class="site-domain" id="siteDomain" data-i18n-aria-label="home.siteDomain.aria"></select>
         </div>
         <p class="site-why" id="siteWhy"></p>
         <div class="site-warn" id="siteWarn" hidden>
           <span id="siteWarnText"></span>
-          <button class="btn btn-small" id="siteWarnFix" type="button">Включить правила</button>
+          <button class="btn btn-small" id="siteWarnFix" type="button" data-i18n="home.warn.enableRules"></button>
         </div>
         <div class="site-controls" id="siteControls">
           <button class="switch-row" id="siteSwitch" type="button" role="switch" aria-checked="false">
             <span class="switch" aria-hidden="true"></span>
-            <span id="siteSwitchText">Без VPN</span>
+            <span id="siteSwitchText" data-i18n="action.direct"></span>
           </button>
-          <button class="flag-btn" id="siteServer" type="button" aria-label="Сервер для этого сайта" title="Сервер для этого сайта">
+          <button class="flag-btn" id="siteServer" type="button" data-i18n-aria-label="home.siteServer" data-i18n-title="home.siteServer">
             <span class="flag" id="siteFlag"></span>
             <span class="chev small" aria-hidden="true"></span>
           </button>
         </div>
         <div class="site-links">
-          <button class="link small-link" id="ruleRemove" type="button" hidden>Убрать правило</button>
-          <button class="link small-link" id="tdButton" type="button" aria-expanded="false">Домены этой вкладки</button>
+          <button class="link small-link" id="ruleRemove" type="button" hidden data-i18n="home.ruleRemove"></button>
+          <button class="link small-link" id="tdButton" type="button" aria-expanded="false" data-i18n="home.tabDomains"></button>
         </div>
         <div class="td" id="td" hidden>
           <p class="td-note" id="tdNote"></p>
           <ul class="td-list" id="tdList"></ul>
           <div class="td-actions" id="tdActions" hidden>
-            <select class="select-small" id="tdAction" aria-label="Что делать с отмеченными доменами"></select>
-            <button class="btn btn-small" id="tdAdd" type="button">Добавить правила</button>
+            <select class="select-small" id="tdAction" data-i18n-aria-label="home.td.action.aria"></select>
+            <button class="btn btn-small" id="tdAdd" type="button" data-i18n="home.td.add"></button>
           </div>
         </div>
         <div class="reload" id="reload" hidden>
-          <span>Правило сохранено. Обновите вкладку: уже открытые соединения могут ещё идти по-старому.</span>
-          <button class="btn btn-small" id="reloadTab" type="button">Обновить вкладку</button>
+          <span data-i18n="home.ruleSaved"></span>
+          <button class="btn btn-small" id="reloadTab" type="button" data-i18n="common.reloadTab"></button>
         </div>
       </section>
 
       <form class="card add-card" id="homeAdd" hidden>
-        <label class="row-label" for="homeLinks">Добавьте сервер: вставьте ссылку или адрес подписки</label>
-        <textarea id="homeLinks" rows="3" spellcheck="false" placeholder="vless://… или hysteria2://… — по одной на строку&#10;https://… — подписка"></textarea>
-        <button class="btn" id="homeAddBtn" type="submit">Добавить</button>
+        <label class="row-label" for="homeLinks" data-i18n="home.add.label"></label>
+        <textarea id="homeLinks" rows="3" spellcheck="false" data-i18n-placeholder="common.linksPlaceholder"></textarea>
+        <button class="btn" id="homeAddBtn" type="submit" data-i18n="common.add"></button>
         <p class="add-result" id="homeAddResult" hidden></p>
       </form>
     </section>
@@ -126,142 +129,146 @@
     <!-- Серверы -->
     <section class="panel" id="panel-servers" role="tabpanel" aria-labelledby="tab-servers" hidden>
       <div class="panel-head">
-        <h2>Серверы <span class="count" id="srvCount"></span></h2>
-        <button class="btn btn-small" id="srvAdd" type="button">+ Добавить</button>
+        <h2><span data-i18n="servers.title"></span> <span class="count" id="srvCount"></span></h2>
+        <button class="btn btn-small" id="srvAdd" type="button" data-i18n="servers.add"></button>
       </div>
-      <input class="search" id="srvSearch" type="search" placeholder="Поиск по имени или адресу" autocomplete="off">
+      <input class="search" id="srvSearch" type="search" data-i18n-placeholder="servers.search" autocomplete="off">
       <div class="tools">
-        <button class="ghost" id="pingAll" type="button">Пинг всех</button>
-        <button class="ghost" id="fastest" type="button">Самый быстрый</button>
+        <button class="ghost" id="pingAll" type="button" data-i18n="servers.pingAll"></button>
+        <button class="ghost" id="fastest" type="button" data-i18n="servers.fastest"></button>
       </div>
       <div id="srvGroups"></div>
-      <p class="empty" id="srvEmpty" hidden>Серверов пока нет. Нажмите «+ Добавить» и вставьте ссылки серверов или адрес подписки.</p>
-      <p class="hint" id="srvHint">Нажмите на сервер, чтобы сделать его текущим. Порядок — перетаскиванием или «Выше» / «Ниже» в меню ⋯.</p>
+      <p class="empty" id="srvEmpty" hidden data-i18n="servers.empty"></p>
+      <p class="hint" id="srvHint" data-i18n="servers.hint"></p>
     </section>
 
     <!-- Правила -->
     <section class="panel" id="panel-rules" role="tabpanel" aria-labelledby="tab-rules" hidden>
       <div class="panel-head">
-        <h2>Правила сайтов <span class="count" id="rulesCount"></span></h2>
-        <button class="icon-btn" id="rulesMore" type="button" aria-label="Ещё: наборы, импорт, экспорт" aria-haspopup="menu" title="Ещё"></button>
+        <h2><span data-i18n="rules.title"></span> <span class="count" id="rulesCount"></span></h2>
+        <button class="icon-btn" id="rulesMore" type="button" data-i18n-aria-label="rules.more.aria" aria-haspopup="menu" data-i18n-title="common.more"></button>
       </div>
-      <p class="rules-ru" id="rulesRu" hidden>Российские сайты — без VPN: включено</p>
+      <p class="rules-ru" id="rulesRu" hidden data-i18n="rules.ruOn"></p>
       <form class="rule-add" id="ruleForm">
-        <textarea class="search rule-input" id="ruleInput" rows="1" spellcheck="false" placeholder="Введите домен" aria-label="Домен или адрес сайта (несколько — по одному на строку); заодно поиск по правилам"></textarea>
-        <select class="select-small" id="ruleAction" aria-label="Что делать с этими сайтами"></select>
-        <button class="btn plus" type="submit" aria-label="Добавить правило" title="Добавить правило">+</button>
+        <textarea class="search rule-input" id="ruleInput" rows="1" spellcheck="false" data-i18n-placeholder="rules.input.placeholder" data-i18n-aria-label="rules.input.aria"></textarea>
+        <select class="select-small" id="ruleAction" data-i18n-aria-label="rules.action.aria"></select>
+        <button class="btn plus" type="submit" data-i18n-aria-label="rules.addRule" data-i18n-title="rules.addRule">+</button>
       </form>
       <p class="rules-off" id="rulesOff" hidden></p>
       <section class="card perm-card" id="permRules" hidden></section>
       <ul class="rules" id="rulesList"></ul>
       <div class="empty-box" id="rulesEmpty" hidden>
-        <p><b>Правил пока нет.</b> Правило говорит, как открывать сайт: через VPN (через текущий или выбранный сервер) или без VPN.</p>
-        <p>Например: <code>example.com</code> → «Без VPN» — сайт и все его поддомены (www.example.com, m.example.com) пойдут без VPN, даже когда VPN включён.</p>
+        <p data-i18n="rules.empty.p1"><b data-slot="title" data-i18n="rules.empty.title"></b></p>
+        <p data-i18n="rules.empty.p2"><code data-slot="domain">example.com</code></p>
       </div>
-      <p class="hint" id="rulesHint">Правило для домена действует и на все поддомены, побеждает самое конкретное. Можно задать целую зону: ru, рф, su.</p>
+      <p class="hint" id="rulesHint" data-i18n="rules.hint"></p>
     </section>
 
     <!-- Настройки -->
     <section class="panel" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
-      <div class="panel-head"><h2>Настройки</h2></div>
+      <div class="panel-head"><h2 data-i18n="tabs.settings"></h2></div>
 
       <fieldset class="group">
-        <legend>Если сервер недоступен</legend>
+        <legend data-i18n="settings.onFailure.legend"></legend>
         <label class="check"><input type="radio" name="onFailure" value="block">
-          <span class="opt"><span class="opt-name">Не открывать сайт</span>
-            <span class="opt-note">Защита от утечки: пока сервер недоступен, сайт не откроется</span></span></label>
+          <span class="opt"><span class="opt-name" data-i18n="settings.onFailure.block"></span>
+            <span class="opt-note" data-i18n="settings.onFailure.block.note"></span></span></label>
         <label class="check"><input type="radio" name="onFailure" value="direct">
-          <span class="opt"><span class="opt-name">Открыть без VPN</span>
-            <span class="opt-note">Сайт откроется, но с вашего настоящего IP</span></span></label>
+          <span class="opt"><span class="opt-name" data-i18n="settings.onFailure.direct"></span>
+            <span class="opt-note" data-i18n="settings.onFailure.direct.note"></span></span></label>
       </fieldset>
 
       <fieldset class="group">
-        <legend>Правила сайтов</legend>
+        <legend data-i18n="rules.title"></legend>
         <label class="check"><input type="checkbox" id="setRulesWhenOff">
-          <span class="opt"><span class="opt-name">Правила работают, когда VPN выключен</span>
-            <span class="opt-note">Сайты из правил «через VPN» идут через VPN, остальные — без VPN</span></span></label>
+          <span class="opt"><span class="opt-name" data-i18n="settings.rulesWhenOff"></span>
+            <span class="opt-note" data-i18n="settings.rulesWhenOff.note"></span></span></label>
         <label class="check"><input type="checkbox" id="setRuDirect">
-          <span class="opt"><span class="opt-name">Российские сайты — без VPN</span>
-            <span class="opt-note">.ru, .рф, .su, VK, Яндекс и другие идут без VPN, даже когда VPN включён. Правила для отдельных сайтов важнее</span></span></label>
+          <span class="opt"><span class="opt-name" data-i18n="ru.title"></span>
+            <span class="opt-note" data-i18n="settings.ru.note"></span></span></label>
         <label class="check"><input type="checkbox" id="autoSiteDomains">
-          <span class="opt"><span class="opt-name">Автоматически добавлять домены сайта</span>
-            <span class="opt-note">Видео, картинки и скрипты сайта из правила «через VPN» лежат на других доменах — пока сайт открыт, Waysplit добавляет их к его правилу</span></span></label>
+          <span class="opt"><span class="opt-name" data-i18n="settings.autoSite"></span>
+            <span class="opt-note" data-i18n="settings.autoSite.note"></span></span></label>
         <div class="site-warn" id="autoSitePerm" hidden>
-          <span>Нужно разрешение Chrome видеть запросы вкладок — без него домены сами не добавляются.</span>
-          <button class="btn btn-small" id="autoSitePermBtn" type="button">Разрешить</button>
+          <span data-i18n="settings.autoSite.perm"></span>
+          <button class="btn btn-small" id="autoSitePermBtn" type="button" data-i18n="common.allow"></button>
         </div>
       </fieldset>
 
       <fieldset class="group">
-        <legend>Защита и запуск</legend>
+        <legend data-i18n="settings.protect.legend"></legend>
         <label class="check"><input type="checkbox" id="webrtcProtection">
-          <span class="opt"><span class="opt-name">Защита WebRTC</span>
-            <span class="opt-note">Пока VPN включён, сайты не узнают настоящий IP через WebRTC (видеозвонки идут через VPN)</span></span></label>
-        <label class="field"><span>При запуске Chrome</span>
+          <span class="opt"><span class="opt-name" data-i18n="settings.webrtc"></span>
+            <span class="opt-note" data-i18n="settings.webrtc.note"></span></span></label>
+        <label class="field"><span data-i18n="settings.autoConnect"></span>
           <select class="select-small" id="autoConnect">
-            <option value="restore">восстановить, как было</option>
-            <option value="off">VPN выключен</option>
+            <option value="restore" data-i18n="settings.autoConnect.restore"></option>
+            <option value="off" data-i18n="settings.autoConnect.off"></option>
           </select></label>
       </fieldset>
 
       <fieldset class="group">
-        <legend>Подписки</legend>
-        <label class="field"><span>User-Agent при скачивании</span>
+        <legend data-i18n="settings.subs.legend"></legend>
+        <label class="field"><span data-i18n="settings.subs.ua"></span>
           <input class="search" id="subscriptionUA" type="text" spellcheck="false" maxlength="200"></label>
-        <label class="field"><span>Обновлять раз в, часов</span>
+        <label class="field"><span data-i18n="settings.subs.interval"></span>
           <input class="search narrow" id="subscriptionIntervalHours" type="number" min="1" max="168" step="1"></label>
-        <p class="hint">Если сервер подписки сам сообщает интервал, берётся его. С браузерным User-Agent панели вроде Marzban и Remnawave отдают веб-страницу вместо списка серверов.</p>
+        <p class="hint" data-i18n="settings.subs.hint"></p>
       </fieldset>
 
       <fieldset class="group">
-        <legend>Для опытных</legend>
-        <label class="field"><span>Локальные порты серверов: начиная с <span class="hint" id="portRangeEnd"></span></span>
+        <legend data-i18n="settings.advanced.legend"></legend>
+        <label class="field"><span data-i18n="settings.ports"><span class="hint" id="portRangeEnd" data-slot="end"></span></span>
           <input class="search narrow" id="portRangeStart" type="number" min="1024" max="65337" step="1"></label>
-        <label class="field"><span>Подробность журнала ядер</span>
+        <label class="field"><span data-i18n="settings.logLevel"></span>
           <select class="select-small" id="logLevel">
-            <option value="error">только ошибки</option>
-            <option value="warn">предупреждения (обычно)</option>
-            <option value="info">подробно</option>
-            <option value="debug">очень подробно</option>
-            <option value="trace">всё</option>
+            <option value="error" data-i18n="settings.logLevel.error"></option>
+            <option value="warn" data-i18n="settings.logLevel.warn"></option>
+            <option value="info" data-i18n="settings.logLevel.info"></option>
+            <option value="debug" data-i18n="settings.logLevel.debug"></option>
+            <option value="trace" data-i18n="settings.logLevel.trace"></option>
           </select></label>
       </fieldset>
 
       <fieldset class="group">
-        <legend>Оформление</legend>
-        <label class="field"><span>Тема</span>
+        <legend data-i18n="settings.look.legend"></legend>
+        <label class="field"><span data-i18n="settings.theme"></span>
           <select class="select-small" id="theme">
-            <option value="system">как в системе</option>
-            <option value="light">светлая</option>
-            <option value="dark">тёмная</option>
+            <option value="system" data-i18n="settings.theme.system"></option>
+            <option value="light" data-i18n="settings.theme.light"></option>
+            <option value="dark" data-i18n="settings.theme.dark"></option>
           </select></label>
+        <!-- Язык окна: «как в Chrome» и языки из словарей (их названия подставляет settings.js). -->
+        <label class="field"><span data-i18n="settings.language"></span>
+          <select class="select-small" id="language"></select></label>
       </fieldset>
 
       <fieldset class="group">
-        <legend>Резервная копия</legend>
-        <p class="hint">Серверы, подписки, правила, избранное и настройки — в одном файле. <b>В файле секреты</b> (ссылки серверов и адреса подписок): храните его как пароль и никому не пересылайте.</p>
+        <legend data-i18n="settings.backup.legend"></legend>
+        <p class="hint" data-i18n="settings.backup.hint"><b data-slot="secrets" data-i18n="settings.backup.hint.secrets"></b></p>
         <div class="tools">
-          <button class="ghost" id="exportBackup" type="button">Сохранить копию</button>
-          <button class="ghost" id="importBackup" type="button">Восстановить из копии</button>
+          <button class="ghost" id="exportBackup" type="button" data-i18n="settings.backup.save"></button>
+          <button class="ghost" id="importBackup" type="button" data-i18n="settings.backup.restore"></button>
         </div>
       </fieldset>
 
       <div class="card list-card">
-        <button class="list-row" id="openDiag" type="button"><span>Диагностика</span><span class="chev" aria-hidden="true"></span></button>
-        <a class="list-row" id="helpLink" target="_blank" rel="noopener"><span>Помощь</span><span class="ext" aria-hidden="true"></span></a>
-        <a class="list-row" id="issuesLink" target="_blank" rel="noopener"><span>Сообщить об ошибке</span><span class="ext" aria-hidden="true"></span></a>
+        <button class="list-row" id="openDiag" type="button"><span data-i18n="settings.diag"></span><span class="chev" aria-hidden="true"></span></button>
+        <a class="list-row" id="helpLink" target="_blank" rel="noopener"><span data-i18n="top.help"></span><span class="ext" aria-hidden="true"></span></a>
+        <a class="list-row" id="issuesLink" target="_blank" rel="noopener"><span data-i18n="top.report"></span><span class="ext" aria-hidden="true"></span></a>
       </div>
       <p class="versions" id="versions"></p>
+      <p class="versions" id="hostLang" hidden><a id="hostLangLink" target="_blank" rel="noopener"></a></p>
     </section>
   </main>
 
   <div class="screens" id="screens"></div>
 
-  <nav class="tabbar" role="tablist" aria-label="Разделы">
-    <button class="tab" id="tab-home" role="tab" type="button" data-tab="home" aria-controls="panel-home"><span class="tab-icon"></span><span>Главная</span></button>
-    <button class="tab" id="tab-servers" role="tab" type="button" data-tab="servers" aria-controls="panel-servers"><span class="tab-icon"></span><span>Серверы</span></button>
-    <button class="tab" id="tab-rules" role="tab" type="button" data-tab="rules" aria-controls="panel-rules"><span class="tab-icon"></span><span>Правила</span></button>
-    <button class="tab" id="tab-settings" role="tab" type="button" data-tab="settings" aria-controls="panel-settings"><span class="tab-icon"></span><span>Настройки</span></button>
+  <nav class="tabbar" role="tablist" data-i18n-aria-label="tabs.aria">
+    <button class="tab" id="tab-home" role="tab" type="button" data-tab="home" aria-controls="panel-home"><span class="tab-icon"></span><span data-i18n="tabs.home"></span></button>
+    <button class="tab" id="tab-servers" role="tab" type="button" data-tab="servers" aria-controls="panel-servers"><span class="tab-icon"></span><span data-i18n="tabs.servers"></span></button>
+    <button class="tab" id="tab-rules" role="tab" type="button" data-tab="rules" aria-controls="panel-rules"><span class="tab-icon"></span><span data-i18n="tabs.rules"></span></button>
+    <button class="tab" id="tab-settings" role="tab" type="button" data-tab="settings" aria-controls="panel-settings"><span class="tab-icon"></span><span data-i18n="tabs.settings"></span></button>
   </nav>
 
   <div class="toast" id="toast" role="status" hidden></div>
@@ -274,8 +281,8 @@
     <p class="dlg-text" id="dlgText"></p>
     <input class="search" id="dlgInput" type="text" maxlength="100" hidden>
     <div class="dlg-buttons">
-      <button class="ghost" value="cancel" type="submit">Отмена</button>
-      <button class="btn" value="ok" type="submit" id="dlgOk">ОК</button>
+      <button class="ghost" value="cancel" type="submit" data-i18n="common.cancel"></button>
+      <button class="btn" value="ok" type="submit" id="dlgOk" data-i18n="common.ok"></button>
     </div>
   </form>
 </dialog>

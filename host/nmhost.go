@@ -19,6 +19,7 @@ import (
 	"waysplit/host/internal/device"
 	"waysplit/host/internal/hostlog"
 	"waysplit/host/internal/links"
+	"waysplit/host/internal/msg"
 	"waysplit/host/internal/nm"
 	"waysplit/host/internal/singbox"
 	"waysplit/host/internal/subinfo"
@@ -88,7 +89,7 @@ func (h *nmHost) handle(ctx context.Context, req *nm.Request) (any, error) {
 	case "logs":
 		return logs(req)
 	}
-	return nil, &nm.Error{Code: "UNKNOWN_CMD", Message: "компаньон не знает команду «" + req.Cmd + "» — обновите компаньон"}
+	return nil, nm.Phrased("UNKNOWN_CMD", msg.New("unknown_cmd", "cmd", req.Cmd))
 }
 
 func (h *nmHost) close() {
@@ -170,7 +171,7 @@ func parseLinks(req *nm.Request) (*parseResult, error) {
 		Text string `json:"text"`
 	}
 	if err := json.Unmarshal(req.Raw, &p); err != nil {
-		return nil, &nm.Error{Code: "BAD_REQUEST", Message: "parse_links: нужен текст со ссылками"}
+		return nil, nm.Phrased("BAD_REQUEST", msg.New("bad_request_links"))
 	}
 	return describe(links.ParseText(p.Text)), nil
 }
@@ -205,7 +206,7 @@ func (h *nmHost) ping(ctx context.Context, req *nm.Request) (any, error) {
 		TimeoutMs int      `json:"timeoutMs"`
 	}
 	if err := json.Unmarshal(req.Raw, &p); err != nil {
-		return nil, &nm.Error{Code: "BAD_REQUEST", Message: "ping: нужен список serverIds"}
+		return nil, nm.Phrased("BAD_REQUEST", msg.New("bad_request_ping"))
 	}
 	if p.URL == "" {
 		p.URL = singbox.PingURL
@@ -218,7 +219,7 @@ func (h *nmHost) ping(ctx context.Context, req *nm.Request) (any, error) {
 	running := h.runningLocked()
 	h.mu.Unlock()
 	if len(running) == 0 {
-		return nil, &nm.Error{Code: "CORE_NOT_RUNNING", Message: "ядро не запущено — включите VPN"}
+		return nil, nm.Phrased("CORE_NOT_RUNNING", msg.New("core_not_running"))
 	}
 	results := make([]singbox.PingResult, len(p.ServerIDs))
 	var targets []singbox.Target
@@ -226,7 +227,7 @@ func (h *nmHost) ping(ctx context.Context, req *nm.Request) (any, error) {
 	for i, id := range p.ServerIDs {
 		t, ok := running[id]
 		if !ok {
-			results[i] = singbox.PingResult{ID: id, Error: "сервер не запущен в ядре"}
+			results[i] = singbox.PingFailed(id, msg.New("ping_not_in_core"))
 			continue
 		}
 		targets = append(targets, singbox.Target{ID: id, Port: t.port, Protocol: t.proto})
@@ -261,7 +262,7 @@ func (h *nmHost) fetchSubscription(ctx context.Context, req *nm.Request) (*subsc
 		Device        bool   `json:"device"`
 	}
 	if err := json.Unmarshal(req.Raw, &p); err != nil || !links.IsSubscriptionURL(p.URL) {
-		return nil, &nm.Error{Code: "BAD_REQUEST", Message: "fetch_subscription: нужен адрес подписки http(s)://…"}
+		return nil, nm.Phrased("BAD_REQUEST", msg.New("bad_request_sub", "cmd", "fetch_subscription"))
 	}
 	sub, used, err := fetchSub(ctx, p.URL, p.UserAgent, nil, p.Device)
 	via := false
@@ -279,7 +280,7 @@ func (h *nmHost) fetchSubscription(ctx context.Context, req *nm.Request) (*subsc
 		if errors.As(err, &known) {
 			return nil, known // лимит устройств, шифрование для Happ, сообщение панели — со своим кодом
 		}
-		return nil, &nm.Error{Code: "SUBSCRIPTION_FAILED", Message: err.Error()}
+		return nil, nm.Wrap("SUBSCRIPTION_FAILED", err)
 	}
 	return &subscriptionResult{parseResult: describe(sub.TextResult), Info: sub.Info, Title: sub.Title,
 		UpdateIntervalHours: sub.UpdateIntervalHours, ViaVPN: via, DeviceUsed: used, Announce: sub.Announce, Format: sub.Format}, nil
@@ -295,13 +296,13 @@ func (h *nmHost) subInfo(ctx context.Context, req *nm.Request) (any, error) {
 		ProxyServerID string `json:"proxyServerId"`
 	}
 	if err := json.Unmarshal(req.Raw, &p); err != nil || !links.IsSubscriptionURL(p.URL) {
-		return nil, &nm.Error{Code: "BAD_REQUEST", Message: "sub_info: нужен адрес подписки http(s)://…"}
+		return nil, nm.Phrased("BAD_REQUEST", msg.New("bad_request_sub", "cmd", "sub_info"))
 	}
 	o := subinfo.Options{Timeout: 20 * time.Second}
 	if p.Device {
 		dev, created, err := device.Load(singbox.DataDir())
 		if err != nil {
-			return nil, &nm.Error{Code: "DEVICE_ID", Message: err.Error()}
+			return nil, nm.Wrap("DEVICE_ID", err)
 		}
 		if created {
 			hostlog.Printf("создан идентификатор устройства %s", dev.Short())
@@ -342,17 +343,17 @@ func (h *nmHost) exitIP(ctx context.Context, req *nm.Request) (any, error) {
 		ServerID string `json:"serverId"`
 	}
 	if err := json.Unmarshal(req.Raw, &p); err != nil || p.ServerID == "" {
-		return nil, &nm.Error{Code: "BAD_REQUEST", Message: "exit_ip: нужен serverId"}
+		return nil, nm.Phrased("BAD_REQUEST", msg.New("bad_request_exit_ip"))
 	}
 	h.mu.Lock()
 	t, ok := h.runningLocked()[p.ServerID]
 	h.mu.Unlock()
 	if !ok {
-		return nil, &nm.Error{Code: "CORE_NOT_RUNNING", Message: "ядро не запущено или в нём нет этого сервера"}
+		return nil, nm.Phrased("CORE_NOT_RUNNING", msg.New("core_no_server"))
 	}
 	ip, err := singbox.ExitIP(ctx, singbox.Target{ID: p.ServerID, Port: t.port, Protocol: t.proto}, 10*time.Second)
 	if err != nil {
-		return nil, &nm.Error{Code: "NO_ANSWER", Message: err.Error()}
+		return nil, nm.Wrap("NO_ANSWER", err)
 	}
 	return map[string]string{"ip": ip}, nil
 }

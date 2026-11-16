@@ -8,10 +8,10 @@ package singbox
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"regexp"
 
 	"waysplit/host/internal/links"
+	"waysplit/host/internal/msg"
 )
 
 type Config struct {
@@ -115,8 +115,15 @@ type Entry struct {
 
 // EntryError — сервер не вошёл в конфиг.
 type EntryError struct {
-	ID      string `json:"id"`
-	Message string `json:"message"`
+	ID      string         `json:"id"`
+	Message string         `json:"message"`
+	Msg     string         `json:"msg,omitempty"`    // код фразы (пакет msg)
+	Params  map[string]any `json:"params,omitempty"` // значения вставок
+}
+
+// NewEntryError — сервер не войдёт в конфиг, и почему.
+func NewEntryError(id string, t msg.Text) EntryError {
+	return EntryError{ID: id, Message: t.Ru(), Msg: t.ID, Params: t.Params}
 }
 
 // Built — собранный конфиг и что с каждым сервером.
@@ -154,29 +161,29 @@ func Build(entries []Entry, logLevel string) (*Built, error) {
 	}
 	usedPort := map[int]string{}
 	for _, e := range entries {
-		fail := func(msg string) { b.Errors = append(b.Errors, EntryError{ID: e.ID, Message: msg}) }
+		fail := func(t msg.Text) { b.Errors = append(b.Errors, NewEntryError(e.ID, t)) }
 		switch {
 		case !idRe.MatchString(e.ID):
-			fail(fmt.Sprintf("неверный id сервера «%s»", e.ID))
+			fail(msg.New("bad_server_id", "id", e.ID))
 			continue
 		case b.Ports[e.ID] != 0:
-			fail("сервер с таким id уже есть")
+			fail(msg.New("dup_server_id"))
 			continue
 		case e.LocalPort < 1024 || e.LocalPort > 65535:
-			fail(fmt.Sprintf("неверный локальный порт %d", e.LocalPort))
+			fail(msg.New("bad_local_port", "port", e.LocalPort))
 			continue
 		case usedPort[e.LocalPort] != "":
-			fail(fmt.Sprintf("порт %d уже назначен серверу %s", e.LocalPort, usedPort[e.LocalPort]))
+			fail(msg.New("port_taken", "port", e.LocalPort, "server", usedPort[e.LocalPort]))
 			continue
 		}
 		s, err := links.Parse(e.Link)
 		if err != nil {
-			fail("ссылка не распознана: " + err.Error())
+			fail(msg.New("link_bad", "error", msg.From(err)))
 			continue
 		}
 		out, warns, err := OutboundFor(s, "out-"+e.ID)
 		if err != nil {
-			fail(err.Error())
+			fail(msg.From(err))
 			continue
 		}
 		in := "in-" + e.ID
@@ -192,7 +199,7 @@ func Build(entries []Entry, logLevel string) (*Built, error) {
 		}
 	}
 	if len(b.Config.Outbounds) == 0 {
-		return b, &Error{Code: "NO_SERVERS", Message: "нет ни одного сервера, который можно запустить"}
+		return b, NewError("NO_SERVERS", msg.New("no_servers"))
 	}
 	return b, nil
 }
@@ -213,8 +220,17 @@ func (c *Config) JSON() ([]byte, error) {
 type Error struct {
 	Code    string
 	Message string
-	Detail  string // хвост журнала sing-box и т. п., уже без секретов
+	Detail  string   // хвост журнала sing-box и т. п., уже без секретов
+	Text    msg.Text // фраза (пакет msg): по ней расширение 1.2.0 переводит текст
 }
+
+// NewError — ошибка с кодом для расширения и фразой.
+func NewError(code string, t msg.Text) *Error {
+	return &Error{Code: code, Message: t.Ru(), Text: t}
+}
+
+// Phrase — фраза ошибки (так её находит msg.Of).
+func (e *Error) Phrase() msg.Text { return e.Text }
 
 func (e *Error) Error() string { return e.Message }
 

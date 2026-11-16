@@ -3,40 +3,48 @@
 // Запрос {id, cmd, ...параметры} → ответ {id, ok, result} или {id, ok: false, error: {code, message}}.
 // Один открытый порт на все запросы; ответы сопоставляются по id, у каждого запроса таймаут.
 
+import { t } from './i18n.js';
+import { hostPhrase, hostText } from './hostmsg.js';
+
 export const HOST_NAME = 'com.waysplit.host';
 export const DEFAULT_TIMEOUT = 15000;
 
-// Тексты ошибок Chrome (developer.chrome.com → Native messaging → Debug) → коды и понятные сообщения.
+// Тексты ошибок Chrome (developer.chrome.com → Native messaging → Debug) → коды; понятное
+// сообщение — в словаре: err.<код>.
 const CHROME_ERRORS = [
-  ['Specified native messaging host not found', 'HOST_NOT_FOUND',
-    'Компаньон не установлен'],
-  ['Access to the specified native messaging host is forbidden', 'HOST_FORBIDDEN',
-    'Компаньон не пускает это расширение: он установлен для другой его версии'],
-  ['Failed to start native messaging host', 'HOST_START_FAILED',
-    'Компаньон не запускается: возможно, его файлы удалены или их заблокировал антивирус'],
-  ['Native host has exited', 'HOST_EXITED',
-    'Компаньон неожиданно завершился (подробности — в host.log)'],
-  ['Error when communicating with the native messaging host', 'HOST_PROTOCOL',
-    'Ошибка связи с компаньоном (подробности — в host.log)'],
-  ['Invalid native messaging host name specified', 'HOST_NAME',
-    'Неверное имя компаньона в расширении'],
+  ['Specified native messaging host not found', 'HOST_NOT_FOUND'],
+  ['Access to the specified native messaging host is forbidden', 'HOST_FORBIDDEN'],
+  ['Failed to start native messaging host', 'HOST_START_FAILED'],
+  ['Native host has exited', 'HOST_EXITED'],
+  ['Error when communicating with the native messaging host', 'HOST_PROTOCOL'],
+  ['Invalid native messaging host name specified', 'HOST_NAME'],
 ];
 
+// HostError — ошибка связи или ответ компаньона «нет». phrase — фраза компаньона ({ msg, params },
+// lib/hostmsg.js), если он её прислал и словарь её знает: по ней ошибку можно сохранить и показать
+// потом на другом языке. message — текст на языке окна.
 export class HostError extends Error {
-  constructor(code, message) {
+  constructor(code, message, phrase = null) {
     super(message);
     this.name = 'HostError';
     this.code = code;
+    this.phrase = phrase;
   }
+}
+
+// replyError — ошибка из ответа компаньона { code, message, msg?, params? }.
+export function replyError(e) {
+  const text = e?.message || '';
+  return new HostError(e?.code || 'HOST_ERROR', text ? hostText(e, text) : t('err.HOST_ERROR'), text ? hostPhrase(e, text) : null);
 }
 
 // chromeError переводит текст ошибки Chrome в HostError.
 export function chromeError(text) {
-  const t = String(text || '');
-  for (const [part, code, message] of CHROME_ERRORS) {
-    if (t.includes(part)) return new HostError(code, message);
+  const s = String(text || '');
+  for (const [part, code] of CHROME_ERRORS) {
+    if (s.includes(part)) return new HostError(code, t(`err.${code}`));
   }
-  return new HostError('HOST_DISCONNECTED', t ? `Связь с компаньоном прервалась: ${t}` : 'Связь с компаньоном прервалась');
+  return new HostError('HOST_DISCONNECTED', s ? t('err.HOST_DISCONNECTED.why', { error: s }) : t('err.HOST_DISCONNECTED'));
 }
 
 export class NativeHost {
@@ -78,7 +86,7 @@ export class NativeHost {
       const id = this.nextId++;
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new HostError('TIMEOUT', `Компаньон не ответил за ${Math.round(timeoutMs / 1000)} с`));
+        reject(new HostError('TIMEOUT', t('err.TIMEOUT', { sec: Math.round(timeoutMs / 1000) })));
         this.#scheduleIdle();
       }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
@@ -96,7 +104,7 @@ export class NativeHost {
   disconnect() {
     if (!this.port) return;
     const port = this.port;
-    this.#drop(new HostError('HOST_CLOSED', 'Соединение с компаньоном закрыто'));
+    this.#drop(new HostError('HOST_CLOSED', t('err.HOST_CLOSED')));
     port.disconnect();
   }
 
@@ -120,7 +128,7 @@ export class NativeHost {
     this.pending.delete(msg.id);
     clearTimeout(p.timer);
     if (msg.ok) p.resolve(msg.result);
-    else p.reject(new HostError(msg.error?.code || 'HOST_ERROR', msg.error?.message || 'Компаньон вернул ошибку'));
+    else p.reject(replyError(msg.error));
     this.#scheduleIdle();
   }
 

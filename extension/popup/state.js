@@ -3,7 +3,8 @@
 
 import { normalize } from '../lib/storage.js';
 import { siteData } from '../lib/sitedomains.js';
-import { $, el, setIcon } from './ui.js';
+import { t, usePageLanguage } from '../lib/i18n.js';
+import { $, el, setIcon, toast } from './ui.js';
 
 // S — всё, что показывает окно. site — открытая вкладка браузера: { host, tabId } (только http(s));
 // full — окно развёрнуто на всю вкладку (popup.html?full).
@@ -21,6 +22,12 @@ export async function loadData() {
   S.view = normalize(local);
   S.status = session.status || null;
   S.siteNew = session.siteNew || {};
+  // Язык сменили (в «Настройках» или восстановлением из копии): надписи разметки уже заменены;
+  // открытые экраны и сообщение внизу собраны на прежнем языке — закрыть, вкладку перерисовать.
+  if (usePageLanguage(S.view.settings.language)) {
+    closeAllScreens();
+    toast('');
+  }
   renderVisible();
 }
 
@@ -68,8 +75,8 @@ const stack = [];
 // openScreen({ title, sub, actions, build(screen), render(screen) }) — экран поверх вкладки,
 // вверху стрелка «назад» (и Esc). build — один раз, render — при каждом изменении данных.
 export function openScreen({ title, sub = '', actions = [], build = null, render = null, className = '' }) {
-  const back = el('button', { type: 'button', className: 'icon-btn back', title: 'Назад (Esc)' });
-  back.setAttribute('aria-label', 'Назад');
+  const back = el('button', { type: 'button', className: 'icon-btn back', title: t('common.back.title') });
+  back.setAttribute('aria-label', t('common.back'));
   setIcon(back, 'back');
   const titleEl = el('h2', { className: 'screen-title', textContent: title });
   const subEl = el('span', { className: 'screen-sub', textContent: sub });
@@ -84,8 +91,8 @@ export function openScreen({ title, sub = '', actions = [], build = null, render
     sec,
     body,
     onClose: null,
-    setTitle: (t) => { titleEl.textContent = t; sec.setAttribute('aria-label', t); },
-    setSub: (t) => { subEl.textContent = t; },
+    setTitle: (text) => { titleEl.textContent = text; sec.setAttribute('aria-label', text); },
+    setSub: (text) => { subEl.textContent = text; },
     render: () => render?.(screen),
   };
   back.addEventListener('click', closeScreen);

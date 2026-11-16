@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Waysplit for developers</title>
+  <style>
+    :root { color-scheme: light dark; --fg: #1f2328; --muted: #57606a; --bg: #ffffff; --line: #d0d7de; --accent: #2563eb; --code: #f3f4f6; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fg: #e6edf3; --muted: #9da7b3; --bg: #0d1117; --line: #30363d; --accent: #6ea8fe; --code: #161b22; }
+    }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 20px 64px; }
+    h1 { font-size: 28px; line-height: 1.25; margin: 0 0 4px; }
+    h2 { font-size: 22px; margin: 40px 0 8px; }
+    h3 { font-size: 18px; margin: 28px 0 6px; }
+    h4 { font-size: 16px; margin: 24px 0 4px; }
+    .nav { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 24px; font-size: 15px; }
+    .muted { color: var(--muted); }
+    a { color: var(--accent); }
+    code { font: 14px ui-monospace, "Cascadia Mono", Consolas, monospace; overflow-wrap: anywhere; }
+    pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; }
+    pre code { overflow-wrap: normal; }
+    li { margin: 4px 0; }
+    table { border-collapse: collapse; width: 100%; font-size: 15px; display: block; overflow-x: auto; }
+    th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+    td:first-child code { overflow-wrap: normal; white-space: nowrap; }
+    hr { border: 0; border-top: 1px solid var(--line); margin: 48px 0; }
+  </style>
+</head>
+<body>
+<main>
+  <nav class="nav"><a href="help.html">Install and FAQ</a><a href="usage.html">How to use</a><strong>For developers</strong><a href="../privacy.html#en">Privacy policy</a><a href="https://github.com/jacks553/waysplit">GitHub</a><a href="../ru/dev.html" lang="ru">Русский</a></nav>
+  <h1>Waysplit for developers</h1>
+  <p class="muted">How Waysplit works, how to build it from source and whose code runs inside it.</p>
+<h2 id="how">How it works</h2>
+<ol>
+<li>The extension is in the <code>extension/</code> folder. It has the popup with tabs, the "Getting started" page and the background part. The popup is described in <code>extension/popup/</code>. The same page serves as the toolbar popup, the page opened in a tab and the options page. The extension tells Chrome which site goes where. A PAC script does that.</li>
+<li>The companion is in the <code>host/</code> folder. It is the program <code>waysplit-host.exe</code>, written in Go. Chrome starts it and talks to it over native messaging. The companion parses links, downloads subscriptions, builds core configs, starts and stops the cores.</li>
+<li>The sing-box core opens local proxies on 127.0.0.1 and encrypts traffic to the server.</li>
+<li>The Xray core is needed only for what sing-box lacks. These are servers with the XHTTP transport and VLESS Encryption. The companion decides by the link which core runs a server. It starts Xray only when one of its servers is needed. Such servers are marked "Xray" in the list.</li>
+</ol>
+<pre><code>Chrome ──▶ proxy 127.0.0.1:&lt;server port&gt; ──▶ sing-box or Xray ──VLESS / Hysteria2──▶ VPN server ──▶ site</code></pre>
+<h2 id="setup">Setting up from source</h2>
+<p>You need 64-bit Windows 10 or 11, Google Chrome 120 or later and <a href="https://go.dev">Go</a>. Install Go with <code>winget install -e --id GoLang.Go</code>. Administrator rights are not needed.</p>
+<ol>
+<li>Put the project folder where it will stay. Chrome loads the unpacked extension right from it.</li>
+<li>Run in a terminal in the project folder:
+<pre><code>powershell -ExecutionPolicy Bypass -File tools\setup.ps1</code></pre>
+<p>The script puts the sing-box and Xray cores into <code>host\bin</code>, the same versions that users get. The versions are listed in <code>tools\cores.json</code>. Cores that are already there with the right SHA-256 are left alone. The script downloads the rest from the official releases and checks the SHA-256 of the archive and of every file. Then it builds <code>host\bin\waysplit-host.exe</code> and registers it in Chrome with the <code>install</code> command. That command puts a file into <code>%LOCALAPPDATA%\Waysplit</code> and writes a registry key of the current user. You can run the script as many times as you like.</p>
+</li>
+<li>Open <code>chrome://extensions</code> and turn on "Developer mode". Click "Load unpacked" and choose the <code>extension</code> folder. The extension ID will be <code>jckofomkflegkkhaaccmjbjjhoielnli</code>. The <code>key</code> field in manifest.json sets it.</li>
+</ol>
+<p>To register the companion by hand, run <code>host\bin\waysplit-host.exe install</code>. To unregister it, run <code>uninstall</code>. If you move the project folder, run <code>install</code> again. The companion accepts two extension IDs: the development one and the store one. The store ID is in <code>host/storeid.go</code>. So both versions work with one companion. Do not enable them at the same time, or they will fight over the Chrome proxy.</p>
+<p>Logs and configs are in <code>%LOCALAPPDATA%\Waysplit\</code>. The companion writes <code>host.log</code>, and this log has no secrets. The cores write <code>sing-box.log</code> and <code>xray.log</code>. <code>config.json</code> and <code>xray.json</code> hold secrets, do not send them to anyone.</p>
+<h2 id="folders">Folders</h2>
+<table>
+<thead><tr><th>Folder</th><th>What is there</th></tr></thead>
+<tbody>
+<tr><td><code>extension/</code></td><td>the Chrome extension. Interface texts are in <code>extension/lib/i18n/ru.js</code> and <code>en.js</code>, the store description is in <code>_locales</code></td></tr>
+<tr><td><code>host/</code></td><td>the companion in Go. <code>internal/links</code> parses links and subscriptions. <code>internal/singbox</code> and <code>internal/xray</code> build configs, check and run the cores. <code>internal/subinfo</code> handles subscription diagnostics, <code>internal/device</code> the device ID, <code>internal/hostlog</code> the log and secret masking, <code>internal/nm</code> the link to Chrome, <code>internal/msg</code> the companion messages with codes</td></tr>
+<tr><td><code>host/bin/</code></td><td><code>sing-box.exe</code> and <code>xray.exe</code> with licenses and the built <code>waysplit-host.exe</code>. They are not kept in git: <code>tools\setup.ps1</code> puts and builds them</td></tr>
+<tr><td><code>tools/setup.ps1</code></td><td>the development setup described above</td></tr>
+<tr><td><code>tools/cores.json</code>, <code>tools/cores.ps1</code></td><td>core versions, official release URLs and SHA-256 in one place for all scripts. The download with verification is there too, used by <code>setup.ps1</code>, <code>build-companion.ps1</code> and <code>ci.ps1</code>. For a new core version change the version, the URLs and the SHA-256 here. The archive SHA-256 comes from the core release page, the file SHA-256 is written down after a check</td></tr>
+<tr><td><code>tools/companion/</code></td><td>the installer for users: <code>install.cmd</code>, <code>uninstall.cmd</code>, <code>waysplit-setup.ps1</code>, the instructions in Russian and English, the full GPL-3.0 text and the companion icon <code>waysplit.ico</code>. In the companion archive the <code>.cmd</code> files appear under both English and Russian names</td></tr>
+<tr><td><code>tools/release/</code></td><td>builds the archives for publishing, see below</td></tr>
+<tr><td><code>tools/ci.ps1</code>, <code>.github/workflows/release.yml</code></td><td>checks and builds a release by a version tag, see "Release"</td></tr>
+<tr><td><code>tools/genkey/</code></td><td>the permanent extension ID</td></tr>
+<tr><td><code>tools/icons/</code></td><td>draws the extension icons in <code>extension/icons</code> and the companion icon <code>tools/companion/waysplit.ico</code> from the glyph <code>call_split_24px.svg</code></td></tr>
+<tr><td><code>tools/chrome-check.js</code></td><td>checks the extension in a real Chrome with a temporary profile</td></tr>
+<tr><td><code>tools/popup-shots.js</code>, <code>tools/store-shots.js</code>, <code>tools/shots-lib.js</code></td><td>screenshots of all popup screens in two themes and screenshots for the store, all on made-up data. The popup screenshots are collected on the page <code>dist/popup-shots/index.html</code></td></tr>
+<tr><td><code>docs/</code></td><td>the project site for GitHub Pages: help, how to use, for developers, the privacy policy</td></tr>
+<tr><td><code>store/</code></td><td>texts and images for the Chrome Web Store, <code>STORE-CHECKLIST.md</code></td></tr>
+<tr><td><code>tests/</code></td><td>tests of the extension code on Node.js</td></tr>
+</tbody>
+</table>
+<h2 id="build">Build and tests</h2>
+<pre><code>cd host; go build -o bin\waysplit-host.exe .; go test ./...; cd ..
+cd tools; go test ./...; cd ..
+npm test
+node tools/chrome-check.js</code></pre>
+<p><code>go test ./...</code> in the <code>host</code> folder checks the parsing of links and subscriptions and the config building for both cores. The configs are compared with reference files and run through <code>sing-box check</code> and <code>xray run -test</code>. It also checks starting and stopping the cores, end-to-end connections through local test servers, the protocol for talking to Chrome and the registry registration. The registration is checked in a temporary key. These tests do not need the internet.</p>
+<p><code>npm test</code> checks the extension code and needs Node.js. <code>node tools/chrome-check.js</code> checks the extension in a real headless Chrome with a temporary profile. This check needs the internet for the ping and "My current IP". The companion must be built and registered, and ports 27101-27103 must be free.</p>
+<h2 id="release">Release</h2>
+<p>A release builds itself. Raise the version in <code>extension/manifest.json</code> and <code>host/main.go</code>, add a section to <code>CHANGELOG.md</code>, commit and push a tag:</p>
+<pre><code>git tag v1.2.3
+git push origin v1.2.3</code></pre>
+<p>The tag starts GitHub Actions by the file <code>.github/workflows/release.yml</code>, which runs <code>tools/ci.ps1 -Sources</code>. The script compares the versions of the tag, the extension and the companion. Then it runs all tests: Go, <code>npm test</code> and the Chrome check. The Chrome check runs on the unpacked <code>Waysplit-extension.zip</code>, the very thing people install by hand. The script downloads the cores from the official releases and checks their SHA-256 against <code>tools/cores.json</code>. Next it builds the archives and checks the installer on the built archive in a temporary folder. The installer refuses a damaged archive, installs a good one without the internet, and uninstalls cleanly. At the end the script downloads the source archives of the cores and creates the release. The release holds <code>Waysplit-companion.zip</code>, <code>Waysplit-extension.zip</code>, their SHA-256 and the core source code. <code>Waysplit-extension.zip</code> holds the extension for a manual install.</p>
+<p>The release notes get the version section from <code>CHANGELOG.md</code> and three sections from <code>README.md</code>: "Как установить", "Ручная установка (запасной вариант)" and "Переход с ручной версии на версию из магазина". Links in them must be full, like <code>https://…</code>. Relative links do not work in release notes.</p>
+<p>The store archive is among the build files on the run page in Actions, under the name <code>chrome-web-store-v1.2.3</code>. It is not put into the release, so users do not confuse it with the companion. A tag with a hyphen, for example <code>v1.2.3-rc1</code>, makes a pre-release. Such a release does not become the latest one.</p>
+<p>You can run the same on your computer with <code>powershell -ExecutionPolicy Bypass -File tools\ci.ps1 -Tag v1.2.3</code>. The cores are taken from <code>host\bin</code> or <code>dist\cores</code> if their SHA-256 matches. Then the internet is needed only for the Chrome check. Skip it with the <code>-SkipChrome</code> switch.</p>
+<p>To build the archives by hand:</p>
+<pre><code>powershell -ExecutionPolicy Bypass -File tools\build-store.ps1       # store\waysplit-&lt;version&gt;.zip
+powershell -ExecutionPolicy Bypass -File tools\build-companion.ps1   # dist\Waysplit-companion.zip and .sha256
+powershell -ExecutionPolicy Bypass -File tools\build-extension.ps1   # dist\Waysplit-extension.zip and .sha256</code></pre>
+<p>The store archive gets a copy of <code>extension/</code> without the <code>key</code> field and without extra files. The store does not accept the <code>key</code> field. The build checks the manifest: the description in every language must be no longer than 132 characters. It also checks the 128 icon: a 96×96 picture with transparent margins of 16 pixels. And it checks that the extension has no code from the internet.</p>
+<p>The companion archive holds:</p>
+<ul>
+<li><code>waysplit-host.exe</code>;</li>
+<li>the cores <code>sing-box.exe</code> and <code>xray.exe</code> from <code>dist\cores</code>;</li>
+<li>the installer and the instructions;</li>
+<li><code>LICENSE.txt</code> and <code>THIRD-PARTY-LICENSES.txt</code>;</li>
+<li>the core licenses;</li>
+<li><code>CORES.txt</code>;</li>
+<li><code>SHA256SUMS.txt</code>.</li>
+</ul>
+<p><code>waysplit-host.exe</code> is built with <code>-trimpath</code>, so it has no paths of this computer. It has an icon and version info, visible in the file properties and in Task Manager. The SHA-256 of the cores is checked against <code>tools/cores.json</code>. <code>THIRD-PARTY-LICENSES.txt</code> holds the full license texts of all third-party code in the exe. The module list for it comes from <code>go list -deps</code>. If a module has no license file, the build stops. <code>CORES.txt</code> lists the core versions, where they come from and where their source code is. The installer checks the files by <code>SHA256SUMS.txt</code>.</p>
+<p>The extension for a manual install is built from <code>extension/</code> as is, with the <code>key</code> field. An unpacked copy has the same ID as the development version, and the companion accepts it. The build checks that the ID from <code>key</code> matches <code>host/extid.go</code>. It also checks that the archive has no keys or service files.</p>
+<p>File times in the archives equal the time of the last commit. So the same code gives the same archive. The companion archive is named <code>Waysplit-companion.zip</code>, with no version in the name. Thanks to this the permanent link <code>…/releases/latest/download/Waysplit-companion.zip</code> always leads to the latest release. Every new upload to the store needs a new version in manifest.json. All steps are listed in <code>store/STORE-CHECKLIST.md</code>.</p>
+<p><code>node tools/store-shots.js</code> makes the store screenshots. They show the real interface on made-up data. <code>cd tools; go run ./icons -promo ..\store\promo-440x280.png</code> draws the small promo image.</p>
+<p>The command <code>cd tools; go run ./release public [-author "Name &lt;ID+name@users.noreply.github.com&gt;"] [-message "what changed"]</code> builds the public repository. It exports the last commit to <code>dist\public</code> without internal notes and checks all files for secrets. The commit is made from a GitHub service address. The first run gives a new repository with one commit. After that <code>dist\public</code> works as a clone of the public repository. Files in it are replaced, and the history stays. Changes land as a new commit on top of it, which needs <code>-message</code>. The command prints the list of changes. You send them with a regular <code>git push</code>.</p>
+<h2 id="extension-id">Permanent extension ID</h2>
+<p>The ID is set by the <code>key</code> field in <code>extension/manifest.json</code>. <code>tools/genkey</code> makes the key. It is an RSA-2048 key, and its public part is written in <code>key</code>. The ID is written in <code>host/extid.go</code>. It is the first 32 hex characters of the SHA-256 of the key, with digits 0-f replaced by letters a-p. The private key is in <code>tools\genkey\private-key.pem</code> and does not get into git.</p>
+<p>The command <code>cd tools; go run ./genkey; cd ..</code> just rewrites the files if the key already exists. The ID does not change.</p>
+<p>The command <code>go run ./genkey -new</code> makes a new key, and <strong>the ID changes</strong>. After that rebuild the companion, run <code>install</code> and reload the extension in Chrome.</p>
+<h2 id="cli">Checking a link without the browser</h2>
+<ol>
+<li>Create the file <code>links.local.txt</code> in the project folder. It does not get into git. Paste a <code>vless://…</code> or <code>hysteria2://…</code> link there. You can paste several, one per line, and a subscription URL <code>https://…</code>. Lines that start with <code>#</code> are comments.</li>
+<li>Run the command you need from the project folder:</li>
+</ol>
+<table>
+<thead><tr><th>Command</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>host\bin\waysplit-host.exe parse</code></td><td>shows which servers are recognized and which are skipped and why. Xray servers are marked <code>[Xray]</code></td></tr>
+<tr><td><code>host\bin\waysplit-host.exe config</code></td><td>builds the sing-box and Xray configs, checks them with the cores and shows which server is on which port</td></tr>
+<tr><td><code>host\bin\waysplit-host.exe try</code></td><td>starts the cores, checks the ping and the IP through every server and keeps the proxies up until you press Enter</td></tr>
+<tr><td><code>host\bin\waysplit-host.exe subinfo file</code></td><td>does the same as the "Check subscription" button and prints a report without secrets. The subscription URL is taken from the file or written right in the command. <code>*.local.txt</code> files do not get into git</td></tr>
+</tbody>
+</table>
+<p><code>parse</code>, <code>config</code> and <code>try</code> download subscriptions the same way the extension does. They send the device ID only if there are no servers without it. The <code>-device</code> flag sends it at once. The <code>-port N</code> flag sets the first local port. These commands print in Russian.</p>
+<p>You can check a proxy with <code>curl.exe -x socks5h://127.0.0.1:27101 https://api.ipify.org</code>. It should show the IP of the server. In Windows PowerShell the name <code>curl</code> hides another command, so write <code>curl.exe</code>.</p>
+<h2 id="licenses">Credits and licenses</h2>
+<p>Waysplit is distributed under the <a href="https://github.com/jacks553/waysplit/blob/main/LICENSE">Apache 2.0</a> license. Copyright 2026 The Waysplit Authors.</p>
+<p>Thanks to the authors of the third-party code Waysplit stands on:</p>
+<ul>
+<li>sing-box: <a href="https://github.com/SagerNet/sing-box">SagerNet/sing-box</a>. The license is GPL-3.0 or later with an additional term: derivative works may not use the sing-box name or imply a link to it without the author's consent. Waysplit does not modify sing-box and runs it as a separate program. The companion archive holds the official release, and its SHA-256 is checked at build time. Its license <code>sing-box-LICENSE.txt</code> and the full GPL-3.0 text in <code>sing-box-GPL-3.0.txt</code> are next to it.</li>
+<li>Xray-core: <a href="https://github.com/XTLS/Xray-core">XTLS/Xray-core</a>, under the <a href="https://www.mozilla.org/MPL/2.0/">Mozilla Public License 2.0</a>. It is also an unmodified official release that runs as a separate program. The license is next to it, in <code>xray-LICENSE.txt</code>.</li>
+<li>go-yaml: <a href="https://github.com/yaml/go-yaml">yaml/go-yaml</a>, MIT and Apache-2.0 licenses. The module <code>go.yaml.in/yaml/v3</code> is built into the companion and parses Clash and Mihomo YAML subscriptions.</li>
+<li>The sign in the icons: the <code>call_split</code> glyph from <a href="https://github.com/google/material-design-icons">Material Symbols</a> by Google in the Rounded style, Apache-2.0 license. The sign is in the extension icons <code>extension/icons</code> and in the companion icon <code>tools/companion/waysplit.ico</code>. The unmodified source SVG is in <code>tools/icons/call_split_24px.svg</code>. In the icons the sign is white on our background. The full license text is in <code>extension/icons/LICENSE-material-symbols.txt</code> and in <code>THIRD-PARTY-LICENSES.txt</code> of the companion archive.</li>
+<li>Country flags: the font <code>extension/fonts/TwemojiCountryFlags.woff2</code> from the npm package <a href="https://github.com/talkjs/country-flag-emoji-polyfill">country-flag-emoji-polyfill</a>, version 0.1.10. The package code is under the MIT license. The flag drawings come from <a href="https://github.com/twitter/twemoji">Twemoji</a>, © Twitter, Inc. and other contributors, under <a href="https://creativecommons.org/licenses/by/4.0/">CC-BY 4.0</a>. The full license text is in <code>extension/fonts/LICENSE-TwemojiCountryFlags.md</code>. The font is needed because Chrome on Windows does not draw emoji flags in server names on its own.</li>
+</ul>
+<p>The core versions, where they come from and links to the source code of these exact versions are listed in <code>CORES.txt</code> in the companion archive. The source archives of the cores are attached to every release on the <a href="https://github.com/jacks553/waysplit/releases">releases page</a>. The versions and SHA-256 of the cores are written in one place, <code>tools/cores.json</code>.</p>
+<p>The full license texts of all third-party code inside <code>waysplit-host.exe</code> are in the companion archive, in the file <code>THIRD-PARTY-LICENSES.txt</code>. That includes the Go standard library and <code>golang.org/x/sys</code>.</p>
+</main>
+</body>
+</html>

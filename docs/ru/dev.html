@@ -30,7 +30,7 @@
 </head>
 <body>
 <main>
-  <nav class="nav"><a href="help.html">Установка и вопросы</a><a href="usage.html">Как пользоваться</a><strong>Для разработчиков</strong><a href="../privacy.html">Политика конфиденциальности</a><a href="https://github.com/jacks553/waysplit">GitHub</a></nav>
+  <nav class="nav"><a href="help.html">Установка и вопросы</a><a href="usage.html">Как пользоваться</a><strong>Для разработчиков</strong><a href="../privacy.html">Политика конфиденциальности</a><a href="https://github.com/jacks553/waysplit">GitHub</a><a href="../en/dev.html" lang="en">English</a></nav>
   <h1>Waysplit для разработчиков</h1>
   <p class="muted">Как устроен Waysplit, как собрать его из исходников и чей код в нём работает.</p>
 <h2 id="how">Как это устроено</h2>
@@ -57,12 +57,12 @@
 <table>
 <thead><tr><th>Папка</th><th>Что там</th></tr></thead>
 <tbody>
-<tr><td><code>extension/</code></td><td>расширение Chrome</td></tr>
-<tr><td><code>host/</code></td><td>компаньон на Go. <code>internal/links</code> разбирает ссылки и подписки. <code>internal/singbox</code> и <code>internal/xray</code> собирают конфиги, проверяют и запускают ядра. <code>internal/subinfo</code> отвечает за диагностику подписок, <code>internal/device</code> за идентификатор устройства, <code>internal/hostlog</code> за журнал и маскировку секретов, <code>internal/nm</code> за связь с Chrome</td></tr>
+<tr><td><code>extension/</code></td><td>расширение Chrome. Надписи окна лежат в <code>extension/lib/i18n/ru.js</code> и <code>en.js</code>, описание для магазина в <code>_locales</code></td></tr>
+<tr><td><code>host/</code></td><td>компаньон на Go. <code>internal/links</code> разбирает ссылки и подписки. <code>internal/singbox</code> и <code>internal/xray</code> собирают конфиги, проверяют и запускают ядра. <code>internal/subinfo</code> отвечает за диагностику подписок, <code>internal/device</code> за идентификатор устройства, <code>internal/hostlog</code> за журнал и маскировку секретов, <code>internal/nm</code> за связь с Chrome, <code>internal/msg</code> за сообщения компаньона с кодами</td></tr>
 <tr><td><code>host/bin/</code></td><td><code>sing-box.exe</code> и <code>xray.exe</code> с лицензиями и собранный <code>waysplit-host.exe</code>. В git они не хранятся: их кладёт и собирает <code>tools\setup.ps1</code></td></tr>
 <tr><td><code>tools/setup.ps1</code></td><td>установка для разработки, она описана выше</td></tr>
 <tr><td><code>tools/cores.json</code>, <code>tools/cores.ps1</code></td><td>версии ядер, адреса официальных выпусков и SHA-256 в одном месте для всех скриптов. Там же скачивание со сверкой, его используют <code>setup.ps1</code>, <code>build-companion.ps1</code> и <code>ci.ps1</code>. Для новой версии ядра поменяйте здесь версию, адреса и SHA-256. SHA-256 архива берётся со страницы выпуска ядра, SHA-256 файлов записывается после проверки</td></tr>
-<tr><td><code>tools/companion/</code></td><td>установщик для пользователей: <code>Установить.cmd</code>, <code>Удалить.cmd</code>, <code>waysplit-setup.ps1</code>, инструкция, полный текст GPL-3.0 и значок компаньона <code>waysplit.ico</code>. В архив компаньона эти файлы попадают с русскими именами</td></tr>
+<tr><td><code>tools/companion/</code></td><td>установщик для пользователей: <code>install.cmd</code>, <code>uninstall.cmd</code>, <code>waysplit-setup.ps1</code>, инструкции на русском и английском, полный текст GPL-3.0 и значок компаньона <code>waysplit.ico</code>. В архив компаньона файлы <code>.cmd</code> попадают и с русскими, и с английскими именами</td></tr>
 <tr><td><code>tools/release/</code></td><td>сборка архивов для выкладки, о ней написано ниже</td></tr>
 <tr><td><code>tools/ci.ps1</code>, <code>.github/workflows/release.yml</code></td><td>проверка и сборка выпуска по тегу версии, подробнее в разделе "Выпуск"</td></tr>
 <tr><td><code>tools/genkey/</code></td><td>постоянный ID расширения</td></tr>
@@ -93,7 +93,7 @@ git push origin v1.2.3</code></pre>
 <pre><code>powershell -ExecutionPolicy Bypass -File tools\build-store.ps1       # store\waysplit-&lt;версия&gt;.zip
 powershell -ExecutionPolicy Bypass -File tools\build-companion.ps1   # dist\Waysplit-companion.zip и .sha256
 powershell -ExecutionPolicy Bypass -File tools\build-extension.ps1   # dist\Waysplit-extension.zip и .sha256</code></pre>
-<p>В архив для магазина попадает копия <code>extension/</code> без поля <code>key</code> и без лишних файлов. Поле <code>key</code> магазин не принимает. Сборка проверяет manifest: описание должно быть не длиннее 132 символов. Ещё она проверяет значок 128: рисунок 96×96 и прозрачные поля по 16 пикселей. И проверяет, что в расширении нет кода из интернета.</p>
+<p>В архив для магазина попадает копия <code>extension/</code> без поля <code>key</code> и без лишних файлов. Поле <code>key</code> магазин не принимает. Сборка проверяет manifest: описание на каждом языке должно быть не длиннее 132 символов. Ещё она проверяет значок 128: рисунок 96×96 и прозрачные поля по 16 пикселей. И проверяет, что в расширении нет кода из интернета.</p>
 <p>В архиве компаньона лежат:</p>
 <ul>
 <li><code>waysplit-host.exe</code>;</li>

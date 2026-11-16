@@ -149,9 +149,9 @@ try {
   # Обновление поверх прежней версии: её лишние файлы убираются.
   New-Item -ItemType Directory -Force $app | Out-Null
   foreach ($f in 'cores.txt', 'libcronet.dll') { Set-Content (Join-Path $app $f) 'old' }
-  Exec 'Установить.cmd' { cmd.exe /c (Join-Path $x 'Установить.cmd') -NoPause }
+  Exec 'Установить.cmd' { cmd.exe /c (Join-Path $x 'Установить.cmd') -NoPause -Lang ru }
   $sums = Get-Content (Join-Path $x 'SHA256SUMS.txt') -Encoding UTF8
-  foreach ($f in 'waysplit-host.exe', 'sing-box.exe', 'xray.exe', 'CORES.txt', 'sing-box-LICENSE.txt', 'sing-box-GPL-3.0.txt', 'xray-LICENSE.txt', 'SHA256SUMS.txt', 'Удалить.cmd') {
+  foreach ($f in 'waysplit-host.exe', 'sing-box.exe', 'xray.exe', 'CORES.txt', 'sing-box-LICENSE.txt', 'sing-box-GPL-3.0.txt', 'xray-LICENSE.txt', 'SHA256SUMS.txt', 'Удалить.cmd', 'Uninstall.cmd', 'Прочитай меня.txt', 'README.txt') {
     $p = Join-Path $app $f
     if (-not (Test-Path $p)) { Fail "после установки нет $f" }
     $name = (Get-Item -LiteralPath $p).Name
@@ -170,10 +170,34 @@ try {
   Write-Host "компаньон пускает ручную версию ($devId) и версию из магазина ($storeId)"
 
   Set-Content (Join-Path $data 'device-id') 'ci-device-id-0000' # чтобы удаление задало свой вопрос
-  Exec 'Удалить.cmd' { cmd.exe /c (Join-Path $app 'Удалить.cmd') -NoPause -DeviceId delete }
+  Exec 'Удалить.cmd' { cmd.exe /c (Join-Path $app 'Удалить.cmd') -NoPause -DeviceId delete -Lang ru }
   if ((Test-Path $app) -or (Test-Path $data)) { Fail 'после удаления остались папки программы или данных' }
   if (Test-Path 'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.waysplit.host') { Fail 'после удаления осталась регистрация в Chrome' }
   Write-Host 'установка (без интернета), обновление и удаление — без ошибок'
+
+  # Те же файлы под английскими именами и сообщения по-английски (версия 1.2.0): установщик и
+  # компаньон (его регистрация) пишут на одном языке, русских букв в выводе нет. Русский вывод так
+  # не проверить: через канал на английской Windows русские буквы теряются.
+  function RunEn([string]$what, [string]$file, [string[]]$more, [string[]]$must) {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $out = (cmd.exe /c $file -NoPause -Lang en @more) -join "`n"
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = $prev
+    if ($code -ne 0) { Fail "$what — код $code`n$out" }
+    foreach ($m in $must) { if (-not $out.Contains($m)) { Fail "$what — в выводе нет «$m»`n$out" } }
+    if ($out -match '[\u0400-\u04FF]') { Fail "$what — в английском выводе русские буквы`n$out" }
+  }
+  RunEn 'Install.cmd' (Join-Path $x 'Install.cmd') @() @('Waysplit: installing the companion', 'all files are in place',
+    'The companion is registered in Chrome.', 'Done: the companion is installed.')
+  if (-not (Test-Path (Join-Path $app 'waysplit-host.exe'))) { Fail 'после Install.cmd нет waysplit-host.exe' }
+  Set-Content (Join-Path $data 'device-id') 'ci-device-id-0000'
+  RunEn 'Uninstall.cmd' (Join-Path $app 'Uninstall.cmd') @('-DeviceId', 'keep') @('Waysplit: removing the companion',
+    'the companion is no longer registered in Chrome', 'kept the device ID', 'Done: the companion is removed.')
+  if (Test-Path $app) { Fail 'после Uninstall.cmd осталась папка программы' }
+  if ((Get-ChildItem -LiteralPath $data -Force | ForEach-Object Name) -join ',' -ne 'device-id') { Fail 'после Uninstall.cmd с -DeviceId keep в папке данных должен остаться только device-id' }
+  if (Test-Path 'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.waysplit.host') { Fail 'после Uninstall.cmd осталась регистрация в Chrome' }
+  Write-Host 'Install.cmd и Uninstall.cmd: сообщения по-английски, идентификатор устройства оставлен'
 } finally {
   $env:LOCALAPPDATA = $realLocal
   Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue

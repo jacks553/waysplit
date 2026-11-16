@@ -12,6 +12,7 @@ import (
 
 	"waysplit/host/internal/corebin"
 	"waysplit/host/internal/hostlog"
+	"waysplit/host/internal/msg"
 )
 
 // DataDir — папка данных компаньона: %LOCALAPPDATA%\Waysplit.
@@ -29,7 +30,7 @@ func FindBinary() (string, error) {
 	if p := corebin.Find("WAYSPLIT_SINGBOX", "sing-box.exe"); p != "" {
 		return p, nil
 	}
-	return "", &Error{Code: "SINGBOX_NOT_FOUND", Message: "sing-box не найден рядом с waysplit-host.exe: установите компаньон заново («Установить.cmd»)"}
+	return "", NewError("SINGBOX_NOT_FOUND", msg.New("singbox_not_found"))
 }
 
 // Check проверяет файл конфига командой `sing-box check`. Возвращает вывод ядра
@@ -45,15 +46,17 @@ func Check(bin, path string) (string, error) {
 		var exit *exec.ExitError
 		if !errors.As(err, &exit) {
 			// Ядро даже не запустилось: нет файла или его заблокировал антивирус.
-			return "", &Error{Code: "SINGBOX_FAILED", Message: "не удалось запустить sing-box: " + hostlog.Mask(err.Error())}
+			return "", NewError("SINGBOX_FAILED", msg.New("singbox_failed", "error", hostlog.Mask(err.Error())))
 		}
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return text, &Error{Code: "CONFIG_INVALID", Message: "sing-box check не ответил за 30 секунд"}
+			return text, NewError("CONFIG_INVALID", msg.New("singbox_check_timeout"))
 		}
 		if text == "" {
 			text = err.Error()
 		}
-		return text, &Error{Code: "CONFIG_INVALID", Message: "sing-box не принял конфиг: " + firstLine(text), Detail: text}
+		e := NewError("CONFIG_INVALID", msg.New("singbox_rejected", "line", firstLine(text)))
+		e.Detail = text
+		return text, e
 	}
 	return text, nil
 }
@@ -163,7 +166,7 @@ func Version(bin string) (string, error) {
 		return v, v != "" && v != strings.TrimSpace(first)
 	})
 	if err != nil {
-		return "", &Error{Code: "SINGBOX_FAILED", Message: "не удалось запустить sing-box: " + err.Error()}
+		return "", NewError("SINGBOX_FAILED", msg.New("singbox_failed", "error", msg.From(err)))
 	}
 	return v, nil
 }

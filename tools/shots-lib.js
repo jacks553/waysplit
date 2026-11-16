@@ -38,23 +38,43 @@ const xhttp = (cc, city, host) => `vless://${uuid(host)}@${host}:443?encryption=
   + `&type=xhttp&path=%2Fxh&mode=auto${tag(cc, city)}`;
 const ws = (cc, city, host) => `vless://${uuid(host)}@${host}:443?encryption=none&security=tls&sni=${host}&type=ws&path=%2Fws${tag(cc, city)}`;
 
-export const ownLinks = [
-  reality('NL', 'Амстердам', 'nl.example.net'),
-  reality('DE', 'Франкфурт', 'de.example.net'),
-  hy2('FI', 'Хельсинки', 'fi.example.net'),
-  xhttp('TR', 'Стамбул', 'tr.example.net'),
-  ws('JP', 'Токио', 'jp.example.net'),
-  hy2('US', 'Нью-Йорк', 'us.example.net'),
-];
-const subLinks = [
-  reality('SE', 'Стокгольм', 'se.vpn.example.net'),
-  reality('GB', 'Лондон', 'gb.vpn.example.net'),
-  hy2('PL', 'Варшава', 'pl.vpn.example.net'),
-];
-export const subUrl = 'https://sub.example.com/api/sub/demo';
+// Данные — на языке кадров (ru или en): города серверов, название подписки, сообщение провайдера,
+// зона в правилах. Остальное (адреса, ключи, пинг) от языка не зависит.
+const CITIES = {
+  ru: { NL: 'Амстердам', DE: 'Франкфурт', FI: 'Хельсинки', TR: 'Стамбул', JP: 'Токио', US: 'Нью-Йорк', SE: 'Стокгольм', GB: 'Лондон', PL: 'Варшава' },
+  en: { NL: 'Amsterdam', DE: 'Frankfurt', FI: 'Helsinki', TR: 'Istanbul', JP: 'Tokyo', US: 'New York', SE: 'Stockholm', GB: 'London', PL: 'Warsaw' },
+};
+const TEXTS = {
+  ru: { subTitle: 'Мой VPN', announce: 'Плановые работы в ночь на воскресенье, 03:00–04:00 (МСК).', zone: 'рф' },
+  en: { subTitle: 'My VPN', announce: 'Scheduled maintenance on Sunday night, 03:00–04:00 (UTC).', zone: 'de' },
+};
 // Пинг как у настоящего: через сам сервер (соединение, TLS, ответ) — сотни миллисекунд; 0 — нет ответа.
-const pings = { Амстердам: 412, Франкфурт: 468, Хельсинки: 655, Стамбул: 590, Токио: 1240, 'Нью-Йорк': 870, Стокгольм: 436, Лондон: 512, Варшава: 0 };
+const PINGS = { NL: 412, DE: 468, FI: 655, TR: 590, JP: 1240, US: 870, SE: 436, GB: 512, PL: 0 };
+export const subUrl = 'https://sub.example.com/api/sub/demo';
 const GB = 2 ** 30;
+
+// fixtures — вымышленные данные на языке lang.
+function fixtures(lang) {
+  const city = CITIES[lang] || CITIES.ru;
+  return {
+    city,
+    text: TEXTS[lang] || TEXTS.ru,
+    ownLinks: [
+      reality('NL', city.NL, 'nl.example.net'),
+      reality('DE', city.DE, 'de.example.net'),
+      hy2('FI', city.FI, 'fi.example.net'),
+      xhttp('TR', city.TR, 'tr.example.net'),
+      ws('JP', city.JP, 'jp.example.net'),
+      hy2('US', city.US, 'us.example.net'),
+    ],
+    subLinks: [
+      reality('SE', city.SE, 'se.vpn.example.net'),
+      reality('GB', city.GB, 'gb.vpn.example.net'),
+      hy2('PL', city.PL, 'pl.vpn.example.net'),
+    ],
+    pings: Object.fromEntries(Object.entries(PINGS).map(([cc, ms]) => [city[cc], ms])),
+  };
+}
 
 // --- настоящий компаньон: как он разбирает эти ссылки ---
 function companion(msg, work) {
@@ -128,8 +148,9 @@ export class NativeHost {
 }
 
 // prepareExtension — копия расширения в work/extension с подделкой компаньона; extra(ext) — свои
-// файлы в копию (например, сцена для магазина). Вернёт путь к копии.
-export async function prepareExtension(work, extra = null) {
+// файлы в копию (например, сцена для магазина); lang — язык данных (ru или en). Вернёт путь к копии.
+export async function prepareExtension(work, extra = null, lang = 'ru') {
+  const { ownLinks, subLinks, pings, text } = fixtures(lang);
   const parse = await companion({ cmd: 'parse_links', text: ownLinks.join('\n') }, work);
   const subParse = await companion({ cmd: 'parse_links', text: subLinks.join('\n') }, work);
   if (parse.servers.length !== ownLinks.length || subParse.servers.length !== subLinks.length) {
@@ -141,9 +162,9 @@ export async function prepareExtension(work, extra = null) {
     hello: { hostVersion, singboxVersion: '1.14.4', singboxPath: `${appDir}\\sing-box.exe`, xrayVersion: '26.10.31',
       xrayPath: `${appDir}\\xray.exe`, dataDir: 'C:\\Users\\user\\AppData\\Local\\Waysplit' },
     parse,
-    sub: { ...subParse, title: 'Мой VPN', updateIntervalHours: 12, format: '',
+    sub: { ...subParse, title: text.subTitle, updateIntervalHours: 12, format: '',
       info: { upload: Math.round(2.1 * GB), download: Math.round(21.3 * GB), total: 200 * GB, expire: Math.floor(Date.UTC(2027, 0, 31) / 1000) },
-      announce: 'Плановые работы в ночь на воскресенье, 03:00–04:00 (МСК).' },
+      announce: text.announce },
     pings,
   };
   const ext = join(work, 'extension');
@@ -153,24 +174,28 @@ export async function prepareExtension(work, extra = null) {
   return ext;
 }
 
-// seed — данные в расширение через страницу ctl: свои серверы, подписка, правила, избранное,
-// текущий сервер, пинг всех. Вернёт msg (команда фону) и idOf (id сервера по городу).
-export async function seed(ctl) {
+// seed — данные в расширение через страницу ctl: язык окна, свои серверы, подписка, правила,
+// избранное, текущий сервер, пинг всех. lang — язык окна и данных (ru или en): задаётся явно,
+// чтобы кадры не зависели от языка Chrome. Вернёт msg (команда фону) и idOf (id сервера по коду
+// страны: 'NL', 'DE'…).
+export async function seed(ctl, lang = 'ru') {
+  const { ownLinks, city, text } = fixtures(lang);
   const msg = async (m) => {
     const r = await ctl.eval(`chrome.runtime.sendMessage(${JSON.stringify(m)})`);
     if (!r?.ok) throw new Error(`${m.type}: ${r?.error?.message}`);
     return r.result;
   };
+  await msg({ type: 'setSetting', key: 'language', value: lang });
   await msg({ type: 'addLinks', text: ownLinks.join('\n') });
   await msg({ type: 'addSubscription', url: subUrl });
   const { servers } = await ctl.eval(`chrome.storage.local.get('servers')`);
-  const idOf = (city) => servers.find((s) => s.name.includes(city)).id;
-  await msg({ type: 'addRules', domains: ['bank.example.net', 'рф'], action: 'direct' });
+  const idOf = (cc) => servers.find((s) => s.name.includes(city[cc])).id;
+  await msg({ type: 'addRules', domains: ['bank.example.net', text.zone], action: 'direct' });
   await msg({ type: 'addRules', domains: ['video.example.com'], action: 'proxy' });
-  await msg({ type: 'addRules', domains: ['news.example.org'], action: 'proxy', serverId: idOf('Франкфурт') });
-  await msg({ type: 'setFavorite', id: idOf('Амстердам'), on: true });
-  await msg({ type: 'setFavorite', id: idOf('Стокгольм'), on: true });
-  await msg({ type: 'select', id: idOf('Амстердам') });
+  await msg({ type: 'addRules', domains: ['news.example.org'], action: 'proxy', serverId: idOf('DE') });
+  await msg({ type: 'setFavorite', id: idOf('NL'), on: true });
+  await msg({ type: 'setFavorite', id: idOf('SE'), on: true });
+  await msg({ type: 'select', id: idOf('NL') });
   await msg({ type: 'ping', ids: [] });
   // Карточка «разрешить видеть запросы вкладок» (домены сайта) показывается один раз, до ответа —
   // на обычных кадрах её нет; кадр с ней — в popup-shots.js.

@@ -47,17 +47,18 @@ func cmdInstall() error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("Компаньон зарегистрирован в Chrome.")
-	fmt.Println("  программа:   ", exe)
-	fmt.Println("  манифест:    ", path)
-	fmt.Println("  реестр:       HKCU\\" + hostKey)
+	fmt.Println(say("Компаньон зарегистрирован в Chrome.", "The companion is registered in Chrome."))
+	fmt.Println(say("  программа:   ", "  program:     "), exe)
+	fmt.Println(say("  манифест:    ", "  manifest:    "), path)
+	fmt.Println(say("  реестр:       ", "  registry:     ") + "HKCU\\" + hostKey)
 	for _, id := range ids {
-		fmt.Println("  расширение:   chrome-extension://" + id + "/")
+		fmt.Println(say("  расширение:   ", "  extension:    ") + "chrome-extension://" + id + "/")
 	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(exe), "sing-box.exe")); err != nil {
-		fmt.Println("\nВнимание: рядом с компаньоном нет sing-box.exe — без него VPN не заработает.")
+		fmt.Println(say("\nВнимание: рядом с компаньоном нет sing-box.exe — без него VPN не заработает.",
+			"\nWarning: sing-box.exe is missing next to the companion. The VPN will not work without it."))
 	}
-	fmt.Println("\nЕсли перенесёте папку с компаньоном, выполните install ещё раз.")
+	fmt.Println(say("\nЕсли перенесёте папку с компаньоном, выполните install ещё раз.", "\nIf you move the companion folder, run install again."))
 	finishMigration() // переход с LinkVPN: старая регистрация и старая папка данных (migrate.go)
 	return nil
 }
@@ -71,9 +72,9 @@ func cmdUninstall() error {
 		removed = true // и старая регистрация LinkVPN (migrate.go)
 	}
 	if removed {
-		fmt.Println("Регистрация компаньона в Chrome удалена.")
+		fmt.Println(say("Регистрация компаньона в Chrome удалена.", "The companion registration in Chrome is removed."))
 	} else {
-		fmt.Println("Компаньон и так не был зарегистрирован.")
+		fmt.Println(say("Компаньон и так не был зарегистрирован.", "The companion was not registered anyway."))
 	}
 	return nil
 }
@@ -106,15 +107,15 @@ func install(exe string, ids []string, dir, key string) (string, error) {
 	}
 	path := filepath.Join(dir, hostName+".json")
 	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
-		return "", fmt.Errorf("не удалось записать %s: %w", path, err)
+		return "", fmt.Errorf(say("не удалось записать %s: %w", "could not write %s: %w"), path, err)
 	}
 	k, _, err := registry.CreateKey(registry.CURRENT_USER, key, registry.SET_VALUE)
 	if err != nil {
-		return "", fmt.Errorf("не удалось создать ключ реестра HKCU\\%s: %w", key, err)
+		return "", fmt.Errorf(say("не удалось создать ключ реестра HKCU\\%s: %w", "could not create the registry key HKCU\\%s: %w"), key, err)
 	}
 	defer k.Close()
 	if err := k.SetStringValue("", path); err != nil {
-		return "", fmt.Errorf("не удалось записать в реестр: %w", err)
+		return "", fmt.Errorf(say("не удалось записать в реестр: %w", "could not write to the registry: %w"), err)
 	}
 	return path, nil
 }
@@ -125,7 +126,7 @@ func uninstall(dir, key, name string) (removed bool, err error) {
 	case err == nil:
 		removed = true
 	case !errors.Is(err, registry.ErrNotExist):
-		return false, fmt.Errorf("не удалось удалить ключ реестра HKCU\\%s: %w", key, err)
+		return false, fmt.Errorf(say("не удалось удалить ключ реестра HKCU\\%s: %w", "could not delete the registry key HKCU\\%s: %w"), key, err)
 	}
 	switch err := os.Remove(filepath.Join(dir, name+".json")); {
 	case err == nil:

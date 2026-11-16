@@ -3,7 +3,8 @@
 // и попадает в резервную копию).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { coreText, fmtUptime, pingBars, plural, splitFlag } from '../extension/lib/format.js';
+import { coreText, fmtUptime, pingBars, splitFlag } from '../extension/lib/format.js';
+import { t } from '../extension/lib/i18n.js';
 import { normalize } from '../extension/lib/storage.js';
 import { S1, S2, setup } from './fakes.js';
 
@@ -26,7 +27,7 @@ test('флаг страны из имени сервера', () => {
 });
 
 test('склонения: 1 сервер, 2 сервера, 5 серверов, 11–14 серверов', () => {
-  const s = (n) => plural(n, ['сервер', 'сервера', 'серверов']);
+  const s = (n) => t('n.servers', { n }); // формы — в словаре, выбор по числу — Intl.PluralRules
   assert.deepEqual([1, 2, 4, 5, 11, 12, 14, 21, 22, 25, 101, 111, 0].map(s),
     ['1 сервер', '2 сервера', '4 сервера', '5 серверов', '11 серверов', '12 серверов', '14 серверов', '21 сервер', '22 сервера', '25 серверов', '101 сервер', '111 серверов', '0 серверов']);
 });

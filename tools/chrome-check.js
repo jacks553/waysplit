@@ -249,9 +249,11 @@ async function waitPort(port, open, ms) {
 // --- Chrome и DevTools по трубе (JSON-сообщения через нулевой байт) ---
 // screen — размер экрана: у Chrome без окна он по умолчанию 800×600, а на невысоком экране окно
 // расширения ниже (popup.css: 580 вместо 600) — проверяем обычный случай, экран 1920×1080.
-function startChrome(profileDir = profile, moreHosts = [], screen = '1920x1080') {
+// lang — язык интерфейса Chrome: от него зависит язык окна при настройке «как в Chrome» (версия
+// 1.2.0). Основная проверка идёт по-русски на любом компьютере: на машине сборки GitHub Chrome английский.
+function startChrome(profileDir = profile, moreHosts = [], screen = '1920x1080', lang = 'ru') {
   const proc = spawn(chromePath, [
-    '--headless=new', `--screen-info={${screen}}`, `--user-data-dir=${profileDir}`, '--no-first-run', '--no-default-browser-check',
+    '--headless=new', `--lang=${lang}`, `--screen-info={${screen}}`, `--user-data-dir=${profileDir}`, '--no-first-run', '--no-default-browser-check',
     '--remote-debugging-pipe', '--enable-unsafe-extension-debugging', '--no-proxy-server',
     `--host-resolver-rules=${['*.test', 'free.example', RU_SITE, ...moreHosts].map((h) => `MAP ${h} 127.0.0.3`).join(', ')}`,
     // Окна расширения в проверке — фоновые вкладки: без этих флагов Chrome замедляет в них таймеры
@@ -702,6 +704,11 @@ try {
   // У автора — 90–160 мс; порог с запасом на медленную машину сборки (GitHub Actions): на ней первое
   // открытие окна сразу после загрузки расширения занимало 1600–1900 мс (выпуск 1.1.0).
   check(ui0.ready > 0 && ui0.ready < 3000, `окно показано с данными за ${Math.round(ui0.ready)} мс от открытия`);
+  // Язык (версия 1.2.0): у новой установки — «как в Chrome». Chrome здесь русский — окно по-русски.
+  const lang0 = await popup.eval(`(async () => ({ setting: (await chrome.storage.local.get('settings')).settings?.language,
+    ui: chrome.i18n.getUILanguage(), html: document.documentElement.lang, home: document.querySelector('.tabbar .tab[data-tab="home"]').textContent.trim() }))()`);
+  check(lang0.setting === 'auto' && /^ru/.test(lang0.ui) && lang0.html === 'ru' && lang0.home === 'Главная',
+    `новая установка: язык «как в Chrome» (${lang0.setting}), Chrome — ${lang0.ui}, окно по-русски (lang=${lang0.html}, «${lang0.home}»)`);
   if (shotsDir) await popup.shot(join(shotsDir, 'popup-empty.png'), 'light');
   const welcome = (await chrome.send('Target.getTargets')).targetInfos.find((t) => t.url.endsWith('/welcome/welcome.html'));
   check(!!welcome, 'при установке открылась страница «Начало работы»');
@@ -881,6 +888,46 @@ try {
   await popup.eval(js.message({ type: 'toggle', enabled: true }));
   await popup.eval(`(async () => { ${wait} await wait(() => ['on', 'warn'].includes($('status').dataset.state), 15000); return 1; })()`);
 
+  // Английский язык (версия 1.2.0). Выбор в «Настройках» меняет надписи сразу, без перезапуска: и на
+  // странице, где выбрали, и в уже открытом окне расширения, и подсказку значка на панели. Потом —
+  // те же замеры «Главной» в окне 400×600: английские надписи другой длины.
+  const pickLanguage = (value) => `(async () => { ${wait}
+    tab('settings');
+    $('language').value = ${JSON.stringify(value)};
+    $('language').dispatchEvent(new Event('change'));
+    await wait(() => document.documentElement.lang === ${JSON.stringify(value === 'en' ? 'en' : 'ru')}, 5000);
+    await sleep(300);
+    return { html: document.documentElement.lang, settings: document.querySelector('.tabbar .tab[data-tab="settings"]').textContent.trim(),
+      legends: [...document.querySelectorAll('#panel-settings legend')].map((x) => x.textContent).join(', '), value: $('language').value,
+      options: [...$('language').options].map((o) => o.textContent).join(', '), tab: document.querySelector('.tabbar .tab[aria-selected="true"]')?.dataset.tab }; })()`;
+  const langOf = (code) => `(async () => { ${wait}
+    await wait(() => document.documentElement.lang === ${JSON.stringify(code)}, 5000);
+    return { html: document.documentElement.lang, home: document.querySelector('.tabbar .tab[data-tab="home"]').textContent.trim(), status: $('status').textContent }; })()`;
+  const en1 = await opts.eval(pickLanguage('en'));
+  check(en1.html === 'en' && en1.settings === 'Settings' && en1.value === 'en' && en1.tab === 'settings' && en1.options === 'same as Chrome, Русский, English',
+    `язык English в «Настройках»: страница сразу по-английски (lang=${en1.html}, разделы: ${en1.legends}; варианты языка: ${en1.options})`);
+  const en2 = await popup.eval(langOf('en'));
+  check(en2.html === 'en' && en2.home === 'Home' && /^(Connected · |Server is not responding)/.test(en2.status),
+    `открытое окно расширения тоже по-английски, без перезапуска: «${en2.home}», «${en2.status}»`);
+  const enTitle = await popup.eval(js.title);
+  check(enTitle === 'Waysplit — connected', `подсказка значка на панели по-английски: «${enTitle}»`);
+  fit = await homeFit(['on', 'warn']);
+  check(fits(fit) && fit.why.startsWith('By the rule for target.test') && fit.links.join() === 'Remove rule,Domains of this tab',
+    `English: окно ${fit.win}, VPN включён, у сайта правило («${fit.why}»): ${fitText(fit)}`);
+  await popup.size(400, 580, [1280, 720]);
+  fit = await homeFit(['on', 'warn']);
+  check(fits(fit, 580) && fit.links.length === 2, `English, экран 1280×720: окно ${fit.win} (высота .app — ${fit.app}), у сайта правило: ${fitText(fit)}`);
+  await popup.size(400, 600);
+  await popup.eval(js.message({ type: 'toggle', enabled: false }));
+  fit = await homeFit(['rules']);
+  check(fits(fit) && fit.status === 'Off · rules are active', `English: окно ${fit.win}, «${fit.status}»: ${fitText(fit)}`);
+  await popup.eval(js.message({ type: 'toggle', enabled: true }));
+  await popup.eval(`(async () => { ${wait} await wait(() => ['on', 'warn'].includes($('status').dataset.state), 15000); return 1; })()`);
+  const ru1 = await opts.eval(pickLanguage('ru'));
+  const ru2 = await popup.eval(langOf('ru'));
+  check(ru1.html === 'ru' && ru1.settings === 'Настройки' && ru1.value === 'ru' && ru2.home === 'Главная' && (await popup.eval(js.title)) === 'Waysplit — подключено',
+    `язык Русский: страница, окно и подсказка значка снова по-русски («${ru1.settings}», «${ru2.home}»)`);
+
   await opts.eval(js.tab('settings'));
   check(await opts.eval(`document.getElementById('autoSiteDomains').checked && !document.getElementById('autoSitePerm').hidden`),
     'в «Настройках»: «Автоматически добавлять домены сайта» включено, рядом — «нужно разрешение Chrome» и кнопка «Разрешить»');
@@ -893,6 +940,29 @@ try {
   await popup.eval(js.message({ type: 'toggle', enabled: false }));
   fit = await homeFit(['off']);
   check(fits(fit) && fit.state === 'off' && fit.why === 'Правила нет — как у остальных сайтов: без VPN', `окно ${fit.win}, «${fit.status}» («${fit.why}»): ${fitText(fit)}`);
+  // Те же два замера по-английски (язык — сообщением фону, как его записывает «Настройки»).
+  await popup.eval(js.message({ type: 'setSetting', key: 'language', value: 'en' }));
+  fit = await homeFit(['off']);
+  check(fits(fit) && fit.status === 'Off' && fit.why === 'No rule — same as other sites: without VPN' && fit.links.join() === 'Domains of this tab',
+    `English: окно ${fit.win}, «${fit.status}» («${fit.why}»): ${fitText(fit)}`);
+  await popup.eval(js.message({ type: 'toggle', enabled: true }));
+  fit = await homeFit(['on', 'warn']);
+  check(fits(fit) && fit.why === 'No rule — same as other sites: through VPN', `English: окно ${fit.win}, VPN включён, у сайта нет правила («${fit.why}»): ${fitText(fit)}`);
+  // Сообщения компаньона (версия 1.2.0): он присылает фразу с кодом, и окно показывает её на своём
+  // языке. Две строки, которые не станут серверами, — причины по-английски, а после смены языка тот же
+  // запрос даёт их по-русски. Компаньон свежий — строки «обновите компаньон» в «Настройках» нет.
+  const badLinks = ['vless://nouuid.example.com:443', 'ss://YWVzLTI1Ni1nY206cGFzcw@ss.example.com:8388'].join(String.fromCharCode(10));
+  const skipEn = (await popup.eval(js.message({ type: 'addLinks', text: badLinks })))?.result?.skipped?.map((x) => x.reason) || [];
+  check(skipEn.length === 2 && skipEn[0] === 'the link has no UUID' && /^protocol .+ is not supported yet$/.test(skipEn[1]),
+    `English: причины компаньона, почему строки не стали серверами, — по-английски: «${skipEn.join('», «')}»`);
+  await opts.eval(js.tab('settings'));
+  const hostLang = await opts.eval(`(async () => { ${wait} await wait(() => /companion [0-9]/.test($('versions').textContent), 10000); return { versions: $('versions').textContent, hidden: $('hostLang').hidden }; })()`);
+  check(hostLang.hidden && hostLang.versions.includes(`companion ${hostVersion}`), `English, «Настройки»: «${hostLang.versions}», строки «обновите компаньон» нет (компаньон свежий)`);
+  await popup.eval(js.message({ type: 'setSetting', key: 'language', value: 'ru' }));
+  await popup.eval(langOf('ru'));
+  const skipRu = (await popup.eval(js.message({ type: 'addLinks', text: badLinks })))?.result?.skipped?.map((x) => x.reason) || [];
+  check(skipRu.length === 2 && skipRu[0] === 'в ссылке нет uuid' && /^протокол .+ пока не поддерживается$/.test(skipRu[1]),
+    `по-русски те же причины: «${skipRu.join('», «')}»`);
   await popup.eval(js.message({ type: 'toggle', enabled: true }));
   await popup.eval(`(async () => { ${wait} await wait(() => ['on', 'warn'].includes($('status').dataset.state), 15000); return 1; })()`);
   [text] = await readUntil(tab, target, 'Waysplit-OK A');
@@ -1314,6 +1384,33 @@ try {
   await chrome.close();
   check(await waitPort(other.localPort, false, 10000), 'Chrome закрыт: ядро завершилось вместе с ним');
   check(await waitPort(srvX.localPort, false, 10000), 'Chrome закрыт: Xray тоже завершился');
+
+  // --- новая установка в английском Chrome (версия 1.2.0): язык «как в Chrome» — английский ---
+  // Та же копия без компаньона, но свой профиль и Chrome с английским интерфейсом.
+  const enChrome = startChrome(join(work, 'profile-en'), [], '1920x1080', 'en');
+  try {
+    const { id: enId } = await enChrome.send('Extensions.loadUnpacked', { path: bareDir });
+    const enPop = await enChrome.page(`chrome-extension://${enId}/popup/popup.html`);
+    await enPop.size(400, 600);
+    const e1 = await enPop.eval(`(async () => { ${wait}
+      await wait(() => !$('problem').hidden, 10000);
+      return { ui: chrome.i18n.getUILanguage(), setting: (await chrome.storage.local.get('settings')).settings?.language, html: document.documentElement.lang,
+        home: document.querySelector('.tabbar .tab[data-tab="home"]').textContent.trim(), problem: $('problemText').textContent, hint: $('hint').textContent,
+        label: $('download').textContent, steps: [...$('steps').children].map((li) => li.textContent), title: await chrome.action.getTitle({}) }; })()`);
+    check(/^en/.test(e1.ui) && e1.setting === 'auto' && e1.html === 'en' && e1.home === 'Home' && e1.problem === 'Companion is not installed'
+      && e1.label === 'Download' && e1.steps.length === 3 && e1.title === 'Waysplit — off',
+    `английский Chrome (${e1.ui}), новая установка: язык «как в Chrome», окно по-английски — «${e1.problem}», «${e1.hint}», кнопка «${e1.label}», значок «${e1.title}»`);
+    if (shotsDir) await enPop.shot(join(shotsDir, 'popup-no-companion-en.png'), 'light');
+    const enWelcome = await enChrome.page(`chrome-extension://${enId}/welcome/welcome.html`);
+    const e2 = await enWelcome.eval(`(async () => { ${wait}
+      await wait(() => $('hostState').dataset.kind === 'error', 10000);
+      return { html: document.documentElement.lang, title: document.title, h1: document.querySelector('h1').textContent, state: $('hostState').textContent,
+        label: $('download').textContent, steps: $('installSteps').children.length }; })()`);
+    check(e2.html === 'en' && e2.title === 'Waysplit — getting started' && e2.h1 === e2.title && e2.state === 'Companion is not installed' && e2.label === 'Download' && e2.steps === 3,
+      `«Начало работы» в английском Chrome: «${e2.title}», «${e2.state}», шагов установки ${e2.steps}`);
+  } finally {
+    await enChrome.close();
+  }
 
   // --- «домены сайта»: автосбор ---
   // Автосбору нужно разрешение видеть запросы вкладок, а окно разрешения в Chrome без окна не

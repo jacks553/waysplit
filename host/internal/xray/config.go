@@ -11,11 +11,11 @@ package xray
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"waysplit/host/internal/hostlog"
 	"waysplit/host/internal/links"
+	"waysplit/host/internal/msg"
 	"waysplit/host/internal/singbox"
 )
 
@@ -143,7 +143,7 @@ func OutboundFor(s *links.Server, tag string) (Outbound, []string, error) {
 	var warns []string
 	o := Outbound{Tag: tag, Protocol: "vless"}
 	if s.Protocol != "vless" {
-		return o, nil, fmt.Errorf("протокол %s через Xray не запускается", s.Protocol)
+		return o, nil, msg.E("xr_protocol", "proto", s.Protocol)
 	}
 	set := &VLESS{Address: s.Address, Port: s.Port, ID: s.UUID, Encryption: s.Encryption}
 	if set.Encryption == "" {
@@ -153,7 +153,7 @@ func OutboundFor(s *links.Server, tag string) (Outbound, []string, error) {
 	case "", "xtls-rprx-vision", "xtls-rprx-vision-udp443":
 		set.Flow = s.Flow
 	default:
-		return o, nil, fmt.Errorf("flow=%s не поддерживается Xray", s.Flow)
+		return o, nil, msg.E("xr_flow", "flow", s.Flow)
 	}
 	o.Settings = set
 
@@ -178,18 +178,18 @@ func OutboundFor(s *links.Server, tag string) (Outbound, []string, error) {
 		st.RealitySettings = &Reality{ServerName: s.SNI, Fingerprint: fp, Password: s.PublicKey,
 			ShortID: s.ShortID, SpiderX: s.SpiderX, Mldsa65Verify: s.PQV}
 	default:
-		return o, nil, fmt.Errorf("security=%s не поддерживается", s.Security)
+		return o, nil, msg.E("xr_security", "security", s.Security)
 	}
 
 	switch s.Transport {
 	case "tcp":
 		if s.HeaderType != "" && s.HeaderType != "none" {
-			return o, nil, fmt.Errorf("TCP с маскировкой headerType=%s не поддерживается", s.HeaderType)
+			return o, nil, msg.E("xr_tcp_header", "header", s.HeaderType)
 		}
 		st.Network = "raw"
 	case "xhttp":
 		if !xhttpModes[s.Mode] {
-			return o, nil, fmt.Errorf("xhttp: неизвестный режим mode=%s", s.Mode)
+			return o, nil, msg.E("xr_xhttp_mode", "mode", s.Mode)
 		}
 		x := &XHTTP{Host: s.Host, Path: s.Path, Mode: s.Mode}
 		if s.Extra != "" {
@@ -203,7 +203,7 @@ func OutboundFor(s *links.Server, tag string) (Outbound, []string, error) {
 	case "grpc":
 		st.Network, st.GRPCSettings = "grpc", &GRPCSettings{ServiceName: s.ServiceName}
 	default:
-		return o, nil, fmt.Errorf("транспорт %s не поддерживается", s.Transport)
+		return o, nil, msg.E("xr_transport", "transport", s.Transport)
 	}
 	o.StreamSettings = st
 	return o, warns, nil
@@ -245,24 +245,24 @@ func Build(entries []singbox.Entry, level string) (*Built, error) {
 	}
 	usedPort := map[int]string{}
 	for _, e := range entries {
-		fail := func(msg string) { b.Errors = append(b.Errors, singbox.EntryError{ID: e.ID, Message: msg}) }
+		fail := func(t msg.Text) { b.Errors = append(b.Errors, singbox.NewEntryError(e.ID, t)) }
 		switch {
 		case !singbox.ValidID(e.ID):
-			fail(fmt.Sprintf("неверный id сервера «%s»", e.ID))
+			fail(msg.New("bad_server_id", "id", e.ID))
 			continue
 		case b.Ports[e.ID] != 0:
-			fail("сервер с таким id уже есть")
+			fail(msg.New("dup_server_id"))
 			continue
 		case e.LocalPort < 1024 || e.LocalPort > 65535:
-			fail(fmt.Sprintf("неверный локальный порт %d", e.LocalPort))
+			fail(msg.New("bad_local_port", "port", e.LocalPort))
 			continue
 		case usedPort[e.LocalPort] != "":
-			fail(fmt.Sprintf("порт %d уже назначен серверу %s", e.LocalPort, usedPort[e.LocalPort]))
+			fail(msg.New("port_taken", "port", e.LocalPort, "server", usedPort[e.LocalPort]))
 			continue
 		}
 		s, err := links.Parse(e.Link)
 		if err != nil {
-			fail("ссылка не распознана: " + err.Error())
+			fail(msg.New("link_bad", "error", msg.From(err)))
 			continue
 		}
 		hostlog.AddSecret(s.UUID) // uuid бывает и не в виде UUID — маска uuid его не узнает
@@ -271,7 +271,7 @@ func Build(entries []singbox.Entry, level string) (*Built, error) {
 		}
 		out, warns, err := OutboundFor(s, "out-"+e.ID)
 		if err != nil {
-			fail(err.Error())
+			fail(msg.From(err))
 			continue
 		}
 		in := "in-" + e.ID
@@ -288,7 +288,7 @@ func Build(entries []singbox.Entry, level string) (*Built, error) {
 		}
 	}
 	if len(b.Config.Inbounds) == 0 {
-		return b, &singbox.Error{Code: "NO_SERVERS", Message: "нет ни одного сервера, который можно запустить"}
+		return b, singbox.NewError("NO_SERVERS", msg.New("no_servers"))
 	}
 	return b, nil
 }

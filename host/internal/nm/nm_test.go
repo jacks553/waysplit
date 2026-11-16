@@ -6,11 +6,14 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	"waysplit/host/internal/msg"
 )
 
 func TestReadWrite(t *testing.T) {
@@ -135,5 +138,60 @@ func TestServe(t *testing.T) {
 		if r.ID == 8 && strings.Contains(r.Error.Message, "d47d7dee-9073") {
 			t.Errorf("uuid в тексте ошибки не замаскирован: %q", r.Error.Message)
 		}
+	}
+}
+
+type codedErr struct{ error }
+
+func (codedErr) ErrorCode() string { return "PORT_BUSY" }
+func (e codedErr) Unwrap() error   { return e.error }
+
+// Ошибка для расширения: прежний текст (его видят расширения до 1.2.0) и фраза — только если
+// фраза и есть весь текст; секреты прячутся и в тексте, и во вставках.
+func TestToError(t *testing.T) {
+	busy := msg.E("port_busy", "port", 27105)
+	e := toError(codedErr{busy})
+	if e.Code != "PORT_BUSY" || e.Message != "Порт 27105 занят другой программой" || e.Msg != "port_busy" || e.Params["port"] != 27105 {
+		t.Errorf("с фразой: %#v", *e)
+	}
+	e = toError(fmt.Errorf("перед фразой: %w", busy))
+	if e.Code != "INTERNAL" || e.Message != "перед фразой: Порт 27105 занят другой программой" || e.Msg != "" || e.Params != nil {
+		t.Errorf("фраза — не весь текст: %#v", *e)
+	}
+	e = toError(errors.New("просто текст"))
+	if e.Message != "просто текст" || e.Msg != "" {
+		t.Errorf("без фразы: %#v", *e)
+	}
+	uuid := "123e4567-e89b-12d3-a456-426614174000"
+	e = toError(msg.E("sub_net", "reason", msg.New("raw", "error", "сбой "+uuid)))
+	inner, _ := e.Params["reason"].(msg.Text)
+	if strings.Contains(e.Message, uuid) || e.Msg != "sub_net" || inner.Params["error"] != "сбой 123e…" {
+		t.Errorf("секрет во вставке: %#v", *e)
+	}
+	data, _ := json.Marshal(e)
+	if want := `{"code":"INTERNAL","message":"подписка не скачалась: сбой 123e…","msg":"sub_net","params":{"reason":{"msg":"raw","params":{"error":"сбой 123e…"}}}}`; string(data) != want {
+		t.Errorf("JSON %s, нужно %s", data, want)
+	}
+}
+
+func TestWrapPhrased(t *testing.T) {
+	e := Wrap("NO_ANSWER", msg.E("exit_ip_not_ip"))
+	if e.Code != "NO_ANSWER" || e.Msg != "exit_ip_not_ip" || e.Message != "api.ipify.org вернул не IP-адрес" {
+		t.Errorf("Wrap: %#v", *e)
+	}
+	if e := Wrap("NO_ANSWER", errors.New("timeout")); e.Msg != "" || e.Message != "timeout" {
+		t.Errorf("Wrap без фразы: %#v", *e)
+	}
+	e = Phrased("BAD_REQUEST", msg.New("unknown_cmd", "cmd", "x"))
+	if e.Message != "компаньон не знает команду «x» — обновите компаньон" || e.Msg != "unknown_cmd" || e.Params["cmd"] != "x" {
+		t.Errorf("Phrased: %#v", *e)
+	}
+	if p := e.Phrase(); p.ID != "unknown_cmd" {
+		t.Errorf("Phrase: %+v", p)
+	}
+	// Ошибка без фразы в JSON — прежняя: только code и message.
+	data, _ := json.Marshal(&Error{Code: "X", Message: "y"})
+	if string(data) != `{"code":"X","message":"y"}` {
+		t.Errorf("JSON без фразы: %s", data)
 	}
 }

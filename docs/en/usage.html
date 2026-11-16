@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How to use Waysplit</title>
+  <style>
+    :root { color-scheme: light dark; --fg: #1f2328; --muted: #57606a; --bg: #ffffff; --line: #d0d7de; --accent: #2563eb; --code: #f3f4f6; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fg: #e6edf3; --muted: #9da7b3; --bg: #0d1117; --line: #30363d; --accent: #6ea8fe; --code: #161b22; }
+    }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 20px 64px; }
+    h1 { font-size: 28px; line-height: 1.25; margin: 0 0 4px; }
+    h2 { font-size: 22px; margin: 40px 0 8px; }
+    h3 { font-size: 18px; margin: 28px 0 6px; }
+    h4 { font-size: 16px; margin: 24px 0 4px; }
+    .nav { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 24px; font-size: 15px; }
+    .muted { color: var(--muted); }
+    a { color: var(--accent); }
+    code { font: 14px ui-monospace, "Cascadia Mono", Consolas, monospace; overflow-wrap: anywhere; }
+    pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; }
+    pre code { overflow-wrap: normal; }
+    li { margin: 4px 0; }
+    table { border-collapse: collapse; width: 100%; font-size: 15px; display: block; overflow-x: auto; }
+    th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+    td:first-child code { overflow-wrap: normal; white-space: nowrap; }
+    hr { border: 0; border-top: 1px solid var(--line); margin: 48px 0; }
+  </style>
+</head>
+<body>
+<main>
+  <nav class="nav"><a href="help.html">Install and FAQ</a><strong>How to use</strong><a href="dev.html">For developers</a><a href="../privacy.html#en">Privacy policy</a><a href="https://github.com/jacks553/waysplit">GitHub</a><a href="../ru/usage.html" lang="ru">Русский</a></nav>
+  <h1>How to use Waysplit</h1>
+
+<p>Everything is controlled from the extension popup. It opens with the Waysplit icon on the Chrome toolbar. At the bottom of the popup there are four tabs: Home, Servers, Rules and Settings. The popup always opens on Home. The server picker, adding servers, subscription details and diagnostics open as separate screens on top of a tab. To go back, use the arrow at the top or the Esc key. The "Open in a tab" button at the top right opens the same interface in a full browser tab. The "?" button menu has "Help" and "Report a problem".</p>
+<p>Messages at the bottom of the popup behave in different ways. Short success messages disappear by themselves. Errors stay until you close them with the cross or the Esc key. Messages with a reason or an instruction stay too, for example "skipped…" or "reload the tab".</p>
+<p>If you have no servers yet, paste a <code>vless://…</code> or <code>hysteria2://…</code> link or a subscription URL on Home and click "Add". You can paste several links, one per line. Later you add servers on the "Servers" tab with the "+ Add" button. The first server you add becomes the current one.</p>
+<p>The big button on Home turns the VPN on and off for all sites. When the VPN is on, all Chrome traffic goes through the current server. Sites with "without VPN" rules are the exception.</p>
+<p>The "Server" row shows the flag, the name and the latency bars. Click the row to open the server picker. It has a search by name and address. Favorite servers come first, marked with a star. Then come the groups by subscription and your own servers.</p>
+<p>Four bars mean a latency under 600 ms, three under 1 s, two under 1.6 s, one means more. Gray bars mean the server did not respond. The server row then says so: "no response". Hover to see the milliseconds and the reason. The ping of visible servers refreshes automatically, at most once a minute. Click a server to make it current. Sites switch to it in a second or two, and you do not need to restart the browser.</p>
+<p>The "Servers" tab holds subscriptions and your own servers. It has the "Ping all" and "Fastest" buttons. Click a row to choose a server. The "⋯" menu of each server has ping, rename, copy link, favorites, move up or down, and delete. You can also change the order by dragging. Ping works when the VPN is off too: the core starts for the time of the check.</p>
+<p>If you close Chrome with the VPN on, the VPN turns on automatically at the next start. You can turn this off in the settings.</p>
+<h2 id="subscriptions">Subscriptions</h2>
+<p>A subscription URL <code>https://…</code> goes into the same field as server links. Waysplit downloads the server list and shows the subscription name, traffic and expiry date. After that it updates the subscription automatically. By default this happens every 12 hours, but the subscription server can set its own interval.</p>
+<p>The list is downloaded with the User-Agent <code>v2rayN/7.0</code>. With a browser User-Agent, panels like Marzban and Remnawave return a web page instead of the list. You can change the User-Agent in the settings.</p>
+<p>On update, servers are recognized by address and key. So the chosen server and the site rules stay in place, and favorites are not lost. If the subscription cannot be downloaded directly while the VPN is on, it is downloaded through the VPN.</p>
+<p>Subscriptions are on the "Servers" tab. Click a subscription to open its details. The "⋯" menu of a subscription has "Update", "Details and check", "Rename" and "Delete". Deleting removes the subscription together with its servers.</p>
+<p>If the panel sent a message from the provider, you see it in the subscription block.</p>
+<p>Waysplit does not decrypt a subscription encrypted for the Happ app. Links to such subscriptions start with <code>happ://crypt…</code>, and only the Happ app can open them. Pasting such a link is useless, Waysplit will suggest asking the provider for a regular one. Get a regular subscription link <code>https://…</code> in your provider account or ask support for it. A link like <code>happ://add/https://…</code> works as is: Waysplit takes the URL from it.</p>
+<p>Panels often give separate URLs for different apps. In Remnawave such URLs end with /json, /singbox, /mihomo and /clash. Any of them works. Waysplit understands a plain list of links, as text or in base64. It also understands Xray JSON, sing-box JSON and Clash or Mihomo YAML. From these it takes VLESS and Hysteria2 servers. The same server from several configs is added once. Servers of other protocols, for example VMess and Trojan, go to "skipped" with a reason. A link for classic Clash is usually empty, because it does not support VLESS. Waysplit says so.</p>
+<p>If a subscription gives no servers or the wrong ones, open its details and click "Check subscription". Waysplit downloads it the way different apps do and shows a report. The report has the server response, the format, the number of servers of each kind and the headers. It has no subscription URL, server links or passwords. The report itself is in Russian for now. The "with the device ID" checkbox sends the ID of this computer to the provider. The provider may count it as one more device, so the checkbox is off by default.</p>
+<h2 id="sites">Sites through VPN and without VPN</h2>
+<h3>This site</h3>
+<p>Home has the "This site" block. It shows the domain of the open tab and an explanation. The explanation says which rule the site follows, or that there is no rule and the site goes like other sites. If the site has a subdomain, for example m.example.com, you can choose the level the rule applies to.</p>
+<p>The "Through VPN / Without VPN" switch shows how the site opens now. Switching it creates or changes the rule for this domain. The button with a flag on the right opens the server picker for the site. Its first items are "Same as other sites" and "Without VPN". After "Remove rule" the site goes like other sites again.</p>
+<p>Sometimes a rule cannot work right now: the VPN is off, and rules are disabled while the VPN is off. A yellow line says so. Its "Turn on rules" button turns on the setting "Rules work when VPN is off" at once. After any change click "Reload tab".</p>
+<h3 id="site-domains">Site domains</h3>
+<p>Video, images and scripts of a site usually live on other domains. For youtube.com these are, for example, googlevideo.com and ytimg.com. So a rule for one domain is not enough. Site domains are attached to the rule. They follow the rule itself: the same action and the same server. They are a part of the rule, not separate rules. If you delete the rule, they go away with it.</p>
+<p>The rule row shows how many site domains it has, for example "+6 site domains". The "⋯" menu of a rule has "Site domains…". It opens a list where you can remove any domain. A removed domain is not added again automatically. The same screen has the "Restore removed" button.</p>
+<p>Site domains appear in two ways. The first way is ready-made sets. When you add a rule for the main domain of a set, the domains of the set are attached to it at once. The main domains of the sets are youtube.com, instagram.com, telegram.org, discord.com and chatgpt.com.</p>
+<p>The second way: Waysplit collects them on its own while the site is open. Only "through VPN" rules work this way. Domains that the tab with the site contacts are added to its rule. Home then shows a hint that new site domains were found and the tab needs a reload. This needs the Chrome permission to see tab requests. Waysplit asks for it once, after the first "through VPN" rule, with a card that explains why. Without the permission only the sets work. You can turn automatic adding off in the settings with the "Add site domains automatically" checkbox.</p>
+<p>Domains are not added from incognito tabs, even if you allowed the extension to work there. Rules are stored on disk, and nothing from incognito should stay there.</p>
+<p>Chrome chooses the proxy by the request address, not by the tab. So <strong>an attached domain follows the rule in all tabs</strong>. To keep half the internet from going through the VPN of one site, some domains are not added by themselves:</p>
+<ul>
+<li>common services: google.com, gstatic.com, analytics, ads, script libraries like jsdelivr.net;</li>
+<li>domains in the <code>ru</code>, <code>рф</code> and <code>su</code> zones and sites from the "Russian sites without VPN" set;</li>
+<li>domains that have their own rule;</li>
+<li>local addresses.</li>
+</ul>
+<p>If you need such a common domain through the VPN, add a regular rule for it. For shared hostings like cloudfront.net and github.io only the full name is added, for example d123.cloudfront.net, not the whole hosting. Both lists are in <code>extension/lib/domain-sets.json</code>, in the <code>common</code> and <code>hostings</code> sections.</p>
+<h3 id="ru-direct">Russian sites without VPN</h3>
+<p>This is a switch on Home. The same checkbox is in the settings and on the "Getting started" page. It is off by default. When it is on, the <code>.ru</code>, <code>.рф</code> and <code>.su</code> zones and Russian services on other domains open without VPN even when the VPN is on. These are VK, Odnoklassniki, Yandex, Wildberries, Avito and others. Their list is in the "Russian sites without VPN" set in <code>extension/lib/domain-sets.json</code>. The switch exists because some Russian sites and banks do not let in visitors from foreign IPs.</p>
+<p>It is a setting, not a set of rules. Nothing appears in the rule list, only a reminder line on the "Rules" tab. Your rules and site domains take priority. A "through VPN" rule for a single Russian site works even when the switch is on. For such a site the "This site" block says "Without VPN: Russian site".</p>
+<h3>Domains of this tab</h3>
+<p>This link is in the "This site" block. It shows which sites the tab contacted. You can check the ones you need, and Waysplit adds separate rules for them. It helps when you need to add rules by hand. It needs the same permission to see tab requests. After you grant it, reload the tab.</p>
+<h3>The "Rules" tab</h3>
+<p>The "Enter a domain" field both adds rules and searches the list. Next to it you choose what to do with the site: "Without VPN", "Through VPN" like other sites, or a specific server. Then click "+". You can paste several domains or page addresses, one per line.</p>
+<p>A rule row has the site icon, the domain, the direction label and the trash bin. The icon comes only from Chrome's own memory, with no requests to the internet. If there is no icon, you see the first letter of the domain. The label shows where the site goes: "without VPN", "VPN" or a server flag. Click the label to open the server picker. The trash bin deletes the rule at once. The message at the bottom of the popup then has an "Undo" button. It brings the rule back as it was, with its site domains. The "⋯" menu of a row has "Disable rule" and "Site domains…". A disabled rule stays in the list.</p>
+<p>The "⋯" menu of the tab itself has the ready-made sets, rule import and export, and the "Rules work when VPN is off" checkbox. The sets are in the file <code>extension/lib/domain-sets.json</code>. The export file holds rules together with their site domains and has no secrets. Files for import and export are chosen on the page opened in a tab.</p>
+<h3 id="rules">How rules work</h3>
+<p>A rule for a domain also covers all its subdomains. The most specific rule wins. For example, google.com goes through the VPN, and mail.google.com has a "without VPN" rule. Then mail goes without VPN. You can also set a rule for a whole zone: <code>ru</code>, <code>рф</code> or <code>su</code>.</p>
+<p>When the VPN is on, everything goes through the current server, except sites with rules. When the VPN is off, everything goes without VPN, but "through VPN" rules keep working. You can turn this off with the "Rules work when VPN is off" checkbox. It is on the "Settings" tab and in the "⋯" menu on the "Rules" tab. Local addresses like localhost and 192.168.x.x always go without VPN.</p>
+<h2 id="settings">Protection, settings, diagnostics</h2>
+<p>While the VPN is on, WebRTC protection works. Sites cannot learn your real IP through WebRTC. When you turn the VPN off, everything goes back to how it was. You can turn the protection off in the settings.</p>
+<p>The "Settings" tab holds:</p>
+<ul>
+<li>what to do if the server is unavailable;</li>
+<li>WebRTC protection;</li>
+<li>rules while the VPN is off;</li>
+<li>Russian sites without VPN;</li>
+<li>adding site domains automatically;</li>
+<li>connecting when Chrome starts;</li>
+<li>the User-Agent and the update interval for subscriptions;</li>
+<li>the start of the local port range;</li>
+<li>the log level;</li>
+<li>the theme and the language.</li>
+</ul>
+<p>If the server is unavailable, you can choose "Don't open the site" or "Open without VPN". The first option protects from leaks. The theme can follow the system, or be light or dark. The language can be the same as in Chrome, Russian or English. Both apply to the popup and to the "Getting started" page, and the language changes at once.</p>
+<p>At the bottom of the tab there are "Diagnostics", "Help", "Report a problem" and the versions of the extension, the companion and the cores.</p>
+<p>A backup is made with the "Save backup" button. One file gets servers, subscriptions, rules with site domains, favorites and settings. The file is saved and chosen on the page opened in a tab. <strong>The file holds secrets</strong>: server links and subscription URLs. Keep it like a password. The "Restore from backup" button replaces the current data.</p>
+<p>Diagnostics shows the versions of the extension, the companion and the cores, the extension ID and the state of the cores. It also shows who controls the proxy and whether WebRTC protection works. It has the "My current IP" button, events and logs without secrets. The "Copy debug report" button is there too.</p>
+</main>
+</body>
+</html>

@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"waysplit/host/internal/hostlog"
+	"waysplit/host/internal/msg"
 )
 
 const (
@@ -58,14 +59,36 @@ func Write(w io.Writer, data []byte) error {
 	return err
 }
 
-// Error — ошибка для расширения: код и понятный текст по-русски.
+// Error — ошибка для расширения: код и понятный текст по-русски. Msg и Params — код фразы и
+// значения вставок (пакет msg): по ним расширение 1.2.0 показывает текст на языке окна;
+// расширения до 1.2.0 этих полей не знают и показывают Message.
 type Error struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code    string         `json:"code"`
+	Message string         `json:"message"`
+	Msg     string         `json:"msg,omitempty"`
+	Params  map[string]any `json:"params,omitempty"`
 }
 
 func (e *Error) Error() string     { return e.Message }
 func (e *Error) ErrorCode() string { return e.Code }
+
+// Phrase — фраза ошибки (пустая, если её нет).
+func (e *Error) Phrase() msg.Text { return msg.Text{ID: e.Msg, Params: e.Params} }
+
+// Phrased — ошибка с кодом для расширения и фразой.
+func Phrased(code string, t msg.Text) *Error {
+	return &Error{Code: code, Message: t.Ru(), Msg: t.ID, Params: t.Params}
+}
+
+// Wrap — ошибка с кодом для расширения из любой ошибки: текст — её текст, фраза — её фраза, если
+// она и есть весь текст ошибки.
+func Wrap(code string, err error) *Error {
+	e := &Error{Code: code, Message: err.Error()}
+	if t, ok := msg.Of(err); ok && t.Ru() == e.Message {
+		e.Msg, e.Params = t.ID, t.Params
+	}
+	return e
+}
 
 // Request — запрос расширения. Raw — весь JSON запроса: из него команда берёт свои поля.
 type Request struct {
@@ -94,7 +117,7 @@ func Serve(ctx context.Context, in io.Reader, out io.Writer, h Handler) error {
 		data, err := json.Marshal(r)
 		if err == nil && len(data) > MaxOut {
 			hostlog.Printf("ответ на запрос %d больше 1 МБ (%d байт), отправляю ошибку", r.ID, len(data))
-			data, err = json.Marshal(response{ID: r.ID, Error: &Error{Code: "RESULT_TOO_BIG", Message: "ответ компаньона слишком большой"}})
+			data, err = json.Marshal(response{ID: r.ID, Error: Phrased("RESULT_TOO_BIG", msg.New("result_too_big"))})
 		}
 		if err != nil {
 			hostlog.Printf("ответ на запрос %d не собрался: %v", r.ID, err)
@@ -119,14 +142,14 @@ func Serve(ctx context.Context, in io.Reader, out io.Writer, h Handler) error {
 		req := &Request{Raw: data}
 		if err := json.Unmarshal(data, req); err != nil || req.Cmd == "" {
 			hostlog.Printf("непонятный запрос: %.200s", hostlog.Mask(string(data)))
-			send(response{ID: req.ID, Error: &Error{Code: "BAD_REQUEST", Message: "непонятный запрос к компаньону"}})
+			send(response{ID: req.ID, Error: Phrased("BAD_REQUEST", msg.New("bad_message"))})
 			continue
 		}
 		go func() {
 			defer func() {
 				if p := recover(); p != nil {
 					hostlog.Printf("сбой в команде %s: %v\n%s", req.Cmd, p, debug.Stack())
-					send(response{ID: req.ID, Error: &Error{Code: "INTERNAL", Message: "внутренняя ошибка компаньона (подробности — в host.log)"}})
+					send(response{ID: req.ID, Error: Phrased("INTERNAL", msg.New("internal"))})
 				}
 			}()
 			result, err := h(ctx, req)
@@ -140,9 +163,15 @@ func Serve(ctx context.Context, in io.Reader, out io.Writer, h Handler) error {
 }
 
 func toError(err error) *Error {
+	e := &Error{Code: "INTERNAL", Message: hostlog.Mask(err.Error())}
 	var coded interface{ ErrorCode() string }
 	if errors.As(err, &coded) {
-		return &Error{Code: coded.ErrorCode(), Message: hostlog.Mask(err.Error())}
+		e.Code = coded.ErrorCode()
 	}
-	return &Error{Code: "INTERNAL", Message: hostlog.Mask(err.Error())}
+	// Фраза — только если она и есть весь текст ошибки (секреты в значениях прячутся так же).
+	if t, ok := msg.Of(err); ok && t.Ru() == err.Error() {
+		t = t.Map(hostlog.Mask)
+		e.Msg, e.Params = t.ID, t.Params
+	}
+	return e
 }

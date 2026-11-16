@@ -3,6 +3,7 @@
 // с объяснением, карточкой в окне; без него работают только готовые наборы.
 
 import { send } from '../lib/format.js';
+import { language, t } from '../lib/i18n.js';
 import { $, el, toast } from './ui.js';
 import { S, closeAllScreens, renderVisible, showTab } from './state.js';
 
@@ -44,7 +45,7 @@ export function openSiteSetting() {
   box.scrollIntoView({ block: 'center' });
   box.focus();
 }
-const TO_SETTINGS = { action: { label: 'Открыть настройки', run: openSiteSetting } };
+const toSettings = () => ({ action: { label: t('common.openSettings'), run: openSiteSetting } });
 
 // wanted — показывать ли карточку: автосбор включён, разрешения нет, ещё не спрашивали и есть
 // хотя бы одно включённое правило «через VPN» для сайта (после первого такого правила).
@@ -55,23 +56,24 @@ const wanted = () => {
 };
 
 function build(box) {
-  const allow = el('button', { type: 'button', className: 'btn btn-small', textContent: 'Разрешить' });
+  const allow = el('button', { type: 'button', className: 'btn btn-small', textContent: t('common.allow') });
   allow.dataset.act = 'allow';
   allow.addEventListener('click', async () => {
-    if (await requestPerm()) toast('Разрешение получено. Обновите вкладку с сайтом — его домены начнут добавляться к правилу.', 'keep');
-    else toast('Без разрешения работают только готовые наборы. Разрешить можно в «Настройках».', '', TO_SETTINGS);
+    if (await requestPerm()) toast(t('perm.toast.granted'), 'keep');
+    else toast(t('perm.toast.denied'), '', toSettings());
   });
-  const later = el('button', { type: 'button', className: 'ghost', textContent: 'Не сейчас' });
+  const later = el('button', { type: 'button', className: 'ghost', textContent: t('common.notNow') });
   later.dataset.act = 'later';
   later.addEventListener('click', async () => {
     await send({ type: 'setSetting', key: 'siteDomainsAsked', value: true });
-    toast('Хорошо. Разрешить можно позже — в «Настройках».', '', TO_SETTINGS);
+    toast(t('perm.toast.later'), '', toSettings());
   });
-  box.append(
-    el('p', { className: 'perm-title', textContent: 'Чтобы видео и картинки сайта тоже шли через VPN' }),
-    el('p', { className: 'hint', textContent: 'Waysplit будет запоминать домены, с которых сайт грузит содержимое. Chrome спросит разрешение один раз.' }),
+  box.replaceChildren(
+    el('p', { className: 'perm-title', textContent: t('perm.title') }),
+    el('p', { className: 'hint', textContent: t('perm.text') }),
     el('div', { className: 'tools' }, allow, later),
   );
+  box.dataset.lang = language();
 }
 
 // renderPermCards — карточка на «Главной» и на вкладке «Правила».
@@ -80,7 +82,7 @@ export function renderPermCards() {
   for (const id of ['permHome', 'permRules']) {
     const box = $(id);
     if (!box) continue;
-    if (show && !box.childElementCount) build(box);
+    if (show && box.dataset.lang !== language()) build(box); // первый показ или язык сменили
     box.hidden = !show;
   }
 }

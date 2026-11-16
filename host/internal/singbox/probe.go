@@ -2,7 +2,6 @@ package singbox
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"waysplit/host/internal/hostlog"
+	"waysplit/host/internal/msg"
 )
 
 const (
@@ -32,9 +32,16 @@ type Target struct {
 
 // PingResult — время ответа в миллисекундах или ошибка.
 type PingResult struct {
-	ID    string `json:"id"`
-	MS    int    `json:"ms,omitempty"`
-	Error string `json:"error,omitempty"`
+	ID     string         `json:"id"`
+	MS     int            `json:"ms,omitempty"`
+	Error  string         `json:"error,omitempty"`
+	Msg    string         `json:"msg,omitempty"`    // код фразы (пакет msg)
+	Params map[string]any `json:"params,omitempty"` // значения вставок
+}
+
+// PingFailed — сервер не ответил, и почему.
+func PingFailed(id string, t msg.Text) PingResult {
+	return PingResult{ID: id, Error: t.Ru(), Msg: t.ID, Params: t.Params}
 }
 
 // Ping делает HTTP-запрос через локальный порт сервера (inbound mixed понимает и
@@ -42,7 +49,7 @@ type PingResult struct {
 func Ping(ctx context.Context, t Target, target string, timeout time.Duration) (int, error) {
 	start := time.Now()
 	if _, err := get(ctx, t.Port, target, timeout); err != nil {
-		return 0, errors.New(netError(err, t))
+		return 0, &msg.Error{Text: netError(err, t)}
 	}
 	return int(time.Since(start).Milliseconds()), nil
 }
@@ -51,11 +58,11 @@ func Ping(ctx context.Context, t Target, target string, timeout time.Duration) (
 func ExitIP(ctx context.Context, t Target, timeout time.Duration) (string, error) {
 	body, err := get(ctx, t.Port, ExitIPURL, timeout)
 	if err != nil {
-		return "", errors.New(netError(err, t))
+		return "", &msg.Error{Text: netError(err, t)}
 	}
 	ip := strings.TrimSpace(body)
 	if net.ParseIP(ip) == nil {
-		return "", errors.New("api.ipify.org вернул не IP-адрес")
+		return "", msg.E("exit_ip_not_ip")
 	}
 	return ip, nil
 }
@@ -73,7 +80,7 @@ func PingMany(ctx context.Context, targets []Target, target string, timeout time
 			defer func() { <-sem }()
 			res[i].ID = t.ID
 			if ms, err := Ping(ctx, t, target, timeout); err != nil {
-				res[i].Error = err.Error()
+				res[i] = PingFailed(t.ID, msg.From(err))
 			} else {
 				res[i].MS = ms
 			}
@@ -110,13 +117,13 @@ func get(ctx context.Context, port int, target string, timeout time.Duration) (s
 }
 
 // netError — понятная причина, почему сервер не ответил. Подробности — в журнал.
-func netError(err error, t Target) string {
+func netError(err error, t Target) msg.Text {
 	hostlog.Printf("проверка сервера %s (порт %d): %v", t.ID, t.Port, err)
 	if strings.Contains(err.Error(), "dial tcp 127.0.0.1:") {
-		return fmt.Sprintf("ядро не слушает порт %d", t.Port) // не достучались до самого sing-box
+		return msg.New("ping_core_port", "port", t.Port) // не достучались до самого sing-box
 	}
 	if t.Protocol == "hysteria2" {
-		return "Сервер не отвечает (возможно, заблокирован UDP)"
+		return msg.New("ping_no_response_udp")
 	}
-	return "Сервер не отвечает"
+	return msg.New("ping_no_response")
 }

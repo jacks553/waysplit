@@ -12,6 +12,10 @@
 //   ui     { setIcon(state, title) } — значок на панели: off | on | rules | error; необязательно
 //   sets   () → содержимое lib/domain-sets.json (наборы и списки для «доменов сайта»); необязательно
 //   timers { setTimeout, clearTimeout, setInterval, clearInterval }
+//   uiLanguage () → язык интерфейса Chrome ('ru', 'en-US'…) — для настройки языка «как в Chrome»
+//
+// Сообщения, ошибки и подсказка значка — на языке из настройки language (lib/i18n.js): язык
+// выставляется при старте фона и при каждом reconcile, поэтому меняется сразу, без перезапуска.
 
 import { buildPac } from './pac.js';
 import { DEFAULT_SETTINGS, PORT_RANGE, freePort, newId, normalize } from './storage.js';
@@ -21,6 +25,9 @@ import { dropSubscription, isDue, mergeSubscription, subHost } from './subscript
 import { maskUrl } from './format.js';
 import { attachSets, canAttach, cleanSiteDomain, indexRules, siteData, tidySiteDomains } from './sitedomains.js';
 import { MIN_HOST_VERSION, olderThan, outdatedMessage } from './companion.js';
+import { LANGUAGE_SETTINGS, chromeLanguage, resolveLanguage, setLanguage, t } from './i18n.js';
+import { NO_ANSWER } from './i18n/legacy.js';
+import { hostPhrase, hostText } from './hostmsg.js';
 
 export const HEARTBEAT_MS = 20000;
 const RECONNECT_DELAYS = [1000, 3000, 10000, 30000];
@@ -29,8 +36,8 @@ const APPLY_TIMEOUT = 60000;
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/; // как у компаньона: из таких id собираются теги sing-box
 
 export class Controller {
-  constructor({ store, proxy, host, alarms, privacy = null, ui = null, sets = null, timers = globalThis, now = Date.now }) {
-    Object.assign(this, { store, proxy, host, alarms, privacy, ui, sets, timers, now });
+  constructor({ store, proxy, host, alarms, privacy = null, ui = null, sets = null, timers = globalThis, now = Date.now, uiLanguage = chromeLanguage }) {
+    Object.assign(this, { store, proxy, host, alarms, privacy, ui, sets, timers, now, uiLanguage });
     this.appliedPac = undefined; // что стоит в Chrome — неизвестно, пока фон не поставил сам
     this.rtc = undefined; // защита WebRTC: 'on' — поставлена нами, 'off' — снята, иначе — почему не вышло
     this.iconKey = '';
@@ -63,10 +70,28 @@ export class Controller {
         const st = normalize(await this.store.get());
         if (st.settings.autoConnect === 'off' && st.enabled) await this.store.set({ enabled: false });
       }
+      await this.#languageOnce();
       await this.#applySetsOnce();
       await this.reconcile();
     })();
     return this.initDone;
+  }
+
+  // #languageOnce — настройка языка появилась в версии 1.2.0. Один раз, пока её нет в хранилище:
+  // у тех, кто обновился с прежней версии (в хранилище уже что-то есть), язык остаётся русским,
+  // как был; новая установка — «как в Chrome». Потом — выставить язык сообщений.
+  async #languageOnce() {
+    const raw = (await this.store.get()) || {};
+    if (raw.settings?.language === undefined) {
+      const language = Object.keys(raw).length ? 'ru' : 'auto';
+      await this.#mutate((st) => ({ settings: { ...st.settings, language } }));
+    }
+    this.#useLanguage(normalize(await this.store.get()).settings);
+  }
+
+  // #useLanguage — язык сообщений фона по настройке language ('auto' — по языку Chrome).
+  #useLanguage(settings) {
+    setLanguage(resolveLanguage(settings.language, this.uiLanguage()));
   }
 
   // siteData — наборы и списки для «доменов сайта» (lib/domain-sets.json), читаются один раз.
@@ -103,7 +128,7 @@ export class Controller {
           try {
             await this.#step();
           } catch (e) {
-            await this.#status({ state: 'error', code: 'INTERNAL', message: `Внутренняя ошибка расширения: ${e.message}` });
+            await this.#status({ state: 'error', code: 'INTERNAL', message: t('err.INTERNAL', { error: e.message }) });
           }
         } while (this.again);
       } finally {
@@ -115,6 +140,7 @@ export class Controller {
 
   async #step() {
     const st = normalize(await this.store.get());
+    this.#useLanguage(st.settings);
     const plan = routingPlan(st, (await this.siteData()).ruDirect);
     const server = plan.current;
     const want = plan.vpnOn;
@@ -141,10 +167,10 @@ export class Controller {
       }
       base.control = await this.proxy.control();
       base.conflict = base.control === 'controlled_by_other_extensions';
-      if (base.conflict && !this.st?.conflict) this.log('error', 'Прокси Chrome управляет другое расширение');
+      if (base.conflict && !this.st?.conflict) this.log('error', t('event.conflict'));
     } catch (e) {
       this.appliedPac = undefined;
-      await this.#status({ ...base, state: 'error', code: 'PROXY_FAILED', message: `Не удалось настроить прокси Chrome: ${e.message}` });
+      await this.#status({ ...base, state: 'error', code: 'PROXY_FAILED', message: t('err.PROXY_FAILED', { error: e.message }) });
       return;
     }
 
@@ -160,7 +186,7 @@ export class Controller {
         }
       } catch (e) {
         this.rtc = 'failed';
-        this.log('error', `Защита WebRTC: ${e.message}`);
+        this.log('error', t('event.webrtc', { error: e.message }));
       }
       base.webrtc = this.rtc;
     }
@@ -204,7 +230,7 @@ export class Controller {
       }
       this.coreStarted = res.running;
       if (res.restarted) this.readyAt = this.now();
-      this.coreError = res.running ? null : Object.assign(new Error('Ядро не запустилось'), { code: 'CORE_STOPPED' });
+      this.coreError = res.running ? null : coded('CORE_STOPPED', t('err.CORE_STOPPED'));
       base.pid = res.pid ?? null;
       const bad = want && (res.errors || []).find((e) => e.id === server.id);
       if (!want && (!plan.rulesOnly || res.running)) {
@@ -212,9 +238,9 @@ export class Controller {
         this.attempt = 0;
         await this.#status({ ...base, state: offState, code: '', message: '' });
       } else if (!res.running) {
-        await this.#status({ ...base, state: 'error', code: 'CORE_STOPPED', message: 'Ядро не запустилось' });
+        await this.#status({ ...base, state: 'error', code: 'CORE_STOPPED', message: t('err.CORE_STOPPED') });
       } else if (bad) {
-        await this.#status({ ...base, state: 'error', code: 'SERVER_INVALID', message: `Этот сервер не запустился: ${bad.message}` });
+        await this.#status({ ...base, state: 'error', code: 'SERVER_INVALID', message: t('err.SERVER_INVALID', { error: hostText(bad, bad.message) }) });
       } else {
         this.attempt = 0;
         await this.#status({ ...base, state: 'on', code: '', message: '' });
@@ -243,7 +269,7 @@ export class Controller {
   // Адреса подписок (http(s)://) добавляются как подписки и сразу скачиваются.
   async addLinks(text) {
     const res = await this.host.request('parse_links', { text }, 30000);
-    const skipped = res.errors.map((e) => ({ text: e.text, reason: e.reason }));
+    const skipped = res.errors.map((e) => ({ text: e.text, reason: hostText(e, e.reason) }));
     const subscriptions = [];
     for (const u of res.subscriptions || []) {
       try {
@@ -258,12 +284,12 @@ export class Controller {
       const keys = new Set(servers.map((s) => s.key));
       for (const s of res.servers) {
         if (keys.has(s.key)) {
-          skipped.push({ text: s.name, reason: 'такой сервер уже есть' });
+          skipped.push({ text: s.name, reason: t('skip.duplicate') });
           continue;
         }
         const localPort = freePort(servers, st.settings.portRangeStart);
         if (localPort === null) {
-          skipped.push({ text: s.name, reason: 'закончились свободные локальные порты' });
+          skipped.push({ text: s.name, reason: t('skip.noPorts') });
           continue;
         }
         const server = {
@@ -283,7 +309,9 @@ export class Controller {
   }
 
   // ping — пинг серверов (ids; пусто — все) через их локальные порты. При выключенном VPN
-  // ядро поднимается на время проверки и потом гасится. Результаты сохраняются у серверов.
+  // ядро поднимается на время проверки и потом гасится. Результаты сохраняются у серверов:
+  // время ответа или причина (текст на текущем языке и её код — по коду окно покажет причину
+  // на своём языке и после смены языка).
   async ping(ids = []) {
     const st = normalize(await this.store.get());
     const list = ids.length ? st.servers.filter((s) => ids.includes(s.id)) : st.servers;
@@ -292,7 +320,7 @@ export class Controller {
     this.#hold(list.map((s) => s.id));
     try {
       await this.reconcile();
-      if (!this.coreStarted) throw this.coreError || Object.assign(new Error('Ядро не запущено'), { code: 'CORE_STOPPED' });
+      if (!this.coreStarted) throw this.coreError || coded('CORE_STOPPED', t('err.CORE_NOT_RUNNING'));
       const timeoutMs = 5000;
       const res = await this.host.request('ping', { serverIds: list.map((s) => s.id), url: PING_URL, timeoutMs },
         Math.ceil(list.length / 8) * (timeoutMs + 1000) + 10000); // компаньон меряет до 8 серверов сразу
@@ -301,10 +329,17 @@ export class Controller {
       await this.#mutate((cur) => ({
         servers: cur.servers.map((s) => {
           const r = byId.get(s.id);
-          return r ? { ...s, lastPingMs: r.ms || null, lastPingError: r.ms ? null : r.error || 'нет ответа', lastPingAt: at } : s;
+          if (!r) return s;
+          const fail = r.ms ? null : pingFailure(r);
+          return { ...s, lastPingMs: r.ms || null, lastPingError: fail?.text ?? null, lastPingMsg: fail?.phrase ?? null, lastPingAt: at };
         }),
       }));
-      return list.map((s) => byId.get(s.id) || { id: s.id, error: 'нет ответа' });
+      return list.map((s) => {
+        const r = byId.get(s.id);
+        if (r?.ms) return r;
+        const { error, reason } = pingFailure(r);
+        return { id: s.id, error, reason };
+      });
     } finally {
       this.pinging--;
       this.#release(list.map((s) => s.id));
@@ -328,14 +363,14 @@ export class Controller {
   // pingCurrent — быстрый пинг текущего сервера (окно открылось при включённом VPN).
   async pingCurrent() {
     const st = normalize(await this.store.get());
-    if (!st.servers.some((s) => s.id === st.currentServerId)) return { error: 'Сервер не выбран' };
+    if (!st.servers.some((s) => s.id === st.currentServerId)) return { error: t('err.NO_SERVER') };
     return (await this.ping([st.currentServerId]))[0];
   }
 
   // fastest — пинг всех и выбор самого быстрого.
   async fastest() {
     const best = (await this.ping()).filter((r) => r.ms > 0).sort((a, b) => a.ms - b.ms)[0];
-    if (!best) throw Object.assign(new Error('Ни один сервер не ответил'), { code: 'NO_ANSWER' });
+    if (!best) throw coded('NO_ANSWER', t('err.NO_ANSWER'));
     await this.select(best.id);
     return best;
   }
@@ -343,7 +378,7 @@ export class Controller {
   // select — сделать сервер текущим. Ядро не перезапускается: меняется только PAC.
   async select(id) {
     await this.#mutate((st) => {
-      if (!st.servers.some((s) => s.id === id)) throw Object.assign(new Error('Такого сервера нет'), { code: 'NOT_FOUND' });
+      if (!st.servers.some((s) => s.id === id)) throw coded('NOT_FOUND', t('err.NOT_FOUND.server'));
       return { currentServerId: id };
     });
     await this.reconcile();
@@ -353,7 +388,7 @@ export class Controller {
   // rename — новое имя сервера (ядро и PAC не меняются).
   async rename(id, name) {
     const clean = String(name ?? '').trim().slice(0, 100);
-    if (!clean) throw Object.assign(new Error('Имя не может быть пустым'), { code: 'BAD_NAME' });
+    if (!clean) throw coded('BAD_NAME', t('err.BAD_NAME'));
     // customName — обновление подписки это имя больше не меняет.
     await this.#mutate((st) => ({ servers: st.servers.map((s) => (s.id === id ? { ...s, name: clean, customName: true } : s)) }));
   }
@@ -382,7 +417,7 @@ export class Controller {
   async setFavorite(id, on) {
     await this.#mutate((st) => {
       const s = st.servers.find((x) => x.id === id);
-      if (!s) throw coded('NOT_FOUND', 'Такого сервера нет');
+      if (!s) throw coded('NOT_FOUND', t('err.NOT_FOUND.server'));
       const rest = st.favorites.filter((k) => k !== s.key);
       return { favorites: on ? [...rest, s.key] : rest };
     });
@@ -409,11 +444,11 @@ export class Controller {
   // остальные домены набора привязываются к правилу как «домены сайта». Домен был привязан
   // к другому правилу — привязка снимается: теперь у него своё правило.
   async addRules(entries, action, serverId = null) {
-    if (action !== 'direct' && action !== 'proxy') throw coded('BAD_RULE', 'Неизвестное действие правила');
+    if (action !== 'direct' && action !== 'proxy') throw coded('BAD_RULE', t('err.BAD_RULE'));
     const res = { added: 0, updated: 0, skipped: [], domains: [] };
     const data = await this.siteData();
     await this.#mutate((st) => {
-      if (action === 'proxy' && serverId && !st.servers.some((s) => s.id === serverId)) throw coded('NOT_FOUND', 'Такого сервера нет');
+      if (action === 'proxy' && serverId && !st.servers.some((s) => s.id === serverId)) throw coded('NOT_FOUND', t('err.NOT_FOUND.server'));
       const rules = [...st.rules];
       const index = new Map(rules.map((r, i) => [r.domain, i]));
       const seen = new Set();
@@ -450,15 +485,15 @@ export class Controller {
   async updateRule(id, patch = {}) {
     await this.#mutate((st) => {
       const rule = st.rules.find((r) => r.id === id);
-      if (!rule) throw coded('NOT_FOUND', 'Такого правила нет');
+      if (!rule) throw coded('NOT_FOUND', t('err.NOT_FOUND.rule'));
       const next = { ...rule };
       if ('enabled' in patch) next.enabled = !!patch.enabled;
       if ('action' in patch) {
-        if (patch.action !== 'direct' && patch.action !== 'proxy') throw coded('BAD_RULE', 'Неизвестное действие правила');
+        if (patch.action !== 'direct' && patch.action !== 'proxy') throw coded('BAD_RULE', t('err.BAD_RULE'));
         next.action = patch.action;
       }
       if ('serverId' in patch) {
-        if (patch.serverId && !st.servers.some((s) => s.id === patch.serverId)) throw coded('NOT_FOUND', 'Такого сервера нет');
+        if (patch.serverId && !st.servers.some((s) => s.id === patch.serverId)) throw coded('NOT_FOUND', t('err.NOT_FOUND.server'));
         next.serverId = patch.serverId || null;
       }
       if (next.action === 'direct') next.serverId = null;
@@ -505,7 +540,7 @@ export class Controller {
   async removeSiteDomain(ruleId, domain) {
     await this.#mutate((st) => {
       const rule = st.rules.find((r) => r.id === ruleId);
-      if (!rule) throw coded('NOT_FOUND', 'Такого правила нет');
+      if (!rule) throw coded('NOT_FOUND', t('err.NOT_FOUND.rule'));
       if (!rule.siteDomains.includes(domain)) return null;
       const next = {
         ...rule,
@@ -522,7 +557,7 @@ export class Controller {
   async restoreSiteDomains(ruleId) {
     const data = await this.siteData();
     await this.#mutate((st) => {
-      if (!st.rules.some((r) => r.id === ruleId)) throw coded('NOT_FOUND', 'Такого правила нет');
+      if (!st.rules.some((r) => r.id === ruleId)) throw coded('NOT_FOUND', t('err.NOT_FOUND.rule'));
       const rules = st.rules.map((r) => (r.id === ruleId ? { ...r, siteDomainsRemoved: [] } : r));
       return { rules: attachSets(rules, data, new Set([ruleId])) };
     });
@@ -557,7 +592,7 @@ export class Controller {
     const st = normalize(await this.store.get());
     for (const [ruleId, domains] of added) {
       const rule = st.rules.find((r) => r.id === ruleId);
-      this.log('info', `Домены сайта ${rule?.domain ?? ruleId}: добавлено ${domains.length} (${domains.slice(0, 8).join(', ')}${domains.length > 8 ? ', …' : ''})`);
+      this.log('info', t('event.siteDomains', { domain: rule?.domain ?? ruleId, n: domains.length, list: `${domains.slice(0, 8).join(', ')}${domains.length > 8 ? ', …' : ''}` }));
     }
     await this.#hints((siteNew) => {
       const next = { ...siteNew };
@@ -597,14 +632,14 @@ export class Controller {
   // версии 1.0.0 их нет — тогда правилу привязываются домены его набора (как в addRules).
   async importRules(data) {
     const list = Array.isArray(data?.rules) ? data.rules : null;
-    if (data?.type !== 'rules' || !list) throw coded('BAD_FILE', 'Это не файл правил Waysplit');
+    if (data?.type !== 'rules' || !list) throw coded('BAD_FILE', t('err.BAD_FILE.rules'));
     const st = normalize(await this.store.get());
     const groups = new Map(); // «действие|сервер|вкл» → домены: добавляем пачками
     const res = { added: 0, updated: 0, skipped: [], domains: [] };
     const fromFile = new Map(); // домен → «домены сайта» из файла
     for (const r of list) {
       if (r?.action !== 'direct' && r?.action !== 'proxy') {
-        res.skipped.push({ text: String(r?.domain ?? ''), reason: 'неизвестное действие' });
+        res.skipped.push({ text: String(r?.domain ?? ''), reason: t('skip.badAction') });
         continue;
       }
       const serverId = r.action === 'proxy' && r.server ? st.servers.find((s) => s.name === r.server)?.id ?? null : null;
@@ -634,7 +669,7 @@ export class Controller {
   // setSetting — одна настройка (SPEC 3.6). Новый диапазон портов — серверы получают порты
   // из него по порядку (ядро перезапустится).
   async setSetting(key, value) {
-    if (!validSetting(key, value)) throw coded('BAD_SETTING', 'Неверное значение настройки');
+    if (!validSetting(key, value)) throw coded('BAD_SETTING', t('err.BAD_SETTING'));
     await this.#mutate((st) => {
       const patch = { settings: { ...st.settings, [key]: value } };
       if (key === 'portRangeStart' && value !== st.settings.portRangeStart) patch.servers = reassignPorts(st.servers, value);
@@ -648,7 +683,7 @@ export class Controller {
   // addSubscription — новая подписка (или уже известная по адресу) и сразу её скачивание.
   async addSubscription(url) {
     url = String(url ?? '').trim();
-    if (!/^https?:\/\/[^/\s]+/i.test(url)) throw coded('BAD_URL', 'Адрес подписки должен начинаться с http:// или https://');
+    if (!/^https?:\/\/[^/\s]+/i.test(url)) throw coded('BAD_URL', t('err.BAD_URL'));
     let sub;
     let created = false;
     await this.#mutate((st) => {
@@ -671,7 +706,7 @@ export class Controller {
   async updateSubscription(id) {
     const st = normalize(await this.store.get());
     const sub = st.subscriptions.find((s) => s.id === id);
-    if (!sub) throw coded('NOT_FOUND', 'Такой подписки нет');
+    if (!sub) throw coded('NOT_FOUND', t('err.NOT_FOUND.sub'));
     let res;
     try {
       // device — подписка уже привязана к компьютеру как устройство (SPEC-SUBS, шаг 2): компаньон
@@ -683,23 +718,23 @@ export class Controller {
         device: sub.device === true,
       }, 120000); // до двух запросов (без идентификатора и с ним)
     } catch (e) {
-      await this.#mutate((cur) => ({ subscriptions: cur.subscriptions.map((x) => (x.id === id ? { ...x, lastError: e.message, lastTryAt: this.now() } : x)) }));
-      this.log('error', `Подписка «${sub.name}» не обновилась: ${e.message}`);
+      await this.#mutate((cur) => ({ subscriptions: cur.subscriptions.map((x) => (x.id === id ? { ...x, lastError: e.message, lastErrorMsg: e.phrase ?? null, lastTryAt: this.now() } : x)) }));
+      this.log('error', t('event.sub.failed', { name: sub.name, error: e.message }));
       throw e;
     }
     let report;
     let name = sub.name;
     await this.#mutate((cur) => {
-      if (!cur.subscriptions.some((x) => x.id === id)) throw coded('NOT_FOUND', 'Подписку удалили, пока она скачивалась');
+      if (!cur.subscriptions.some((x) => x.id === id)) throw coded('NOT_FOUND', t('err.SUB_GONE'));
       const m = mergeSubscription(cur, id, res, this.now());
       report = m.report;
       name = m.patch.subscriptions.find((x) => x.id === id).name;
       return m.patch;
     });
     if (res.deviceUsed && !sub.device) {
-      this.log('info', `Подписка «${name}» отдаёт серверы только устройствам — этот компьютер привязан к ней как устройство (отправлен идентификатор)`);
+      this.log('info', t('event.sub.device', { name }));
     }
-    this.log('info', `Подписка «${name}» обновлена: новых ${report.added}, удалено ${report.removed}, пропущено ${report.skipped.length}${res.viaVpn ? ' (скачана через VPN)' : ''}`);
+    this.log('info', t(res.viaVpn ? 'event.sub.updatedVpn' : 'event.sub.updated', { name, added: report.added, removed: report.removed, skipped: report.skipped.length }));
     await this.reconcile();
     return { ...report, id, name, info: res.info ?? null, viaVpn: !!res.viaVpn, device: !!res.deviceUsed, announce: res.announce || '' };
   }
@@ -710,13 +745,13 @@ export class Controller {
   async checkSubscription(id, device = false) {
     const st = normalize(await this.store.get());
     const sub = st.subscriptions.find((s) => s.id === id);
-    if (!sub) throw coded('NOT_FOUND', 'Такой подписки нет');
+    if (!sub) throw coded('NOT_FOUND', t('err.NOT_FOUND.sub'));
     const res = await this.host.request('sub_info', {
       url: sub.url,
       device: device === true,
       proxyServerId: this.coreStarted && st.currentServerId ? st.currentServerId : '',
     }, 180000);
-    this.log('info', `Проверка подписки «${sub.name}»${res.device ? ' с идентификатором устройства' : ''}${res.viaVpn ? ' (через VPN)' : ''}`);
+    this.log('info', `${t('event.sub.check', { name: sub.name })}${res.device ? ` ${t('sub.check.done.device')}` : ''}${res.viaVpn ? ` (${t('common.throughVpn')})` : ''}`);
     return { id, name: sub.name, report: res.report, device: !!res.device, viaVpn: !!res.viaVpn };
   }
 
@@ -735,7 +770,7 @@ export class Controller {
   // renameSubscription — своё имя подписки (обновления его больше не меняют).
   async renameSubscription(id, name) {
     const clean = String(name ?? '').trim().slice(0, 100);
-    if (!clean) throw coded('BAD_NAME', 'Имя не может быть пустым');
+    if (!clean) throw coded('BAD_NAME', t('err.BAD_NAME'));
     await this.#mutate((st) => ({ subscriptions: st.subscriptions.map((s) => (s.id === id ? { ...s, name: clean, customName: true } : s)) }));
   }
 
@@ -772,8 +807,9 @@ export class Controller {
   // importBackup — заменить серверы, подписки, правила и настройки копией из файла.
   // Включён ли VPN — не меняется. Ссылки заново разбирает компаньон; порты — заново по порядку.
   async importBackup(data) {
-    if (data?.type !== 'backup' || !Array.isArray(data.servers)) throw coded('BAD_FILE', 'Это не файл резервной копии Waysplit');
-    const settings = { ...DEFAULT_SETTINGS };
+    if (data?.type !== 'backup' || !Array.isArray(data.servers)) throw coded('BAD_FILE', t('err.BAD_FILE.backup'));
+    // В копиях версий до 1.2.0 настройки языка нет — язык остаётся нынешним.
+    const settings = { ...DEFAULT_SETTINGS, language: normalize(await this.store.get()).settings.language };
     for (const [k, v] of Object.entries(data.settings || {})) if (validSetting(k, v)) settings[k] = v;
     const parsed = data.servers.length
       ? await this.host.request('parse_links', { text: data.servers.map((s) => String(s.link ?? '')).join('\n') }, 30000)
@@ -824,7 +860,7 @@ export class Controller {
     const keys = new Set(servers.map((s) => s.key));
     const favorites = [...new Set((Array.isArray(data.favorites) ? data.favorites : []).filter((k) => keys.has(k)))];
     await this.#mutate(() => ({ servers, subscriptions, rules, settings, currentServerId, favorites, siteSetsApplied: true }));
-    this.log('info', `Восстановлено из резервной копии: серверов ${servers.length}, подписок ${subscriptions.length}, правил ${rules.length}`);
+    this.log('info', t('event.restored', { servers: servers.length, subs: subscriptions.length, rules: rules.length }));
     await this.reconcile();
     return { servers: servers.length, skipped, subscriptions: subscriptions.length, rules: rules.length };
   }
@@ -835,12 +871,12 @@ export class Controller {
   async exitIp() {
     const st = normalize(await this.store.get());
     const server = st.servers.find((s) => s.id === st.currentServerId);
-    if (!server) throw coded('NO_SERVER', 'Сервер не выбран');
+    if (!server) throw coded('NO_SERVER', t('err.NO_SERVER'));
     this.pinging++;
     this.#hold([server.id]);
     try {
       await this.reconcile();
-      if (!this.coreStarted) throw this.coreError || coded('CORE_STOPPED', 'Ядро не запущено');
+      if (!this.coreStarted) throw this.coreError || coded('CORE_STOPPED', t('err.CORE_NOT_RUNNING'));
       const r = await this.host.request('exit_ip', { serverId: server.id }, 20000);
       return { ip: r.ip, server: server.name };
     } finally {
@@ -863,7 +899,8 @@ export class Controller {
   }
 
   // log — событие в журнал расширения (последние 100, в storage.session). Журнал из хранилища
-  // загружается один раз: две записи подряд до загрузки не должны затереть друг друга.
+  // загружается один раз: две записи подряд до загрузки не должны затереть друг друга. Текст —
+  // на языке, который стоял в момент события: после смены языка прежние записи не переводятся.
   async log(level, text) {
     this.eventsLoading ??= this.store.getSession('events').then((e) => { this.events ??= e || []; });
     await this.eventsLoading;
@@ -875,15 +912,15 @@ export class Controller {
   // proxyError — Chrome не смог пройти через прокси (например, ядро упало). Запись в журнал,
   // красный значок на 15 с; не чаще раза в 5 с проверяем, всё ли в порядке.
   proxyError(details) {
-    const t = this.now();
-    if (t - (this.lastProxyLog || 0) > 5000) {
-      this.lastProxyLog = t;
-      this.log('error', `Ошибка прокси: ${details?.error || ''}${details?.details ? ` (${details.details})` : ''}`);
+    const at = this.now();
+    if (at - (this.lastProxyLog || 0) > 5000) {
+      this.lastProxyLog = at;
+      this.log('error', `${t('event.proxyError', { error: details?.error || '' })}${details?.details ? ` (${details.details})` : ''}`);
     }
-    this.#status({ proxyError: { error: details?.error || '', fatal: !!details?.fatal, at: t } });
+    this.#status({ proxyError: { error: details?.error || '', fatal: !!details?.fatal, at } });
     this.timers.setTimeout(() => this.#icon(), 15500);
-    if ((this.vpnOn || this.rulesOnly) && t - (this.lastKick || 0) > 5000) {
-      this.lastKick = t;
+    if ((this.vpnOn || this.rulesOnly) && at - (this.lastKick || 0) > 5000) {
+      this.lastKick = at;
       this.reconcile();
     }
   }
@@ -914,12 +951,12 @@ export class Controller {
     const proxyErr = s.proxyError?.fatal && this.now() - s.proxyError.at < 15000 && s.proxyError.at > this.readyAt + 3000
       && (s.state === 'on' || s.state === 'rules');
     let state = 'off';
-    let title = 'Waysplit — выключен';
-    if (s.conflict) [state, title] = ['error', 'Waysplit — прокси Chrome управляет другое расширение'];
-    else if (s.state === 'error') [state, title] = ['error', `Waysplit — ошибка: ${s.message}`];
-    else if (proxyErr) [state, title] = ['error', `Waysplit — ошибка прокси: ${s.proxyError.error}`];
-    else if (s.state === 'on' || s.state === 'connecting') [state, title] = ['on', s.state === 'on' ? 'Waysplit — подключено' : 'Waysplit — подключение…'];
-    else if (s.state === 'rules') [state, title] = ['rules', 'Waysplit — выключен, работают правила сайтов'];
+    let title = t('icon.off');
+    if (s.conflict) [state, title] = ['error', t('icon.conflict')];
+    else if (s.state === 'error') [state, title] = ['error', t('icon.error', { error: s.message })];
+    else if (proxyErr) [state, title] = ['error', t('icon.proxyError', { error: s.proxyError.error })];
+    else if (s.state === 'on' || s.state === 'connecting') [state, title] = ['on', t(s.state === 'on' ? 'icon.on' : 'icon.connecting')];
+    else if (s.state === 'rules') [state, title] = ['rules', t('icon.rules')];
     if (state + title === this.iconKey) return;
     this.iconKey = state + title;
     Promise.resolve(this.ui.setIcon(state, title)).catch(() => {});
@@ -965,7 +1002,7 @@ export class Controller {
     if (!this.wanted) return;
     const restarting = err.code === 'HOST_EXITED' || err.code === 'HOST_DISCONNECTED';
     if (this.vpnOn || this.rulesOnly) this.#status(restarting
-      ? { state: 'connecting', code: err.code, message: 'Компаньон перезапускается…' }
+      ? { state: 'connecting', code: err.code, message: t('status.hostRestarting') }
       : { state: 'error', code: err.code, message: err.message });
     this.#retry();
   }
@@ -986,6 +1023,18 @@ function coded(code, message) {
   return Object.assign(new Error(message), { code });
 }
 
+// pingFailure — почему сервер не ответил на пинг:
+//   error  — причина на языке окна;
+//   reason — код фразы компаньона (ping_no_response, ping_no_response_udp…) или null;
+//   text, phrase — что записать в хранилище: текст компаньона как есть (его покажут и прежние
+//            версии расширения) и фразу (по ней причина видна на любом языке, lib/hostmsg.js).
+// Компаньон ничего не сказал — «нет ответа» (как записывало расширение до 1.2.0).
+function pingFailure(r) {
+  if (!r?.error) return { error: t('common.noAnswer'), reason: null, text: NO_ANSWER, phrase: null };
+  const phrase = hostPhrase(r, r.error);
+  return { error: hostText(r, r.error), reason: phrase?.msg ?? null, text: r.error, phrase };
+}
+
 // Допустимые значения настроек (SPEC 3.6).
 const SETTING_CHECKS = {
   rulesWhenOff: (v) => typeof v === 'boolean',
@@ -1000,6 +1049,7 @@ const SETTING_CHECKS = {
   subscriptionIntervalHours: (v) => Number.isInteger(v) && v >= 1 && v <= 168,
   logLevel: (v) => ['trace', 'debug', 'info', 'warn', 'error'].includes(v),
   theme: (v) => v === 'system' || v === 'light' || v === 'dark',
+  language: (v) => LANGUAGE_SETTINGS.includes(v),
 };
 
 export function validSetting(key, value) {
@@ -1011,7 +1061,7 @@ function reassignPorts(servers, start) {
   const out = [];
   for (const s of servers) {
     const localPort = freePort(out, start);
-    if (localPort === null) throw coded('NO_PORTS', 'В новом диапазоне не хватает портов для всех серверов');
+    if (localPort === null) throw coded('NO_PORTS', t('err.NO_PORTS'));
     out.push({ ...s, localPort });
   }
   return out;

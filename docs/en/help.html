@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Waysplit: install and FAQ</title>
+  <style>
+    :root { color-scheme: light dark; --fg: #1f2328; --muted: #57606a; --bg: #ffffff; --line: #d0d7de; --accent: #2563eb; --code: #f3f4f6; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fg: #e6edf3; --muted: #9da7b3; --bg: #0d1117; --line: #30363d; --accent: #6ea8fe; --code: #161b22; }
+    }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 20px 64px; }
+    h1 { font-size: 28px; line-height: 1.25; margin: 0 0 4px; }
+    h2 { font-size: 22px; margin: 40px 0 8px; }
+    h3 { font-size: 18px; margin: 28px 0 6px; }
+    h4 { font-size: 16px; margin: 24px 0 4px; }
+    .nav { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 24px; font-size: 15px; }
+    .muted { color: var(--muted); }
+    a { color: var(--accent); }
+    code { font: 14px ui-monospace, "Cascadia Mono", Consolas, monospace; overflow-wrap: anywhere; }
+    pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; }
+    pre code { overflow-wrap: normal; }
+    li { margin: 4px 0; }
+    table { border-collapse: collapse; width: 100%; font-size: 15px; display: block; overflow-x: auto; }
+    th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+    td:first-child code { overflow-wrap: normal; white-space: nowrap; }
+    hr { border: 0; border-top: 1px solid var(--line); margin: 48px 0; }
+  </style>
+</head>
+<body>
+<main>
+  <nav class="nav"><strong>Install and FAQ</strong><a href="usage.html">How to use</a><a href="dev.html">For developers</a><a href="../privacy.html#en">Privacy policy</a><a href="https://github.com/jacks553/waysplit">GitHub</a><a href="../ru/help.html" lang="ru">Русский</a></nav>
+  <h1>Waysplit: install and FAQ</h1>
+  <p class="muted">How to install Waysplit, update and remove it, and what to do if something goes wrong.</p>
+<h2 id="install">How to install</h2>
+<p>You need 64-bit Windows 10 or 11 and Google Chrome 120 or later. You also need your own servers: <code>vless://…</code> and <code>hysteria2://…</code> links or a subscription URL from your VPN provider. Administrator rights are not needed.</p>
+<ol>
+<li>Install the companion. Download <a href="https://github.com/jacks553/waysplit/releases/latest/download/Waysplit-companion.zip">Waysplit-companion.zip</a>. Right-click the archive and choose "Extract All". In the extracted folder, run <code>Install.cmd</code>. Windows may show the "Windows protected your PC" window. This happens because the program has no paid digital signature and Windows does not know it. Click "More info", then "Run anyway". If a second window appears, click "Run" in it. The section <a href="#windows-warning">Why Windows warns you</a> explains more. Wait for the line "Done: the companion is installed". The installer does not need the internet. You can delete the extracted folder afterwards.</li>
+<li>Install the extension from the <a href="https://chromewebstore.google.com/detail/waysplit/fdgapnefknckjikbklcanoklhnmcgklg">Chrome Web Store</a> with the "Add to Chrome" button. Pin its icon to the toolbar: click the puzzle icon to the right of the address bar, then the pin next to Waysplit. The "Getting started" page opens automatically. Its first step should say "The companion is connected". If it says something else, click "Check again".</li>
+<li>Add a link or a subscription. On the "Getting started" page or in the Waysplit popup, paste server links or a subscription URL <code>https://…</code>. Click "Add", then "Turn on VPN". The status shows "Connected · server · N ms" and the icon turns green. To check, open https://api.ipify.org. It shows the IP of the server. Then turn the VPN off and reload the page. Now it shows your usual IP.</li>
+</ol>
+<p>If the store does not open for you, install the extension by hand. The section <a href="#manual">Manual install</a> explains how.</p>
+<p>The sing-box and Xray cores are already in the companion archive, so the installer does not need the internet. The installer checks the files against the <code>SHA256SUMS.txt</code> list from the archive. This way it makes sure the archive is fully extracted and not damaged. If something is wrong, it tells you which file is missing or damaged. Then the installer copies the companion and the cores to <code>%LOCALAPPDATA%\Programs\Waysplit</code> and registers the companion in Chrome. A registered companion is available only to the Waysplit extension. You can also download the companion with the "Download" button on the "Getting started" page or in the extension popup.</p>
+<p>The archive also holds <code>Установить.cmd</code> and <code>Удалить.cmd</code>. They do the same as <code>Install.cmd</code> and <code>Uninstall.cmd</code>. The installer shows its messages in Russian on Russian Windows and in English otherwise.</p>
+<h3 id="windows-warning">Why Windows warns you</h3>
+<p>Windows marks files from the internet as downloaded. It checks programs without a digital signature more strictly. The companion is not signed: a signature needs a paid certificate in the author's name. So when you run <code>Install.cmd</code>, Windows may show the "Windows protected your PC" window. It says "Publisher: Unknown publisher". Another possible window is "Open File - Security Warning". This does not mean the program has a virus. Windows simply does not know it yet. Check the SHA-256 of the archive and click "More info", then "Run anyway". In the second window, click "Run".</p>
+<p>You can remove the warning in advance. Download the archive and check its SHA-256. Then, before extracting, right-click the archive and open "Properties". At the bottom of the "General" tab, check "Unblock" and click "OK". Do this only if the SHA-256 matches.</p>
+<h3 id="check-archive">How to check the archive</h3>
+<p>Every file has a fingerprint, its SHA-256. If a single byte of the archive changes, the fingerprint changes too. The fingerprints of the real archives are on the <a href="https://github.com/jacks553/waysplit/releases/latest">release page</a>. They are written in the release notes and attached as the files <code>Waysplit-companion.zip.sha256</code> and <code>Waysplit-extension.zip.sha256</code>.</p>
+<ol>
+<li>Click "Start", type PowerShell and open Windows PowerShell.</li>
+<li>Run the command below. It is written for an archive in the Downloads folder. If the archive is somewhere else, use its path.
+<pre><code>Get-FileHash "$env:USERPROFILE\Downloads\Waysplit-companion.zip"</code></pre>
+</li>
+<li>Compare the <code>Hash</code> line with the fingerprint on the release page. Check all 64 characters. Upper and lower case do not matter. If they differ, do not run the program and download the archive again from the release page.</li>
+</ol>
+<p>The extension archive for a manual install is checked the same way. Put <code>Waysplit-extension.zip</code> into the command.</p>
+<h2 id="manual">Manual install (fallback)</h2>
+<p>If the Chrome Web Store is not available to you, you can install Waysplit by hand from the GitHub release. It is the same version as in the store. The companion is the same too. Install it first, as in step 1 of <a href="#install">How to install</a>.</p>
+<ol>
+<li>Download the extension archive <a href="https://github.com/jacks553/waysplit/releases/latest/download/Waysplit-extension.zip">Waysplit-extension.zip</a> from the <a href="https://github.com/jacks553/waysplit/releases/latest">release page</a>.</li>
+<li>Extract it to a permanent folder. Right-click <code>Waysplit-extension.zip</code> and choose "Extract All". Pick a folder you will not delete or move, for example <code>Documents\Waysplit-extension</code>. Chrome runs the extension right from this folder. If you delete it, the extension disappears.</li>
+<li>Load the extension into Chrome. Paste <code>chrome://extensions</code> into the address bar and open that page. Turn on "Developer mode" at the top right. Click "Load unpacked" and choose the folder from step 2. You need the folder that holds the <code>manifest.json</code> file. Then pin the icon: click the puzzle icon to the right of the address bar, then the pin next to Waysplit.</li>
+<li>Add a link or a subscription, as in step 3 of "How to install".</li>
+</ol>
+<p>Chrome may remind you about developer mode at startup. It warns this way about any extension installed by hand. Do not disable the extension, just close the reminder.</p>
+<p>A manual copy does not update automatically. To update it, download the new <code>Waysplit-extension.zip</code> and extract it to the same folder, replacing the files. Then open <code>chrome://extensions</code> and click the round arrow on the Waysplit card.</p>
+<p><strong>Do not install a manual copy next to the store version</strong> in the same Chrome profile. Two copies fight over the proxy, and the VPN works through one or the other at random. When the store becomes available, switch to it. The next section explains how.</p>
+<h2 id="switch">Switching from the manual version to the store version</h2>
+<p>If you installed Waysplit by hand from <code>Waysplit-extension.zip</code>, switch to the store version. Chrome updates it automatically and does not remind you about developer mode. Each copy has its own servers, subscriptions and rules, so follow this order.</p>
+<ol>
+<li>Save a backup in the manual version. Open the "Settings" tab and click "Save backup" in the "Backup" section. The file holds secrets: server links and subscription URLs. Keep it like a password. Then turn the VPN off.</li>
+<li>Install Waysplit from the <a href="https://chromewebstore.google.com/detail/waysplit/fdgapnefknckjikbklcanoklhnmcgklg">Chrome Web Store</a>.</li>
+<li>Remove the manual version. Open <code>chrome://extensions</code> and click "Remove" on its card. You can tell it by the "Unpacked extension" label. After that you can delete the <code>Waysplit-extension</code> folder too. If you have no other extensions installed by hand, you can also turn off "Developer mode".</li>
+<li>Restore your data in the store version. Open the "Settings" tab, click "Restore from backup" in the "Backup" section and choose the file from step 1. Servers, subscriptions, rules, favorites and settings come back. It is better to delete the backup file afterwards.</li>
+</ol>
+<p>You do not need to reinstall the companion, it works with both versions. The link between a subscription and the device stays too, because the companion keeps the device ID.</p>
+<h2 id="update">Updating</h2>
+<p>Chrome updates the store extension automatically. The section <a href="#manual">Manual install</a> explains how to update a manual copy. Better still, <a href="#switch">switch to the store version</a>.</p>
+<p>To update the companion, download the new archive and run <code>Install.cmd</code> again. If the extension needs a newer companion, it says "The companion is outdated" and gives a download link. Servers, rules and settings are stored in Chrome and survive an update.</p>
+<h2 id="uninstall">Uninstalling</h2>
+<ol>
+<li>Remove the extension. Right-click the Waysplit icon and choose "Remove from Chrome". Servers, subscriptions and rules are removed with it. If you may need them later, save a backup first. To do that, open the "Settings" tab and click "Save backup" in the "Backup" section.</li>
+<li>Remove the companion. Run <code>Uninstall.cmd</code> from the archive or from the folder <code>%LOCALAPPDATA%\Programs\Waysplit</code>. It unregisters the companion from Chrome and deletes the program and its data. The data is in <code>%LOCALAPPDATA%\Waysplit</code>: logs and core settings. If something has to be deleted by hand, it says so at the end.</li>
+<li><code>Uninstall.cmd</code> asks about the device ID separately. If you just press Enter, the ID stays. Then your subscription provider will see the same computer after a new install. If you answer "yes", the ID is deleted. Then the provider will treat the computer as a new device after a reinstall, and the device limit of your subscription may run out. If you no longer need Waysplit on this computer, delete the ID and unlink the device in your provider account.</li>
+</ol>
+<h2 id="faq">FAQ</h2>
+<h3>Where do I get servers?</h3>
+<p>From your VPN provider. It gives you <code>vless://</code> and <code>hysteria2://</code> links or a subscription URL. You can also set up your own server. Waysplit works only as a client.</p>
+<h3>Why a separate program?</h3>
+<p>A Chrome extension cannot speak VLESS and Hysteria2 on its own. The sing-box and Xray cores do that, and the companion starts them.</p>
+<h3>What does Waysplit know about me?</h3>
+<p>Waysplit sends nothing to the developer. It talks over the network only to your servers and to your subscription. It also makes two checks: the ping and "My current IP". The <a href="https://jacks553.github.io/waysplit/privacy.html#en">privacy policy</a> lists everything.</p>
+<h3>What does "linked to this computer as a device" mean?</h3>
+<p>Some providers give servers only to devices. Then Waysplit repeats the request with a device ID. It is a random number, not tied to your hardware. It is stored only on this computer. It goes only to the subscription provider, only when the provider requires it, and only over <code>https://</code>. In its device list the provider will see a device named "Chrome". If the device limit is reached, Waysplit says so.</p>
+<h3>Does it work on macOS or Linux?</h3>
+<p>Not yet. The companion exists only for 64-bit Windows 10 and 11.</p>
+<h3 id="safe-browsing">Chrome says the extension is not trusted by Enhanced Safe Browsing</h3>
+<p>Chrome marks extensions from new developers this way. The mark goes away on its own in a few months. You can continue the installation.</p>
+<h3 id="companion-language">Companion messages are in Russian while the popup is in English</h3>
+<p>Companion 1.2.0 and later sends its messages in the language of the popup. An older companion writes only in Russian. Update the companion: download the new archive and run <code>Install.cmd</code>.</p>
+<h3 id="antivirus">An antivirus deleted or blocked the companion or a core</h3>
+<p>Antivirus programs sometimes flag new programs by mistake. This happens to VPN cores too. First check the SHA-256 of the archive against the release page, as in the section "How to check the archive". If the fingerprint matches, restore the file from quarantine and add an exclusion for the folder <code>%LOCALAPPDATA%\Programs\Waysplit</code>.</p>
+<p>To add an exclusion, open "Start" and run "Windows Security". Open "Virus &amp; threat protection" and click "Manage settings". In the "Exclusions" section click "Add or remove exclusions", then "Add an exclusion", and choose "Folder".</p>
+<p>Then run <code>Install.cmd</code> again from the extracted archive. If the antivirus deleted the file there too, extract the archive again. Add an exclusion only if the antivirus really gets in the way.</p>
+<h3>Windows 11 does not let the companion run at all</h3>
+<p>This happens when Smart App Control is on in Windows. It blocks unsigned programs, and it cannot make an exception for a single program.</p>
+<h3>What do the icon colors mean?</h3>
+<ul>
+<li>gray: the VPN is off;</li>
+<li>green: the VPN is on;</li>
+<li>yellow: the VPN is off, but "through VPN" site rules are working;</li>
+<li>red: an error. The Waysplit popup shows what happened.</li>
+</ul>
+<h3 id="problems">If something goes wrong</h3>
+<table>
+<thead><tr><th>What you see</th><th>What to do</th></tr></thead>
+<tbody>
+<tr><td>"Companion is not installed"</td><td>Install the companion, as in step 1 of "How to install". Then click the button again. If that does not help, restart Chrome.</td></tr>
+<tr><td>"The companion does not accept this extension"</td><td>Download the companion again and run <code>Install.cmd</code>.</td></tr>
+<tr><td>"The companion is outdated"</td><td>Download the new companion version and run <code>Install.cmd</code>.</td></tr>
+<tr><td>"sing-box was not found…", or "Xray was not found…" for XHTTP servers</td><td>Run <code>Install.cmd</code> again from the extracted archive: the cores are in the archive. If the installer says "the file is missing" or "the file is damaged", download the archive again and extract all of it. If the file disappears again, an antivirus deletes it. See the FAQ above.</td></tr>
+<tr><td>The installer says "the archive was not fully extracted or is damaged"</td><td>Download the archive again and check its SHA-256. Extract the whole archive with "Extract All". Do not run <code>Install.cmd</code> right from inside the archive.</td></tr>
+<tr><td>"Port 27105 is in use by another program"</td><td>Close the program that took the port. It may be another VPN client, for example. Or change the field "Local server ports, starting from" on the "Settings" tab, for example to 28101.</td></tr>
+<tr><td>"Server is not responding"</td><td>Choose another server or click "Fastest" on the "Servers" tab. With Hysteria2 a common cause is that the network blocks UDP.</td></tr>
+<tr><td>"Another extension is controlling the proxy"</td><td>On the <code>chrome://extensions</code> page, turn off the other VPN or proxy extension. Only one extension can control the Chrome proxy.</td></tr>
+<tr><td>The VPN is off, but sites see the VPN IP</td><td>The site may have a "through VPN" rule, then the icon is yellow. Or Windows has the system proxy of another VPN client turned on. Turn it off.</td></tr>
+<tr><td>A message that the subscription URL is unencrypted</td><td>The provider requires a device ID, and it is not sent over <code>http://</code>. Ask your provider for an <code>https://</code> URL.</td></tr>
+<tr><td>Nothing helps</td><td>Open the "Settings" tab, then "Diagnostics", and click "Copy debug report". Attach the report to your question in <a href="https://github.com/jacks553/waysplit/issues">Issues</a>. The report has no server links, UUIDs, passwords or subscription URLs.</td></tr>
+</tbody>
+</table>
+</main>
+</body>
+</html>

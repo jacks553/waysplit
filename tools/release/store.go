@@ -3,8 +3,8 @@ package main
 // Архив для Chrome Web Store (SPEC-STORE.md, 2.1). Магазин не принимает manifest с полем key,
 // поэтому оно вырезается (в репозитории остаётся: у распакованной версии для разработки свой
 // постоянный ID). Проверки — по документации магазина: manifest в корне архива, описание до
-// 132 символов, значок 128×128 с рисунком 96×96 и прозрачными полями по 16 пикселей, в MV3 —
-// никакого кода из интернета.
+// 132 символов (если оно в _locales, то на каждом языке), значок 128×128 с рисунком 96×96
+// и прозрачными полями по 16 пикселей, в MV3 — никакого кода из интернета.
 
 import (
 	"archive/zip"
@@ -48,6 +48,12 @@ func stripKey(raw []byte) ([]byte, map[string]any, error) {
 
 var versionRe = regexp.MustCompile(`^(0|[1-9]\d{0,4})(\.(0|[1-9]\d{0,4})){0,3}$`)
 
+// msgRef — поле manifest.json, текст которого лежит в _locales: "__MSG_имя__".
+var msgRef = regexp.MustCompile(`^__MSG_(\w+)__$`)
+
+// textLimits — сколько символов магазин принимает в полях, которые берёт из manifest.json.
+var textLimits = map[string]int{"name": 75, "description": 132}
+
 // checkManifest — поля, которые магазин берёт из manifest.json и потом не даёт менять в панели.
 func checkManifest(m map[string]any) []string {
 	var bad []string
@@ -55,11 +61,16 @@ func checkManifest(m map[string]any) []string {
 	if v, _ := m["manifest_version"].(float64); v != 3 {
 		bad = append(bad, "manifest_version должен быть 3")
 	}
-	if n := utf8.RuneCountInString(str("name")); n == 0 || n > 75 {
-		bad = append(bad, fmt.Sprintf("name: %d символов (нужно 1–75)", n))
+	// Текст из _locales ("__MSG_…__") проверяет localeProblems — на каждом языке.
+	if s := str("name"); !msgRef.MatchString(s) {
+		if n := utf8.RuneCountInString(s); n == 0 || n > textLimits["name"] {
+			bad = append(bad, fmt.Sprintf("name: %d символов (нужно 1–75)", n))
+		}
 	}
-	if n := utf8.RuneCountInString(str("description")); n == 0 || n > 132 {
-		bad = append(bad, fmt.Sprintf("description: %d символов (магазин берёт его как краткое описание, нужно 1–132)", n))
+	if s := str("description"); !msgRef.MatchString(s) {
+		if n := utf8.RuneCountInString(s); n == 0 || n > textLimits["description"] {
+			bad = append(bad, fmt.Sprintf("description: %d символов (магазин берёт его как краткое описание, нужно 1–132)", n))
+		}
 	}
 	if !versionRe.MatchString(str("version")) {
 		bad = append(bad, fmt.Sprintf("version %q: нужно до четырёх чисел через точку", str("version")))
@@ -99,6 +110,65 @@ func manifestFiles(m map[string]any) []string {
 	add(asMap(m["background"])["service_worker"])
 	sort.Strings(out)
 	return out
+}
+
+// localeProblems — тексты manifest.json из _locales ("__MSG_имя__"): у языка по умолчанию
+// (default_locale) должны быть все такие тексты, у каждого языка, где текст есть, — допустимой
+// длины (name — до 75 символов, description — до 132: магазин берёт его как краткое описание на
+// этом языке). Без default_locale при папке _locales Chrome расширение не загрузит — и наоборот.
+// Имена текстов в Chrome не различают большие и маленькие буквы.
+func localeProblems(files []entry, m map[string]any) []string {
+	var bad []string
+	locales := map[string]map[string]string{} // язык → имя текста → текст
+	for _, f := range files {
+		parts := strings.Split(f.name, "/")
+		if len(parts) != 3 || parts[0] != "_locales" || parts[2] != "messages.json" {
+			continue
+		}
+		var msgs map[string]struct {
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(f.data, &msgs); err != nil {
+			bad = append(bad, fmt.Sprintf("%s — не JSON: %v", f.name, err))
+			continue
+		}
+		texts := map[string]string{}
+		for k, v := range msgs {
+			texts[strings.ToLower(k)] = v.Message
+		}
+		locales[parts[1]] = texts
+	}
+	def, _ := m["default_locale"].(string)
+	switch {
+	case def == "" && len(locales) > 0:
+		bad = append(bad, "есть папка _locales, а в manifest.json нет default_locale")
+	case def != "" && locales[def] == nil:
+		bad = append(bad, fmt.Sprintf("default_locale %q, а файла _locales/%s/messages.json нет", def, def))
+	}
+	for field, limit := range textLimits {
+		s, _ := m[field].(string)
+		ref := msgRef.FindStringSubmatch(s)
+		if ref == nil {
+			continue
+		}
+		key := strings.ToLower(ref[1])
+		if texts := locales[def]; texts != nil {
+			if _, ok := texts[key]; !ok {
+				bad = append(bad, fmt.Sprintf("%s: в _locales/%s/messages.json нет текста %s", field, def, ref[1]))
+			}
+		}
+		for lang, texts := range locales {
+			text, ok := texts[key]
+			if !ok {
+				continue // на этом языке Chrome возьмёт текст языка по умолчанию
+			}
+			if n := utf8.RuneCountInString(text); n == 0 || n > limit {
+				bad = append(bad, fmt.Sprintf("%s (%s): %d символов (нужно 1–%d)", field, lang, n, limit))
+			}
+		}
+	}
+	sort.Strings(bad)
+	return bad
 }
 
 func asMap(v any) map[string]any {
@@ -272,6 +342,7 @@ func extensionProblems(files []entry, m map[string]any) []string {
 			bad = append(bad, err.Error())
 		}
 	}
+	bad = append(bad, localeProblems(files, m)...)
 	bad = append(bad, remoteCode(files)...)
 	bad = append(bad, missingRefs(files)...)
 	return bad

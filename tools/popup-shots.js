@@ -1,5 +1,7 @@
 // Скриншоты всех экранов окна расширения — для проверки глазами (SPEC-POPUP.md):
-//   node tools/popup-shots.js [папка]     (по умолчанию dist/popup-shots, в git не попадает)
+//   node tools/popup-shots.js [папка] [--lang=en]
+// По умолчанию — по-русски, в dist/popup-shots; с --lang=en — по-английски (и окно, и вымышленные
+// данные), в dist/popup-shots-en. В git эти папки не попадают.
 // Каждый экран — в светлой и тёмной теме, 400×600 (как окно на панели Chrome), плюс развёрнутая
 // страница. Рядом — index.html: все кадры на одной странице, светлая и тёмная тема рядом.
 // Данные вымышленные, компаньон — подделка (tools/shots-lib.js); ошибка в странице останавливает съёмку.
@@ -9,11 +11,13 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { prepareExtension, root, seed, startChrome } from './shots-lib.js';
 
-const outDir = resolve(process.argv[2] || join(root, 'dist', 'popup-shots'));
+const args = process.argv.slice(2);
+const lang = args.find((a) => a.startsWith('--lang='))?.slice(7) || 'ru';
+const outDir = resolve(args.find((a) => !a.startsWith('--')) || join(root, 'dist', lang === 'ru' ? 'popup-shots' : `popup-shots-${lang}`));
 const work = mkdtempSync(join(tmpdir(), 'waysplit-popup-shots-'));
 
 async function main() {
-  const ext = await prepareExtension(work);
+  const ext = await prepareExtension(work, null, lang);
   mkdirSync(outDir, { recursive: true });
   const chrome = startChrome(join(work, 'profile'));
   const shots = [];
@@ -22,7 +26,7 @@ async function main() {
     const base = `chrome-extension://${id}`;
     const ctl = await chrome.page(400, 600);
     await ctl.goto(`${base}/popup/popup.html?full`);
-    const { msg } = await seed(ctl);
+    const { msg } = await seed(ctl, lang);
     // Ещё отключённое правило — как его видно в списке.
     await msg({ type: 'addRules', domains: ['mail.example.org'], action: 'direct' });
     const mail = (await ctl.eval(`chrome.storage.local.get('rules')`)).rules.find((r) => r.domain === 'mail.example.org');
@@ -85,7 +89,7 @@ async function main() {
       const ytMore = `[...document.querySelectorAll('#rulesList .rule')].find((x) => x.querySelector('.rule-domain').textContent === 'youtube.com').querySelector('[data-action="more"]').click()`;
       await shot('20-rule-site-domains', 'Вкладка «Правила»: у правила youtube.com — «+6 доменов сайта», в меню ⋯ — «Домены сайта (6)…»', `${tab('rules')}; ${pause}; ${ytMore}`);
       await shot('21-site-domains', 'Экран «Домены сайта»: что привязано к правилу, убрать любой домен',
-        `${tab('rules')}; ${pause}; ${ytMore}; ${pause}; [...document.querySelectorAll('#pop .pop-item')].find((x) => x.textContent.includes('Домены сайта')).click()`);
+        `${tab('rules')}; ${pause}; ${ytMore}; ${pause}; [...document.querySelectorAll('#pop .pop-item')].at(-1).click()`); // «Домены сайта…» — последний пункт меню
       await ctl.eval(`chrome.storage.session.set({ siteNew: { 4242: ['googlevideo.com', 'ytimg.com'] } })`);
       await msg({ type: 'toggle', enabled: false });
       await shot('22-home-site-new', 'Главная: автосбор нашёл новые домены сайта — «обновите вкладку»', null, 'https://www.youtube.com/watch');
@@ -109,6 +113,7 @@ async function main() {
       await pop.eval(`(async () => { document.querySelector('#toast .toast-action').click(); await new Promise((r) => setTimeout(r, 600)); return 1; })()`);
       await shot('29-welcome-ru', '«Начало работы»: галочка «Российские сайты — без VPN» на шаге со ссылкой', `document.getElementById('ruDirect').scrollIntoView({ block: 'center' })`, 'https://gorod-primer.ru/novosti', full, `${base}/welcome/welcome.html`);
       await msg({ type: 'setSetting', key: 'ruDirect', value: false });
+      await shot('32-welcome', '«Начало работы»: шапка и первые шаги', null, 'https://shop.example.org/catalog', full, `${base}/welcome/welcome.html`);
     }
   } finally {
     await chrome.close();

@@ -10,13 +10,14 @@ package links
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
+
+	"waysplit/host/internal/msg"
 )
 
 // Форматы подписки (Subscription.Format; "" — обычный список ссылок).
@@ -49,11 +50,11 @@ func ConvertBody(text, contentType string) (out string, format string, skipped [
 	t := strings.TrimSpace(text)
 	switch {
 	case strings.HasPrefix(t, "<") || strings.Contains(strings.ToLower(contentType), "text/html") && !strings.Contains(t, "://"):
-		return "", "", nil, errors.New("вместо списка серверов пришла веб-страница: проверьте адрес подписки или User-Agent в настройках")
+		return "", "", nil, msg.E("sub_html")
 	case strings.HasPrefix(t, "{") || strings.HasPrefix(t, "["):
 		var v any
 		if err := json.Unmarshal([]byte(t), &v); err != nil {
-			return "", "", nil, errors.New("подписка пришла в виде JSON, но он испорчен: " + err.Error())
+			return "", "", nil, msg.E("sub_json_broken", "error", err.Error())
 		}
 		c := &collector{}
 		switch {
@@ -64,7 +65,7 @@ func ConvertBody(text, contentType string) (out string, format string, skipped [
 			format = FormatSingbox
 			c.singbox(v.(map[string]any))
 		default:
-			return "", "", nil, errors.New("подписка пришла в формате JSON, который Waysplit не знает (нужны настройки Xray или sing-box с outbounds)")
+			return "", "", nil, msg.E("sub_json_unknown")
 		}
 		return c.text(), format, c.skipped, nil
 	case clashRe.MatchString(t):
@@ -73,10 +74,10 @@ func ConvertBody(text, contentType string) (out string, format string, skipped [
 			Providers map[string]any   `yaml:"proxy-providers"`
 		}
 		if err := yaml.Unmarshal([]byte(t), &doc); err != nil {
-			return "", "", nil, errors.New("подписка пришла в формате Clash / Mihomo, но YAML испорчен: " + err.Error())
+			return "", "", nil, msg.E("sub_yaml_broken", "error", err.Error())
 		}
 		if len(doc.Proxies) == 0 && len(doc.Providers) > 0 {
-			return "", "", nil, errors.New("в подписке Clash / Mihomo нет списка серверов (proxies), только ссылки на другие списки (proxy-providers) — попросите у провайдера обычную ссылку на подписку")
+			return "", "", nil, msg.E("sub_clash_providers")
 		}
 		c := &collector{}
 		for _, p := range doc.Proxies {
@@ -110,8 +111,8 @@ func (c *collector) add(s *Server, single bool) {
 	c.single = append(c.single, single)
 }
 
-func (c *collector) skip(name, reason string) {
-	c.skipped = append(c.skipped, LineError{Text: clip(name), Reason: reason})
+func (c *collector) skip(name string, err error) {
+	c.skipped = append(c.skipped, NewLineError(0, clip(name), err))
 }
 
 func (c *collector) text() string {
@@ -187,7 +188,7 @@ func (c *collector) xray(v any) {
 			}
 			s, err := xrayOutbound(o)
 			if err != nil {
-				c.skip(name, err.Error())
+				c.skip(name, err)
 				continue
 			}
 			s.Name = name
@@ -218,7 +219,7 @@ func xrayOutbound(o map[string]any) (*Server, error) {
 		return s, nil
 	case "hysteria":
 		if v := num(st["version"]); v != 0 && v != 2 {
-			return nil, fmt.Errorf("Hysteria версии %d не поддерживается (нужна 2)", v)
+			return nil, msg.E("hysteria_version", "version", v)
 		}
 		s := &Server{Protocol: "hysteria2", Address: str(st["address"]), Port: num(st["port"]), Transport: "udp", Security: "tls"}
 		s.Password = str(obj(ss["hysteriaSettings"])["auth"])
@@ -231,7 +232,7 @@ func xrayOutbound(o map[string]any) (*Server, error) {
 		}
 		return s, nil
 	}
-	return nil, fmt.Errorf("протокол %s пока не поддерживается", proto)
+	return nil, msg.E("proto_unsupported", "proto", proto)
 }
 
 // xrayStream — streamSettings Xray → транспорт и защита сервера.
@@ -357,7 +358,7 @@ func (c *collector) singbox(cfg map[string]any) {
 				s.Ports = append([]PortRange{{s.Port, s.Port}}, s.Ports...)
 			}
 		default:
-			c.skip(name, fmt.Sprintf("протокол %s пока не поддерживается", typ))
+			c.skip(name, msg.E("proto_unsupported", "proto", typ))
 			continue
 		}
 		c.add(s, true)
@@ -422,7 +423,7 @@ func (c *collector) clash(p map[string]any) {
 			}
 		}
 	default:
-		c.skip(name, fmt.Sprintf("протокол %s пока не поддерживается", typ))
+		c.skip(name, msg.E("proto_unsupported", "proto", typ))
 		return
 	}
 	c.add(s, true)

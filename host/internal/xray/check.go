@@ -11,6 +11,7 @@ import (
 
 	"waysplit/host/internal/corebin"
 	"waysplit/host/internal/hostlog"
+	"waysplit/host/internal/msg"
 	"waysplit/host/internal/singbox"
 )
 
@@ -27,7 +28,7 @@ func FindBinary() (string, error) {
 	if p := corebin.Find("WAYSPLIT_XRAY", "xray.exe"); p != "" {
 		return p, nil
 	}
-	return "", &singbox.Error{Code: "XRAY_NOT_FOUND", Message: "Xray не найден рядом с waysplit-host.exe (он нужен для серверов XHTTP): установите компаньон заново («Установить.cmd»)"}
+	return "", singbox.NewError("XRAY_NOT_FOUND", msg.New("xray_not_found"))
 }
 
 // «2026/11/07 19:30:00.123456 [Warning] » в начале строки журнала Xray.
@@ -51,15 +52,17 @@ func Check(bin, path string) (string, error) {
 	if err != nil {
 		var exit *exec.ExitError
 		if !errors.As(err, &exit) {
-			return "", &singbox.Error{Code: "XRAY_FAILED", Message: "не удалось запустить Xray: " + hostlog.Mask(err.Error())}
+			return "", singbox.NewError("XRAY_FAILED", msg.New("xray_failed", "error", hostlog.Mask(err.Error())))
 		}
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return text, &singbox.Error{Code: "CONFIG_INVALID", Message: "проверка конфига Xray не ответила за 30 секунд"}
+			return text, singbox.NewError("CONFIG_INVALID", msg.New("xray_check_timeout"))
 		}
 		if text == "" {
 			text = err.Error()
 		}
-		return text, &singbox.Error{Code: "CONFIG_INVALID", Message: "Xray не принял конфиг: " + reason(text), Detail: text}
+		e := singbox.NewError("CONFIG_INVALID", msg.New("xray_rejected", "line", reason(text)))
+		e.Detail = text
+		return text, e
 	}
 	return text, nil
 }
@@ -93,9 +96,9 @@ func Version(bin string) (string, error) {
 	})
 	switch {
 	case errors.Is(err, corebin.ErrUnclear):
-		return "", &singbox.Error{Code: "XRAY_FAILED", Message: "Xray ответил непонятно на «version»"}
+		return "", singbox.NewError("XRAY_FAILED", msg.New("xray_version_unclear"))
 	case err != nil:
-		return "", &singbox.Error{Code: "XRAY_FAILED", Message: "не удалось запустить Xray: " + err.Error()}
+		return "", singbox.NewError("XRAY_FAILED", msg.New("xray_failed", "error", msg.From(err)))
 	}
 	return v, nil
 }

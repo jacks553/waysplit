@@ -45,7 +45,7 @@ test('обновление подписки: id сохраняются, новы
   assert.match(byKey.k3.id, /^s_[a-z0-9]{4}$/);
   assert.equal(patch.rules[0].serverId, null, 'правило с удалённого сервера — на текущий');
   assert.equal(patch.currentServerId, 's_old1', 'текущий удалён — текущим стал сервер этой подписки');
-  assert.deepEqual(patch.subscriptions[0], { ...SUB, name: 'Моя подписка', updatedAt: 5000, info: res.info, intervalHours: 6, lastError: null, viaVpn: false, device: false, announce: '', format: '' });
+  assert.deepEqual(patch.subscriptions[0], { ...SUB, name: 'Моя подписка', updatedAt: 5000, info: res.info, intervalHours: 6, lastError: null, lastErrorMsg: null, viaVpn: false, device: false, announce: '', format: '' });
 });
 
 test('своё имя сервера и подписки обновление не меняет', () => {

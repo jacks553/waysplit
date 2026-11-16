@@ -2,15 +2,19 @@
 //
 // Подписка: { id, name, url, intervalHours, updatedAt, info, lastError, customName, viaVpn,
 //   device — привязана к компьютеру как устройство (SPEC-SUBS), announce — сообщение провайдера }.
+// lastError — почему не скачалась: текст на языке окна в момент ошибки; lastErrorMsg — та же причина
+// фразой компаньона (lib/hostmsg.js), по ней окно показывает её на текущем языке.
 // У серверов из подписки — subscriptionId. При обновлении сервер узнаётся по key (протокол +
 // адрес + порт + uuid/пароль), его id сохраняется — правила и выбранный сервер не ломаются.
 
 import { freePort, newId } from './storage.js';
+import { t } from './i18n.js';
+import { hostText } from './hostmsg.js';
 
 // mergeSubscription — итог fetch_subscription → { patch для хранилища, report }.
 // report: added, kept, removed, skipped [{ text, reason }], rulesMoved.
 export function mergeSubscription(st, subId, res, now) {
-  const report = { added: 0, kept: 0, removed: 0, skipped: (res.errors || []).map((e) => ({ text: e.text, reason: e.reason })), rulesMoved: 0 };
+  const report = { added: 0, kept: 0, removed: 0, skipped: (res.errors || []).map((e) => ({ text: e.text, reason: hostText(e, e.reason) })), rulesMoved: 0 };
   const fresh = new Map(res.servers.map((s) => [s.key, s]));
   const otherKeys = new Set(st.servers.filter((s) => s.subscriptionId !== subId).map((s) => s.key));
   const removed = new Set();
@@ -35,12 +39,12 @@ export function mergeSubscription(st, subId, res, now) {
   }
   for (const f of fresh.values()) {
     if (otherKeys.has(f.key)) {
-      report.skipped.push({ text: f.name, reason: 'такой сервер уже есть' });
+      report.skipped.push({ text: f.name, reason: t('skip.duplicate') });
       continue;
     }
     const localPort = freePort(servers, st.settings.portRangeStart);
     if (localPort === null) {
-      report.skipped.push({ text: f.name, reason: 'закончились свободные локальные порты' });
+      report.skipped.push({ text: f.name, reason: t('skip.noPorts') });
       continue;
     }
     servers.push({
@@ -65,6 +69,7 @@ export function mergeSubscription(st, subId, res, now) {
     info: res.info ?? null,
     intervalHours: res.updateIntervalHours > 0 ? res.updateIntervalHours : x.intervalHours,
     lastError: null,
+    lastErrorMsg: null,
     viaVpn: !!res.viaVpn,
     // SPEC-SUBS, шаг 2: серверы пришли только с идентификатором устройства — запомнить (дальше
     // компаньон сразу шлёт его); сообщение провайдера — как пришло (обычный текст).
@@ -102,6 +107,6 @@ export function subHost(url) {
   try {
     return new URL(url).hostname;
   } catch {
-    return 'Подписка';
+    return t('sub.title');
   }
 }
