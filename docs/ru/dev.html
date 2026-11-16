@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Waysplit для разработчиков</title>
+  <style>
+    :root { color-scheme: light dark; --fg: #1f2328; --muted: #57606a; --bg: #ffffff; --line: #d0d7de; --accent: #2563eb; --code: #f3f4f6; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fg: #e6edf3; --muted: #9da7b3; --bg: #0d1117; --line: #30363d; --accent: #6ea8fe; --code: #161b22; }
+    }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    main { max-width: 760px; margin: 0 auto; padding: 32px 20px 64px; }
+    h1 { font-size: 28px; line-height: 1.25; margin: 0 0 4px; }
+    h2 { font-size: 22px; margin: 40px 0 8px; }
+    h3 { font-size: 18px; margin: 28px 0 6px; }
+    h4 { font-size: 16px; margin: 24px 0 4px; }
+    .nav { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 24px; font-size: 15px; }
+    .muted { color: var(--muted); }
+    a { color: var(--accent); }
+    code { font: 14px ui-monospace, "Cascadia Mono", Consolas, monospace; overflow-wrap: anywhere; }
+    pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; }
+    pre code { overflow-wrap: normal; }
+    li { margin: 4px 0; }
+    table { border-collapse: collapse; width: 100%; font-size: 15px; display: block; overflow-x: auto; }
+    th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+    td:first-child code { overflow-wrap: normal; white-space: nowrap; }
+    hr { border: 0; border-top: 1px solid var(--line); margin: 48px 0; }
+  </style>
+</head>
+<body>
+<main>
+  <nav class="nav"><a href="help.html">Установка и вопросы</a><a href="usage.html">Как пользоваться</a><strong>Для разработчиков</strong><a href="../privacy.html">Политика конфиденциальности</a><a href="https://github.com/jacks553/waysplit">GitHub</a></nav>
+  <h1>Waysplit для разработчиков</h1>
+  <p class="muted">Как устроен Waysplit, как собрать его из исходников и чей код в нём работает.</p>
+<h2 id="how">Как это устроено</h2>
+<ol>
+<li>Расширение лежит в папке <code>extension/</code>. Это окно с вкладками, страница "Начало работы" и фоновая часть. Окно описано в <code>extension/popup/</code>. Одна и та же страница служит окном на панели, развёрнутой вкладкой и страницей настроек. Расширение говорит Chrome, какой сайт куда направлять. Для этого служит PAC-скрипт.</li>
+<li>Компаньон лежит в папке <code>host/</code>. Это программа <code>waysplit-host.exe</code> на Go. Chrome сам запускает её и общается с ней через native messaging. Компаньон разбирает ссылки, скачивает подписки, собирает настройки ядер, запускает и останавливает ядра.</li>
+<li>Ядро sing-box открывает на компьютере локальные прокси на адресе 127.0.0.1 и шифрует трафик до сервера.</li>
+<li>Ядро Xray нужно только для того, чего нет в sing-box. Это серверы с транспортом XHTTP и шифрованием VLESS Encryption. Компаньон сам решает по ссылке, каким ядром запускать сервер. Xray он запускает, только когда нужен его сервер. В списке у таких серверов стоит пометка "Xray".</li>
+</ol>
+<pre><code>Chrome ──▶ прокси 127.0.0.1:&lt;порт сервера&gt; ──▶ sing-box или Xray ──VLESS / Hysteria2──▶ VPN-сервер ──▶ сайт</code></pre>
+<h2 id="setup">Установка из исходников</h2>
+<p>Понадобятся 64-битная Windows 10 или 11, Google Chrome 120 или новее и <a href="https://go.dev">Go</a>. Go ставится командой <code>winget install -e --id GoLang.Go</code>. Права администратора не нужны.</p>
+<ol>
+<li>Положите папку проекта туда, где она будет лежать постоянно. Chrome берёт распакованное расширение прямо из неё.</li>
+<li>Выполните в терминале в папке проекта:
+<pre><code>powershell -ExecutionPolicy Bypass -File tools\setup.ps1</code></pre>
+<p>Скрипт кладёт в <code>host\bin</code> ядра sing-box и Xray тех же версий, что получают пользователи. Версии записаны в <code>tools\cores.json</code>. Ядра, которые уже лежат с верной SHA-256, скрипт не трогает. Остальные он скачивает из официальных выпусков и сверяет SHA-256 архива и каждого файла. Потом он собирает <code>host\bin\waysplit-host.exe</code> и регистрирует его в Chrome командой <code>install</code>. Она кладёт файл в <code>%LOCALAPPDATA%\Waysplit</code> и пишет ключ реестра текущего пользователя. Скрипт можно запускать сколько угодно раз.</p>
+</li>
+<li>Откройте <code>chrome://extensions</code> и включите "Режим разработчика". Нажмите "Загрузить распакованное расширение" и выберите папку <code>extension</code>. ID расширения будет <code>jckofomkflegkkhaaccmjbjjhoielnli</code>. Его задаёт поле <code>key</code> в manifest.json.</li>
+</ol>
+<p>Зарегистрировать компаньон вручную можно командой <code>host\bin\waysplit-host.exe install</code>, убрать регистрацию можно командой <code>uninstall</code>. Если вы перенесли папку проекта, выполните <code>install</code> ещё раз. Компаньон пускает два ID расширения: для разработки и из магазина. ID магазина записан в <code>host/storeid.go</code>. Поэтому обе версии работают с одним компаньоном. Не включайте их одновременно, иначе они будут спорить за прокси Chrome.</p>
+<p>Журналы и конфиги лежат в <code>%LOCALAPPDATA%\Waysplit\</code>. В <code>host.log</code> пишет компаньон, секретов в этом журнале нет. В <code>sing-box.log</code> и <code>xray.log</code> пишут ядра. В <code>config.json</code> и <code>xray.json</code> есть секреты, их никому не отправляйте.</p>
+<h2 id="folders">Папки</h2>
+<table>
+<thead><tr><th>Папка</th><th>Что там</th></tr></thead>
+<tbody>
+<tr><td><code>extension/</code></td><td>расширение Chrome</td></tr>
+<tr><td><code>host/</code></td><td>компаньон на Go. <code>internal/links</code> разбирает ссылки и подписки. <code>internal/singbox</code> и <code>internal/xray</code> собирают конфиги, проверяют и запускают ядра. <code>internal/subinfo</code> отвечает за диагностику подписок, <code>internal/device</code> за идентификатор устройства, <code>internal/hostlog</code> за журнал и маскировку секретов, <code>internal/nm</code> за связь с Chrome</td></tr>
+<tr><td><code>host/bin/</code></td><td><code>sing-box.exe</code> и <code>xray.exe</code> с лицензиями и собранный <code>waysplit-host.exe</code>. В git они не хранятся: их кладёт и собирает <code>tools\setup.ps1</code></td></tr>
+<tr><td><code>tools/setup.ps1</code></td><td>установка для разработки, она описана выше</td></tr>
+<tr><td><code>tools/cores.json</code>, <code>tools/cores.ps1</code></td><td>версии ядер, адреса официальных выпусков и SHA-256 в одном месте для всех скриптов. Там же скачивание со сверкой, его используют <code>setup.ps1</code>, <code>build-companion.ps1</code> и <code>ci.ps1</code>. Для новой версии ядра поменяйте здесь версию, адреса и SHA-256. SHA-256 архива берётся со страницы выпуска ядра, SHA-256 файлов записывается после проверки</td></tr>
+<tr><td><code>tools/companion/</code></td><td>установщик для пользователей: <code>Установить.cmd</code>, <code>Удалить.cmd</code>, <code>waysplit-setup.ps1</code>, инструкция, полный текст GPL-3.0 и значок компаньона <code>waysplit.ico</code>. В архив компаньона эти файлы попадают с русскими именами</td></tr>
+<tr><td><code>tools/release/</code></td><td>сборка архивов для выкладки, о ней написано ниже</td></tr>
+<tr><td><code>tools/ci.ps1</code>, <code>.github/workflows/release.yml</code></td><td>проверка и сборка выпуска по тегу версии, подробнее в разделе "Выпуск"</td></tr>
+<tr><td><code>tools/genkey/</code></td><td>постоянный ID расширения</td></tr>
+<tr><td><code>tools/icons/</code></td><td>рисует значки расширения в <code>extension/icons</code> и значок компаньона <code>tools/companion/waysplit.ico</code> из глифа <code>call_split_24px.svg</code></td></tr>
+<tr><td><code>tools/chrome-check.js</code></td><td>проверка расширения в настоящем Chrome с временным профилем</td></tr>
+<tr><td><code>tools/popup-shots.js</code>, <code>tools/store-shots.js</code>, <code>tools/shots-lib.js</code></td><td>скриншоты всех экранов окна в двух темах и скриншоты для магазина, всё на вымышленных данных. Скриншоты окна собираются на странице <code>dist/popup-shots/index.html</code></td></tr>
+<tr><td><code>docs/</code></td><td>страницы сайта проекта для GitHub Pages: помощь, как пользоваться, для разработчиков, политика конфиденциальности</td></tr>
+<tr><td><code>store/</code></td><td>тексты и картинки для Chrome Web Store, <code>STORE-CHECKLIST.md</code></td></tr>
+<tr><td><code>tests/</code></td><td>тесты кода расширения на Node.js</td></tr>
+</tbody>
+</table>
+<h2 id="build">Сборка и тесты</h2>
+<pre><code>cd host; go build -o bin\waysplit-host.exe .; go test ./...; cd ..
+cd tools; go test ./...; cd ..
+npm test
+node tools/chrome-check.js</code></pre>
+<p><code>go test ./...</code> в папке <code>host</code> проверяет разбор ссылок и подписок и сборку конфигов обоих ядер. Конфиги сравниваются с эталонами и прогоняются через <code>sing-box check</code> и <code>xray run -test</code>. Ещё проверяются запуск и остановка ядер, сквозные подключения через локальные тестовые серверы, протокол связи с Chrome и регистрация в реестре. Регистрация проверяется во временном ключе. Интернет для этих тестов не нужен.</p>
+<p><code>npm test</code> проверяет код расширения, для него нужен Node.js. <code>node tools/chrome-check.js</code> проверяет расширение в настоящем Chrome без окна, с временным профилем. Для этой проверки нужен интернет, через него идут пинг и "Мой IP". Компаньон должен быть собран и зарегистрирован, а порты 27101-27103 свободны.</p>
+<h2 id="release">Выпуск</h2>
+<p>Выпуск собирается сам. Поднимите версию в <code>extension/manifest.json</code> и <code>host/main.go</code>, допишите раздел в <code>CHANGELOG.md</code>, закоммитьте и отправьте тег:</p>
+<pre><code>git tag v1.2.3
+git push origin v1.2.3</code></pre>
+<p>Тег запускает GitHub Actions по файлу <code>.github/workflows/release.yml</code>, а оттуда запускается <code>tools/ci.ps1 -Sources</code>. Скрипт сверяет версии тега, расширения и компаньона. Потом он гоняет все тесты: Go, <code>npm test</code> и проверку в Chrome. Проверка в Chrome идёт на распакованном <code>Waysplit-extension.zip</code>, то есть на том, что люди ставят вручную. Ядра скрипт скачивает из официальных выпусков и сверяет их SHA-256 с <code>tools/cores.json</code>. Затем он собирает архивы и проверяет установщик на собранном архиве во временной папке. Испорченный архив установщик не ставит, нормальный ставит без интернета, удаление проходит чисто. В конце скрипт скачивает архивы исходного кода ядер и создаёт выпуск. В выпуске лежат <code>Waysplit-companion.zip</code>, <code>Waysplit-extension.zip</code>, их SHA-256 и исходный код ядер. В <code>Waysplit-extension.zip</code> лежит расширение для ручной установки.</p>
+<p>В описание выпуска попадают раздел версии из <code>CHANGELOG.md</code> и три раздела из <code>README.md</code>: "Как установить", "Ручная установка (запасной вариант)" и "Переход с ручной версии на версию из магазина". Ссылки в них должны быть полными, вида <code>https://…</code>. Относительные ссылки в описании выпуска не работают.</p>
+<p>Архив для магазина лежит в файлах сборки на странице запуска в Actions под именем <code>chrome-web-store-v1.2.3</code>. В выпуск он не кладётся, чтобы пользователи не путали его с компаньоном. Тег с дефисом, например <code>v1.2.3-rc1</code>, даёт пробный выпуск. Последним такой выпуск не становится.</p>
+<p>То же можно прогнать у себя командой <code>powershell -ExecutionPolicy Bypass -File tools\ci.ps1 -Tag v1.2.3</code>. Ядра берутся из <code>host\bin</code> или <code>dist\cores</code>, если их SHA-256 совпадает. Тогда интернет нужен только для проверки в Chrome. Пропустить её можно ключом <code>-SkipChrome</code>.</p>
+<p>Собрать архивы вручную:</p>
+<pre><code>powershell -ExecutionPolicy Bypass -File tools\build-store.ps1       # store\waysplit-&lt;версия&gt;.zip
+powershell -ExecutionPolicy Bypass -File tools\build-companion.ps1   # dist\Waysplit-companion.zip и .sha256
+powershell -ExecutionPolicy Bypass -File tools\build-extension.ps1   # dist\Waysplit-extension.zip и .sha256</code></pre>
+<p>В архив для магазина попадает копия <code>extension/</code> без поля <code>key</code> и без лишних файлов. Поле <code>key</code> магазин не принимает. Сборка проверяет manifest: описание должно быть не длиннее 132 символов. Ещё она проверяет значок 128: рисунок 96×96 и прозрачные поля по 16 пикселей. И проверяет, что в расширении нет кода из интернета.</p>
+<p>В архиве компаньона лежат:</p>
+<ul>
+<li><code>waysplit-host.exe</code>;</li>
+<li>ядра <code>sing-box.exe</code> и <code>xray.exe</code> из <code>dist\cores</code>;</li>
+<li>установщик и инструкция;</li>
+<li><code>LICENSE.txt</code> и <code>THIRD-PARTY-LICENSES.txt</code>;</li>
+<li>лицензии ядер;</li>
+<li><code>CORES.txt</code>;</li>
+<li><code>SHA256SUMS.txt</code>.</li>
+</ul>
+<p><code>waysplit-host.exe</code> собран с <code>-trimpath</code>, поэтому в нём нет путей этого компьютера. У него есть значок и сведения о версии, их видно в свойствах файла и в диспетчере задач. SHA-256 ядер сверяется с <code>tools/cores.json</code>. В <code>THIRD-PARTY-LICENSES.txt</code> лежат полные тексты лицензий всего чужого кода в exe. Список модулей для него берётся из <code>go list -deps</code>. Если у модуля нет файла лицензии, сборка останавливается. В <code>CORES.txt</code> записаны версии ядер, откуда они взяты и где их исходный код. По <code>SHA256SUMS.txt</code> установщик проверяет файлы.</p>
+<p>Расширение для ручной установки собирается из <code>extension/</code> как есть, с полем <code>key</code>. У распакованной копии тот же ID, что у версии для разработки, и компаньон её пускает. Сборка проверяет, что ID по <code>key</code> совпадает с <code>host/extid.go</code>. Ещё она проверяет, что в архиве нет ключей и служебных файлов.</p>
+<p>Время файлов в архивах равно времени последнего коммита. Поэтому один и тот же код даёт один и тот же архив. Архив компаньона называется <code>Waysplit-companion.zip</code>, без версии в имени. Благодаря этому постоянная ссылка <code>…/releases/latest/download/Waysplit-companion.zip</code> всегда ведёт на последний выпуск. Каждая новая загрузка в магазин требует новой версии в manifest.json. Все шаги расписаны в <code>store/STORE-CHECKLIST.md</code>.</p>
+<p>Скриншоты для магазина делает <code>node tools/store-shots.js</code>. Это настоящий интерфейс на вымышленных данных. Малую промо-картинку рисует <code>cd tools; go run ./icons -promo ..\store\promo-440x280.png</code>.</p>
+<p>Публичный репозиторий собирает команда <code>cd tools; go run ./release public [-author "Имя &lt;ID+имя@users.noreply.github.com&gt;"] [-message "что изменилось"]</code>. Она выгружает последний коммит в <code>dist\public</code> без внутренних заметок и проверяет все файлы на секреты. Коммит делается от служебного адреса GitHub. В первый раз получается новый репозиторий из одного коммита. Дальше <code>dist\public</code> работает как клон публичного репозитория. Файлы в нём заменяются, а история остаётся. Изменения ложатся новым коммитом поверх неё, для этого нужен <code>-message</code>. Список изменений команда печатает. Отправляются они обычным <code>git push</code>.</p>
+<h2 id="extension-id">Постоянный ID расширения</h2>
+<p>ID задаётся полем <code>key</code> в <code>extension/manifest.json</code>. Ключ делает <code>tools/genkey</code>. Это ключ RSA-2048, его открытая часть записана в <code>key</code>. ID записан в <code>host/extid.go</code>. Это первые 32 hex-символа SHA-256 от ключа, в которых цифры 0-f заменены буквами a-p. Приватный ключ лежит в <code>tools\genkey\private-key.pem</code> и в git не попадает.</p>
+<p>Команда <code>cd tools; go run ./genkey; cd ..</code> просто перепишет файлы, если ключ уже есть. ID при этом не меняется.</p>
+<p>Команда <code>go run ./genkey -new</code> делает новый ключ, и <strong>ID поменяется</strong>. После этого пересоберите компаньон, выполните <code>install</code> и перезагрузите расширение в Chrome.</p>
+<h2 id="cli">Проверка ссылки без браузера</h2>
+<ol>
+<li>Создайте в папке проекта файл <code>links.local.txt</code>. В git он не попадает. Вставьте туда ссылку <code>vless://…</code> или <code>hysteria2://…</code>. Можно несколько, по одной на строку, и адрес подписки <code>https://…</code>. Строки, которые начинаются с <code>#</code>, считаются комментариями.</li>
+<li>Запустите нужную команду из папки проекта:</li>
+</ol>
+<table>
+<thead><tr><th>Команда</th><th>Что делает</th></tr></thead>
+<tbody>
+<tr><td><code>host\bin\waysplit-host.exe parse</code></td><td>показывает, какие серверы распознаны, а какие пропущены и почему. У серверов Xray стоит пометка <code>[Xray]</code></td></tr>
+<tr><td><code>host\bin\waysplit-host.exe config</code></td><td>собирает конфиги sing-box и Xray, проверяет их ядрами и показывает, какой сервер на каком порту</td></tr>
+<tr><td><code>host\bin\waysplit-host.exe try</code></td><td>запускает ядра, проверяет пинг и IP через каждый сервер и держит прокси, пока не нажмёте Enter</td></tr>
+<tr><td><code>host\bin\waysplit-host.exe subinfo файл</code></td><td>делает то же, что кнопка "Проверить" у подписки, и выдаёт отчёт без секретов. Адрес подписки берётся из файла или пишется прямо в команде. Файлы <code>*.local.txt</code> в git не попадают. С <code>-device</code> подписка проверяется ещё и с идентификатором устройства, и провайдер может засчитать устройство. С <code>-proxy 27101</code> проверка идёт через сервер в работающем ядре</td></tr>
+</tbody>
+</table>
+<p><code>parse</code>, <code>config</code> и <code>try</code> скачивают подписки так же, как расширение. Идентификатор устройства они отправляют, только если без него серверов нет. Флаг <code>-device</code> отправляет его сразу. Флаг <code>-port N</code> задаёт первый локальный порт.</p>
+<p>Прокси можно проверить командой <code>curl.exe -x socks5h://127.0.0.1:27101 https://api.ipify.org</code>. Она должна показать IP сервера. В Windows PowerShell под именем <code>curl</code> скрывается другая команда, поэтому пишите <code>curl.exe</code>.</p>
+<h2 id="licenses">Благодарности и лицензии</h2>
+<p>Waysplit распространяется по лицензии <a href="https://github.com/jacks553/waysplit/blob/main/LICENSE">Apache 2.0</a>. Copyright 2026 The Waysplit Authors.</p>
+<p>Спасибо авторам чужого кода, на котором стоит Waysplit:</p>
+<ul>
+<li>sing-box: <a href="https://github.com/SagerNet/sing-box">SagerNet/sing-box</a>. Лицензия GPL-3.0 или новее с дополнительным условием: производные работы не могут использовать имя sing-box или намекать на связь с ним без согласия автора. Waysplit не меняет sing-box и запускает его как отдельную программу. В архиве компаньона лежит официальный выпуск, его SHA-256 сверяется при сборке. Рядом лежат его лицензия <code>sing-box-LICENSE.txt</code> и полный текст GPL-3.0 в файле <code>sing-box-GPL-3.0.txt</code>.</li>
+<li>Xray-core: <a href="https://github.com/XTLS/Xray-core">XTLS/Xray-core</a>, лицензия <a href="https://www.mozilla.org/MPL/2.0/">Mozilla Public License 2.0</a>. Это тоже официальный выпуск без изменений, он работает отдельной программой. Лицензия лежит рядом, в файле <code>xray-LICENSE.txt</code>.</li>
+<li>go-yaml: <a href="https://github.com/yaml/go-yaml">yaml/go-yaml</a>, лицензии MIT и Apache-2.0. Модуль <code>go.yaml.in/yaml/v3</code> встроен в компаньон и разбирает подписки Clash и Mihomo YAML.</li>
+<li>Знак в значках: глиф <code>call_split</code> из <a href="https://github.com/google/material-design-icons">Material Symbols</a> от Google в стиле Rounded, лицензия Apache-2.0. Этот знак стоит в значках расширения <code>extension/icons</code> и в значке компаньона <code>tools/companion/waysplit.ico</code>. Исходный SVG без изменений лежит в <code>tools/icons/call_split_24px.svg</code>. В значках знак белый на нашем фоне. Полный текст лицензии лежит в <code>extension/icons/LICENSE-material-symbols.txt</code> и в <code>THIRD-PARTY-LICENSES.txt</code> архива компаньона.</li>
+<li>Флаги стран: шрифт <code>extension/fonts/TwemojiCountryFlags.woff2</code> из npm-пакета <a href="https://github.com/talkjs/country-flag-emoji-polyfill">country-flag-emoji-polyfill</a> версии 0.1.10. Код пакета распространяется по лицензии MIT. Рисунки флагов взяты из <a href="https://github.com/twitter/twemoji">Twemoji</a>, © Twitter, Inc. и другие авторы, лицензия <a href="https://creativecommons.org/licenses/by/4.0/">CC-BY 4.0</a>. Полный текст лицензии лежит в <code>extension/fonts/LICENSE-TwemojiCountryFlags.md</code>. Шрифт нужен, потому что Chrome на Windows сам не рисует эмодзи-флаги в именах серверов.</li>
+</ul>
+<p>Версии ядер, откуда они взяты и ссылки на исходный код именно этих версий записаны в <code>CORES.txt</code> в архиве компаньона. Архивы исходного кода ядер приложены к каждому выпуску на <a href="https://github.com/jacks553/waysplit/releases">странице выпусков</a>. Версии и SHA-256 ядер записаны в одном месте, в <code>tools/cores.json</code>.</p>
+<p>Полные тексты лицензий всего чужого кода внутри <code>waysplit-host.exe</code> лежат в архиве компаньона, в файле <code>THIRD-PARTY-LICENSES.txt</code>. Туда входят и стандартная библиотека Go, и <code>golang.org/x/sys</code>.</p>
+</main>
+</body>
+</html>
