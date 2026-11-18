@@ -56,7 +56,7 @@ const wanted = () => {
 };
 
 function build(box) {
-  const allow = el('button', { type: 'button', className: 'btn btn-small', textContent: t('common.allow') });
+  const allow = el('button', { type: 'button', className: 'btn', textContent: t('common.allow') });
   allow.dataset.act = 'allow';
   allow.addEventListener('click', async () => {
     if (await requestPerm()) toast(t('perm.toast.granted'), 'keep');

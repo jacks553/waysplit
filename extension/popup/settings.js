@@ -35,7 +35,7 @@ function render() {
   $('setRuDirect').checked = settings.ruDirect;
   $('autoSiteDomains').checked = settings.autoSiteDomains;
   $('autoSitePerm').hidden = !settings.autoSiteDomains || permGranted();
-  for (const id of ['autoConnect', 'subscriptionUA', 'subscriptionIntervalHours', 'portRangeStart', 'logLevel', 'theme', 'language']) {
+  for (const id of ['autoConnect', 'subscriptionUA', 'subscriptionIntervalHours', 'portRangeStart', 'logLevel', 'design', 'themeLcd', 'language']) {
     if (document.activeElement !== $(id)) $(id).value = settings[id];
   }
   $('portRangeEnd').textContent = t('settings.portsEnd', { port: settings.portRangeStart + PORT_RANGE - 1 });
@@ -90,7 +90,16 @@ $('autoSitePermBtn').addEventListener('click', async () => {
 });
 $('autoConnect').addEventListener('change', (e) => save('autoConnect', e.target.value));
 $('logLevel').addEventListener('change', (e) => save('logLevel', e.target.value, 'settings.logLevel.saved'));
-$('theme').addEventListener('change', (e) => save('theme', e.target.value));
+$('themeLcd').addEventListener('change', (e) => save('themeLcd', e.target.value));
+// Оформление: после выбора окно само открывается в другом оформлении (popup.js), на этой же
+// вкладке и с фокусом на этом же выборе. Сообщения «Сохранено» нет: перемену видно и так.
+$('design').addEventListener('change', async (e) => {
+  const resp = await send({ type: 'setSetting', key: 'design', value: e.target.value });
+  if (!resp?.ok) {
+    toast(resp?.error?.message || t('common.failed'), 'error');
+    render();
+  }
+});
 // Язык меняется сразу, без перезапуска: окно перечитывает настройки и заменяет надписи (state.js),
 // фон — подсказку значка на панели и свои сообщения. Сообщения «Сохранено» нет: перемену видно и так.
 $('language').addEventListener('change', async (e) => {

@@ -2,7 +2,7 @@
 // «Мой IP сейчас», журналы (компаньон отдаёт их уже без секретов) и отчёт для отладки — тоже
 // без секретов.
 
-import { coreText, fmtDate, maskUrl, pingError, send, serverMeta } from '../lib/format.js';
+import { coreText, fmtDate, maskUrl, noFlags, pingError, send, serverMeta } from '../lib/format.js';
 import { normalize } from '../lib/storage.js';
 import { has, language, t } from '../lib/i18n.js';
 import { hostText } from '../lib/hostmsg.js';
@@ -74,11 +74,11 @@ export function openDiag() {
       const facts = el('dl', { id: 'diagFacts', className: 'facts' }, ...fact(t('diag.f.ext'), `${chrome.runtime.getManifest().version} · ID ${chrome.runtime.id}`), ...fact(t('diag.f.host'), t('diag.checking')));
       const ipBtn = el('button', { id: 'myIp', type: 'button', className: 'ghost', textContent: t('diag.myIp') });
       const ipOut = el('span', { id: 'myIpResult', className: 'note' });
-      const copyBtn = el('button', { id: 'copyReport', type: 'button', className: 'btn btn-small', textContent: t('diag.copy') });
+      const copyBtn = el('button', { id: 'copyReport', type: 'button', className: 'btn', textContent: t('diag.copy') });
       const copyNote = el('p', { id: 'copyNote', className: 'hint', textContent: t('diag.copy.note') });
       const logs = {};
       const logBlock = (key, title) => {
-        logs[key] = el('pre', { id: `diag-${key}`, className: 'log' });
+        logs[key] = el('pre', { id: `diag-${key}`, className: 'log', tabIndex: 0 });
         return [el('h3', { className: 'group-title', textContent: title }), logs[key]];
       };
       sc.body.append(facts, el('div', { className: 'tools' }, ipBtn, ipOut), el('div', { className: 'tools' }, copyBtn), copyNote,
@@ -108,7 +108,7 @@ export function openDiag() {
         if (status?.proxyError) rows.push(...fact(t('diag.f.proxyError'), `${status.proxyError.error} (${fmtDate(status.proxyError.at)})`));
         facts.replaceChildren(...rows);
         const l = last.logs;
-        logs.events.textContent = events.length ? events.map((e) => `${fmtDate(e.at)}  ${e.level === 'error' ? `${t('diag.events.error')} ` : ''}${e.text}`).join('\n') : t('diag.events.none');
+        logs.events.textContent = !events.length ? t('diag.events.none') : noFlags(events.map((e) => `${fmtDate(e.at)}  ${e.level === 'error' ? `${t('diag.events.error')} ` : ''}${e.text}`).join('\n'));
         logs.host.textContent = l.error ? t('diag.noLink', { error: l.error }) : l.host || t('diag.empty');
         logs.singbox.textContent = l.error ? '—' : l.singbox || t('diag.empty');
         logs.xray.textContent = l.error ? '—' : l.xray || t('diag.empty');
@@ -119,7 +119,7 @@ export function openDiag() {
         ipOut.textContent = t('diag.ip.asking');
         const resp = await send({ type: 'exitIp' });
         ipBtn.disabled = false;
-        ipOut.textContent = resp?.ok ? t('diag.ip.result', { server: resp.result.server, ip: resp.result.ip }) : resp?.error?.message || t('common.failed');
+        ipOut.textContent = noFlags(resp?.ok ? t('diag.ip.result', { server: resp.result.server, ip: resp.result.ip }) : resp?.error?.message || t('common.failed'));
       });
       copyBtn.addEventListener('click', async () => {
         try {

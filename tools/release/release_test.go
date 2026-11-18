@@ -133,6 +133,40 @@ func TestLocalesRealExtension(t *testing.T) {
 	}
 }
 
+// Состав пакета с двумя оформлениями окна (версия 1.3.0): новое окно, папка classic (окно версии
+// 1.2.1) и шрифт флагов для него. Ссылки внутри пакета не висят, кода из сети нет.
+func TestRealExtensionTwoWindows(t *testing.T) {
+	files, _, err := extensionFiles(filepath.Join("..", ".."), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	have := map[string]bool{}
+	classic := 0
+	for _, f := range files {
+		have[f.name] = true
+		if strings.HasPrefix(f.name, "classic/") {
+			classic++
+		}
+	}
+	for _, n := range []string{"popup/popup.html", "popup/popup.js", "popup/popup.css", "lib/common.css", "lib/design.js", "lib/theme.js",
+		"classic/popup.html", "classic/popup.js", "classic/popup.css", "classic/common.css", "classic/ui.js", "classic/settings.js",
+		"options/options.html", "options/options.js", "welcome/welcome.html",
+		"fonts/TwemojiCountryFlags.woff2", "fonts/LICENSE-TwemojiCountryFlags.md", "fonts/pixelify-sans-latin-500.woff2", "fonts/golos-text-latin-500.woff2"} {
+		if !have[n] {
+			t.Errorf("в пакете нет %s", n)
+		}
+	}
+	if classic != 15 {
+		t.Errorf("файлов в classic: %d, ждали 15 (окно версии 1.2.1 целиком)", classic)
+	}
+	if bad := missingRefs(files); len(bad) > 0 {
+		t.Errorf("ссылки на файлы, которых нет в пакете: %v", bad)
+	}
+	if bad := remoteCode(files); len(bad) > 0 {
+		t.Errorf("код или стили из сети: %v", bad)
+	}
+}
+
 func TestRemoteCode(t *testing.T) {
 	bad := []entry{
 		{"a.html", []byte(`<script src="https://cdn.example.com/x.js"></script>`)},
@@ -209,7 +243,12 @@ func TestSecretFiles(t *testing.T) {
 			t.Errorf("%s — не место в архиве расширения", n)
 		}
 	}
-	for _, n := range []string{"popup/popup.js", "icons/icon128.png", "lib/domain-sets.json", "manifest.json", "fonts/LICENSE-TwemojiCountryFlags.md"} {
+	for _, n := range []string{"popup/popup.js", "icons/icon128.png", "lib/domain-sets.json", "manifest.json",
+		"classic/popup.html", "classic/popup.js", "classic/popup.css", "classic/common.css", "options/options.js", "lib/design.js",
+		"fonts/TwemojiCountryFlags.woff2", "fonts/LICENSE-TwemojiCountryFlags.md",
+		"fonts/LICENSE-PixelifySans.md", "fonts/LICENSE-GolosText.md", "fonts/pixelify-sans-cyrillic-500.woff2", "fonts/pixelify-sans-cyrillic-600.woff2",
+		"fonts/pixelify-sans-cyrillic-700.woff2", "fonts/pixelify-sans-latin-500.woff2", "fonts/pixelify-sans-latin-600.woff2", "fonts/pixelify-sans-latin-700.woff2",
+		"fonts/golos-text-cyrillic-500.woff2", "fonts/golos-text-cyrillic-600.woff2", "fonts/golos-text-latin-500.woff2", "fonts/golos-text-latin-600.woff2"} {
 		if secretFile.MatchString(n) {
 			t.Errorf("%s — обычный файл расширения", n)
 		}
@@ -482,13 +521,13 @@ func TestPublicIPAndNames(t *testing.T) {
 			t.Errorf("publicIP(%s) = %v", ip, got)
 		}
 	}
-	for _, n := range []string{"PROGRESS.md", "SPEC.md", "SPEC-STORE.md"} {
+	for _, n := range []string{"PROGRESS.md", "SPEC.md", "SPEC-STORE.md", "design/lcd/STYLE.md", "design/lcd/fonts/fonts.css", "design/lcd/index.html"} {
 		if !isPrivate(n) {
 			t.Errorf("%s — внутренняя заметка", n)
 		}
 	}
-	if isPrivate("README.md") || isPrivate("docs/SPEC.md") {
-		t.Error("README и файлы в папках — не заметки")
+	if isPrivate("README.md") || isPrivate("docs/SPEC.md") || isPrivate("extension/fonts/golos-text-latin-500.woff2") || isPrivate("docs/design/x.md") || isPrivate("designs.md") {
+		t.Error("README, файлы в других папках и шрифты расширения — не заметки")
 	}
 	for _, n := range []string{"links.local.txt", "tools/genkey/private-key.pem", "waysplit-backup-2026.json", "host/bin/sing-box.exe", "host.log"} {
 		if !isForbidden(n) {

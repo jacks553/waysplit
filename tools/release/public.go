@@ -45,8 +45,9 @@ import (
 	"strings"
 )
 
-// privateFiles — внутренние заметки автора: в публичный репозиторий не идут.
-var privateFiles = []string{"PROGRESS.md", "SPEC*.md"}
+// privateFiles — внутренние заметки автора: в публичный репозиторий не идут. Имя с «/» на конце —
+// папка целиком (design/ — макеты и описание стиля окна: рабочие материалы, не часть программы).
+var privateFiles = []string{"PROGRESS.md", "SPEC*.md", "design/"}
 
 // forbiddenNames — таких файлов в публичном репозитории быть не должно.
 var forbiddenNames = []string{"*.local.*", "links.local.txt", "*.pem", "*.key", "*backup*.json", "*.bak", "*.log",
@@ -56,6 +57,12 @@ const publicMark = ".waysplit-public" // метка папки выгрузки:
 
 func isPrivate(name string) bool {
 	for _, p := range privateFiles {
+		if strings.HasSuffix(p, "/") {
+			if strings.HasPrefix(name, p) {
+				return true
+			}
+			continue
+		}
 		if ok, _ := path.Match(p, name); ok {
 			return true
 		}

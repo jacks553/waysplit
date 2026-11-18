@@ -4,11 +4,13 @@
 // Окно только показывает данные из chrome.storage и шлёт команды фону.
 
 import { applyTheme } from '../lib/theme.js';
+import { arrival, checkDesign, designOf, focusedId, goDesign } from '../lib/design.js';
+import { initLookButton } from '../lib/lookmenu.js';
 import { startPage, t } from '../lib/i18n.js';
 import { ISSUES_URL, helpUrl } from '../lib/companion.js';
 import { pacHost } from '../lib/domains.js';
 import { $, dialogOpen, el, initMenu, menuOpen, openMenu, setIcon, toast, toastOpen } from './ui.js';
-import { S, closeScreen, loadData, screenOpen, showTab } from './state.js';
+import { S, activeTab, closeScreen, loadData, screenOpen, showTab } from './state.js';
 import { checkHost } from './home.js';
 import './servers.js';
 import { rulesActions } from './rules.js';
@@ -17,7 +19,11 @@ import { openFull } from './full.js';
 import { initLangButton } from './langbtn.js';
 import { checkPerm } from './siteperm.js';
 
-applyTheme();
+// Тема нового окна — своя настройка. Оформление (lib/design.js): выбрано классическое — это окно
+// сразу переходит в него и дальше не строится. До этого страница не показывается (lib/common.css).
+await applyTheme('themeLcd');
+if (!(await checkDesign('lcd'))) await new Promise(() => {});
+const arrived = arrival(); // пришли из классического окна: на какой вкладке оно было и куда поставить фокус
 startPage(); // надписи разметки — сразу, на языке прошлого раза (настройка читается чуть позже)
 
 const params = new URLSearchParams(location.search);
@@ -46,6 +52,9 @@ document.querySelector('.tabbar').addEventListener('keydown', (e) => {
 
 initMenu();
 initLangButton($('langBtn'), () => S.view?.settings?.language || 'auto');
+// Кнопка оформления: меню «Вид окна» и «Тема» (тема нового окна — настройка themeLcd).
+setIcon($('lookBtn').querySelector('.chev'), 'down');
+initLookButton($('lookBtn'), { themeKey: 'themeLcd', settings: () => S.view?.settings });
 $('helpBtn').addEventListener('click', () => openMenu($('helpBtn'), [
   { label: t('top.help'), run: () => chrome.tabs.create({ url: helpUrl() }) },
   { label: t('top.report'), run: () => chrome.tabs.create({ url: ISSUES_URL }) },
@@ -99,7 +108,7 @@ function offerFileAction() {
   const a = FILE_ACTIONS[params.get('do')];
   if (!S.full || !a) return;
   const bar = el('div', { className: 'action-bar', role: 'status' }, el('span', { textContent: t(a[0]) }),
-    el('button', { type: 'button', className: 'btn btn-small', textContent: t(a[1]), onclick: () => { bar.remove(); a[2](); } }),
+    el('button', { type: 'button', className: 'btn', textContent: t(a[1]), onclick: () => { bar.remove(); a[2](); } }),
     el('button', { type: 'button', className: 'link', textContent: t('file.dismiss'), onclick: () => bar.remove() }));
   $(`panel-${location.hash.slice(1) || 'home'}`)?.prepend(bar);
 }
@@ -114,10 +123,23 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' || area === 'session') loadData();
 });
 
-// Окно всегда открывается на «Главной»; развёрнутая страница — на вкладке из адреса.
-const first = S.full ? location.hash.slice(1) || 'home' : 'home';
+// Оформление сменили (в этом окне или в другом): перейти в классическое окно на той же вкладке.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes.settings) return;
+  const want = designOf(changes.settings.newValue);
+  if (want !== 'lcd') goDesign(want, { tab: activeTab() || '', focus: focusedId() });
+});
+
+// Окно всегда открывается на «Главной»; развёрнутая страница — на вкладке из адреса; после смены
+// оформления — на той вкладке, где оно было.
+const first = arrived?.tab || (S.full ? location.hash.slice(1) || 'home' : 'home');
 Promise.all([loadSite(), checkPerm()]).then(loadData).then(() => {
   showTab(first);
+  // Вид сменили строкой в настройках или кнопкой в шапке — фокус на том же месте в этом окне.
+  if (arrived?.focus) {
+    $(arrived.focus).scrollIntoView({ block: 'center' });
+    $(arrived.focus).focus();
+  }
   performance.mark('waysplit-ready'); // окно показано с данными — замер в tools/chrome-check.js
   offerFileAction();
   checkHost();

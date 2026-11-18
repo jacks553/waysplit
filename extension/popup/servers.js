@@ -15,16 +15,19 @@ let dragId = null;
 const subOf = (id) => S.view.subscriptions.find((x) => x.id === id) || null;
 const subServers = (id) => S.view.servers.filter((s) => s.subscriptionId === id);
 
-// subFacts — коротко о подписке: серверов, трафик, срок.
-function subFacts(sub, long = false) {
-  const facts = [t('n.servers', { n: subServers(sub.id).length })];
+// subLine — короткая строка подписки в списке серверов: «23,4 из 200 ГБ, до 31.01.2027» — чтобы дата не
+// обрезалась. Число серверов в ней не пишется (оно видно по списку); данных о трафике и сроке нет —
+// остаётся число серверов.
+function subLine(sub) {
   const info = sub.info;
-  if (info?.total > 0) facts.push(t('sub.fact.trafficOf', { used: fmtBytes(info.upload + info.download), total: fmtBytes(info.total) }));
-  else if (info && info.upload + info.download > 0) facts.push(t('sub.fact.traffic', { used: fmtBytes(info.upload + info.download) }));
-  if (info?.expire > 0) facts.push(t(info.expire * 1000 < Date.now() ? 'sub.fact.expired' : 'sub.fact.until', { date: fmtDate(info.expire * 1000, false) }));
-  if (sub.device) facts.push(t('sub.fact.device'));
-  if (long && sub.updatedAt) facts.push(t('sub.fact.updated', { date: fmtDate(sub.updatedAt) }));
-  return facts.join(' · ');
+  const used = info ? info.upload + info.download : 0;
+  const GB = 1 << 30;
+  const num = (n) => (n / GB).toFixed(1).replace(/\.0$/, '').replace('.', t('fmt.decimal'));
+  const parts = [];
+  if (info?.total > 0) parts.push(info.total >= GB ? t('sub.line.gbOf', { used: num(used), total: num(info.total) }) : t('sub.line.of', { used: fmtBytes(used), total: fmtBytes(info.total) }));
+  else if (used > 0) parts.push(fmtBytes(used));
+  if (info?.expire > 0) parts.push(t(info.expire * 1000 < Date.now() ? 'sub.fact.expired' : 'sub.fact.until', { date: fmtDate(info.expire * 1000, false) }));
+  return parts.length ? parts.join(', ') : t('n.servers', { n: subServers(sub.id).length });
 }
 
 function render() {
@@ -47,7 +50,9 @@ function render() {
     groups.splice(own < 0 ? groups.length : own, 0, { key: sub.id, title: sub.name, sub, list: [] });
   }
   for (const g of groups) {
-    parts.push(g.sub ? subHead(g.sub) : el('h3', { className: 'group-title', textContent: `${g.title} · ${g.list.length}` }));
+    // Заголовок группы: название, число серверов, справа пунктир до края (его рисуют стили).
+    parts.push(g.sub ? subHead(g.sub) : el('h3', { className: 'group-title' },
+      el('span', { textContent: g.title }), el('span', { className: 'count', textContent: String(g.list.length) })));
     const ul = el('ul', { className: 'srv-list' }, ...g.list.map((s) => {
       const li = serverItem(s, { selected: s.id === view.currentServerId, full: true, more: true });
       li.dataset.group = g.key;
@@ -69,7 +74,7 @@ function subHead(sub) {
   setIcon(more, 'more');
   const open = el('button', { type: 'button', className: 'sub-open', title: t('sub.details') },
     el('span', { className: 'sub-name', textContent: sub.name }),
-    el('span', { className: 'sub-facts', textContent: subFacts(sub) }));
+    el('span', { className: 'sub-facts', textContent: subLine(sub) }));
   open.dataset.action = 'subOpen';
   const head = el('div', { className: 'sub-head' }, open, more);
   head.dataset.sub = sub.id;
@@ -239,6 +244,9 @@ function clearDropMarks() {
 
 $('srvSearch').addEventListener('input', render);
 
+// Пусто: под текстом — такая же кнопка «Добавить», как в заголовке.
+$('srvAddEmpty').addEventListener('click', () => $('srvAdd').click());
+
 $('pingAll').addEventListener('click', async () => {
   $('pingAll').disabled = true;
   toast(t(S.view.enabled ? 'servers.pinging' : 'servers.pingingOff'));
@@ -249,8 +257,11 @@ $('pingAll').addEventListener('click', async () => {
 $('fastest').addEventListener('click', async () => {
   $('fastest').disabled = true;
   toast(t('servers.fastest.run'));
-  await run({ type: 'fastest' }, (r) => t('servers.fastest.done', { name: serverById(r.id)?.name || r.id, ms: r.ms }));
+  const done = await run({ type: 'fastest' }, (r) => t('servers.fastest.done', { name: serverById(r.id)?.name || r.id, ms: r.ms }));
   $('fastest').disabled = false;
+  // Список сразу прокручивается к выбранной строке (она залита), без анимации. Строка перерисовывается,
+  // когда из хранилища приходит новый текущий сервер, — поэтому чуть позже ответа.
+  if (done) setTimeout(() => document.querySelector('#srvGroups .srv[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', behavior: 'instant' }), 300);
 });
 
 // --- экран «Добавить» ---
@@ -333,7 +344,7 @@ async function removeSub(sub) {
 }
 
 function fact(name, value, cls = '') {
-  return [el('dt', { textContent: name }), el('dd', { className: cls, textContent: value })];
+  return [el('dt', { textContent: name }), el('dd', { className: cls, textContent: value, title: cls === 'url' ? value : '' })];
 }
 
 // openSub — «сведения о подписке»: всё о ней, действия и проверка (SPEC-SUBS.md, шаг 1).
@@ -345,7 +356,7 @@ function openSub(id) {
       const facts = el('dl', { id: 'subFacts', className: 'facts' });
       const notes = el('div', { className: 'sub-notes' });
       const actions = el('div', { className: 'tools' },
-        el('button', { type: 'button', className: 'btn btn-small', textContent: t('sub.update'), onclick: () => updateSub(subOf(id)) }),
+        el('button', { type: 'button', className: 'btn', textContent: t('sub.update'), onclick: () => updateSub(subOf(id)) }),
         el('button', { type: 'button', className: 'ghost', textContent: t('common.rename'), onclick: () => renameSub(subOf(id)) }),
         el('button', { type: 'button', className: 'ghost danger', textContent: t('common.delete'), onclick: async () => { if (await removeSub(subOf(id))) closeScreen(); } }));
       // Проверка подписки: отчёт компаньона без секретов.
@@ -354,7 +365,7 @@ function openSub(id) {
       const runBtn = el('button', { id: 'subCheckRun', type: 'button', className: 'ghost', textContent: t('sub.check.run') });
       const copyBtn = el('button', { id: 'subCheckCopy', type: 'button', className: 'ghost', textContent: t('sub.check.copy'), hidden: true });
       const state = el('p', { id: 'subCheckState', className: 'note', hidden: true });
-      const report = el('pre', { id: 'subCheckReport', className: 'log report', hidden: true });
+      const report = el('pre', { id: 'subCheckReport', className: 'log report', hidden: true, tabIndex: 0 });
       const say = (text, kind = '') => {
         state.hidden = !text;
         state.textContent = text;
@@ -405,7 +416,7 @@ function openSub(id) {
       sc.setSub(t('n.servers', { n: subServers(id).length }));
       const info = sub.info;
       const rows = [
-        ...fact(t('sub.f.url'), maskUrl(sub.url)),
+        ...fact(t('sub.f.url'), maskUrl(sub.url), 'url'),
         ...fact(t('sub.f.updated'), sub.updatedAt ? fmtDate(sub.updatedAt) : t('sub.f.never')),
         ...fact(t('sub.f.auto'), t('sub.f.every', { h: sub.intervalHours })),
       ];

@@ -7,6 +7,7 @@ import { Controller } from './lib/controller.js';
 import { TabDomains } from './lib/tabdomains.js';
 import { SiteCollector } from './lib/sitedomains.js';
 import { normalize } from './lib/storage.js';
+import { PAGES, designOf } from './lib/design.js';
 
 const WATCHDOG = 'watchdog';
 const SUBSCRIPTIONS = 'subscriptions';
@@ -73,6 +74,17 @@ const collector = new SiteCollector({
 });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && (changes.rules || changes.settings)) collector.invalidate();
+});
+
+// Оформление окна (lib/design.js): значок расширения открывает окно, выбранное в настройках.
+// Ставится при каждом запуске фона и при смене настройки.
+async function applyDesign() {
+  const { settings } = await chrome.storage.local.get('settings');
+  await chrome.action.setPopup({ popup: PAGES[designOf(settings)] });
+}
+applyDesign();
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.settings && designOf(changes.settings.oldValue) !== designOf(changes.settings.newValue)) applyDesign();
 });
 
 // Слушатели — сразу при запуске фона (иначе Chrome не разбудит его этими событиями).

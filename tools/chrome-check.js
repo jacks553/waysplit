@@ -316,6 +316,22 @@ function startChrome(profileDir = profile, moreHosts = [], screen = '1920x1080',
       // size(ширина, высота, [ширина экрана, высота экрана]) — размер окна; экран — если нужен не 1920×1080.
       size: (width, height, screen) => send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 2, mobile: false,
         ...(screen ? { screenWidth: screen[0], screenHeight: screen[1] } : {}) }, sessionId),
+      // mouse — настоящий щелчок мышью в точке страницы; key — настоящее нажатие клавиши (Enter, Escape, стрелки).
+      mouse: async (x, y) => {
+        for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
+          await send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' ? 'none' : 'left', clickCount: type === 'mouseMoved' ? 0 : 1 }, sessionId);
+        }
+      },
+      key: async (key) => {
+        const code = { Enter: 13, Escape: 27, ArrowDown: 40, ArrowUp: 38, Tab: 9 }[key];
+        const base = { key, code: key, windowsVirtualKeyCode: code, nativeVirtualKeyCode: code };
+        await send('Input.dispatchKeyEvent', { type: key === 'Enter' ? 'keyDown' : 'rawKeyDown', ...base, ...(key === 'Enter' ? { text: '\r', unmodifiedText: '\r' } : {}) }, sessionId);
+        await send('Input.dispatchKeyEvent', { type: 'keyUp', ...base }, sessionId);
+      },
+      // focused — считать страницу активной (иначе у фоновой вкладки :focus и :focus-visible не срабатывают).
+      focused: () => send('Emulation.setFocusEmulationEnabled', { enabled: true }, sessionId),
+      // scheme — тема системы для этой страницы: 'light' или 'dark'.
+      scheme: (value) => send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value }] }, sessionId),
       // inject — свой код до скриптов страницы (при следующей загрузке).
       inject: async (source) => {
         await send('Page.enable', {}, sessionId); // без этого скрипт не подставляется
@@ -337,6 +353,8 @@ function startChrome(profileDir = profile, moreHosts = [], screen = '1920x1080',
 const wait = `const wait = async (f, ms = 20000) => { for (let t = 0; t < ms && !f(); t += 100) await new Promise((r) => setTimeout(r, 100)); return f(); };
   const $ = (id) => document.getElementById(id);
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // plain — имя сервера без флага: в окне флага-эмодзи нет нигде, в подсказках вместо него код страны.
+  const plain = (s) => String(s).replace(/\\p{Regional_Indicator}{2}\\s*/gu, '');
   const tab = (name) => document.querySelector('.tabbar .tab[data-tab="' + name + '"]').click();
   const toastText = () => ($('toast').hidden ? '' : ($('toast').querySelector('.toast-text') || $('toast')).textContent);
   const clearToast = () => { $('toast').hidden = true; $('toast').textContent = ''; };
@@ -348,12 +366,12 @@ const wait = `const wait = async (f, ms = 20000) => { for (let t = 0; t < ms && 
     b.click();
     return true;
   };
-  const srvRow = (name) => [...document.querySelectorAll('#srvGroups li.srv')].find((x) => x.querySelector('.srv-name')?.title.includes(name));
+  const srvRow = (name) => [...document.querySelectorAll('#srvGroups li.srv')].find((x) => x.querySelector('.srv-name')?.title.includes(plain(name)));
   const ruleLi = (shown) => [...document.querySelectorAll('#rulesList li.rule')].find((x) => x.querySelector('.rule-domain').textContent === shown);
-  const siteView = () => ({ hidden: $('site').hidden, vpn: $('siteSwitch').getAttribute('aria-checked') === 'true', text: $('siteSwitchText').textContent,
+  const siteView = () => ({ hidden: $('site').hidden, vpn: $('siteVpn').getAttribute('aria-pressed') === 'true', text: document.querySelector('#siteControls .seg[aria-pressed="true"]')?.textContent || '',
     why: $('siteWhy').textContent, server: $('siteServer').title, dim: $('siteServer').classList.contains('dim'),
     warn: $('siteWarn').hidden ? '' : $('siteWarnText').textContent, fix: $('siteWarnFix').textContent, remove: !$('ruleRemove').hidden, reload: !$('reload').hidden,
-    letter: $('siteIcon').classList.contains('letter') ? $('siteIcon').textContent : '' });`;
+    code: $('siteFlag').textContent });`;
 const js = {
   // add — ссылки или подписка: «Серверы» → «+ Добавить» → экран добавления.
   add: (text) => `(async () => { ${wait}
@@ -386,7 +404,7 @@ const js = {
     const search = document.querySelector('.screen.picker .pick-search input');
     search.value = ${JSON.stringify(name)};
     search.dispatchEvent(new Event('input'));
-    const li = [...document.querySelectorAll('.screen.picker li[data-id]')].find((x) => x.querySelector('.srv-name').title.includes(${JSON.stringify(name)}));
+    const li = [...document.querySelectorAll('.screen.picker li[data-id]')].find((x) => x.querySelector('.srv-name').title.includes(plain(${JSON.stringify(name)})));
     if (!li) return 'нет в списке';
     li.click();
     await wait(() => !document.querySelector('.screen.picker'), 5000);
@@ -396,7 +414,7 @@ const js = {
     tab('home');
     $('serverRow').click();
     await wait(() => document.querySelector('.screen.picker'));
-    const li = [...document.querySelectorAll('.screen.picker li[data-id]')].find((x) => x.querySelector('.srv-name').title.includes(${JSON.stringify(name)}));
+    const li = [...document.querySelectorAll('.screen.picker li[data-id]')].find((x) => x.querySelector('.srv-name').title.includes(plain(${JSON.stringify(name)})));
     li.querySelector('[data-action="star"]').click();
     await wait(() => document.querySelector('.screen.picker .group-title')?.textContent === 'Избранное', 5000);
     const groups = [...document.querySelectorAll('.screen.picker .group-title')].map((h) => h.textContent);
@@ -409,7 +427,7 @@ const js = {
     out.escClosed = !document.querySelector('.screen');
     $('serverRow').click();
     await wait(() => document.querySelector('.screen.picker'));
-    document.querySelector('.screen .back').click();
+    document.querySelector('.screen .back-key').click();
     await wait(() => !document.querySelector('.screen'), 3000);
     out.backClosed = !document.querySelector('.screen');
     return out; })()`,
@@ -463,7 +481,7 @@ const js = {
   siteClick: (id) => `(async () => { ${wait}
     tab('home');
     const before = JSON.stringify(siteView());
-    $(${JSON.stringify(id)}).click();
+    (${JSON.stringify(id)} === 'siteSwitch' ? document.querySelector('#siteControls .seg[aria-pressed="false"]') : $(${JSON.stringify(id)})).click();
     await wait(() => JSON.stringify(siteView()) !== before, 5000);
     await sleep(200);
     return siteView(); })()`,
@@ -473,7 +491,7 @@ const js = {
     $('siteServer').click();
     await wait(() => document.querySelector('.screen.picker'));
     const items = [...document.querySelectorAll('.screen.picker li')];
-    const li = items.find((x) => x.dataset.key === ${JSON.stringify(name)}) || items.find((x) => x.querySelector('.srv-name')?.title.includes(${JSON.stringify(name)}));
+    const li = items.find((x) => x.dataset.key === ${JSON.stringify(name)}) || items.find((x) => x.querySelector('.srv-name')?.title.includes(plain(${JSON.stringify(name)})));
     if (!li) return { error: 'нет в списке' };
     const specials = items.filter((x) => x.dataset.key).map((x) => x.querySelector('.srv-name').textContent);
     li.click();
@@ -586,7 +604,7 @@ const js = {
     $('content').scrollTop = 0;
     const box = (node) => node.getBoundingClientRect();
     const fit = { card: Math.round(box($('permHome')).height), siteShown: !$('site').hidden,
-      label: Math.round(box($('site').querySelector('.row-label')).bottom), view: Math.round(box($('content')).bottom), win: innerWidth + '×' + innerHeight };
+      label: Math.round(box($('site').querySelector('.site-label')).bottom), view: Math.round(box($('content')).bottom), win: innerWidth + '×' + innerHeight };
     tab('rules');
     await sleep(100);
     const rules = !$('permRules').hidden;
@@ -619,9 +637,9 @@ const js = {
     }
     $('content').scrollTop = 0;
     const box = (node) => node.getBoundingClientRect();
-    return { shown: !b.hidden, on: b.getAttribute('aria-checked') === 'true', title: b.querySelector('.ru-title').textContent, sub: b.querySelector('.ru-sub').textContent,
+    return { shown: !b.hidden, on: b.getAttribute('aria-checked') === 'true', title: b.querySelector('.ru-title').textContent, sub: b.title,
       toast: toastText(), setting: (await chrome.storage.local.get('settings')).settings?.ruDirect === true,
-      bottom: Math.round(box(b).bottom), label: Math.round(box($('site').querySelector('.row-label')).bottom), view: Math.round(box($('content')).bottom) }; })()`,
+      bottom: Math.round(box(b).bottom), label: Math.round(box($('site').querySelector('.site-label')).bottom), view: Math.round(box($('content')).bottom) }; })()`,
   // siteNew — подсказка «Найдены новые домены сайта» на «Главной».
   siteNew: `(async () => { ${wait}
     tab('home');
@@ -754,7 +772,7 @@ try {
     await sleep(500);
     await popup.shot(join(shotsDir, 'popup-list-light.png'), 'light');
     await popup.shot(join(shotsDir, 'popup-list-dark.png'), 'dark');
-    await popup.eval(`document.querySelector('.screen .back').click()`);
+    await popup.eval(`document.querySelector('.screen .back-key').click()`);
   }
 
   // --- этап 4: страница настроек — то же окно на всю вкладку ---
@@ -808,13 +826,13 @@ try {
   await popup.inject(`chrome.tabs.query = async () => [{ id: -1, url: ${JSON.stringify(target)} }];`);
   await popup.goto(`chrome-extension://${id}/popup/popup.html`);
   let site = await popup.eval(js.site);
-  check(site.vpn && site.text === 'Через VPN' && /как у остальных/.test(site.why) && site.server.includes(srvA.name),
+  check(site.vpn && site.text === 'Через VPN' && /как у остальных/.test(site.why) && site.server.includes(srvA.name.replace(/\p{Regional_Indicator}{2}\s*/gu, '')) && !/\p{Regional_Indicator}/u.test(site.server),
     `«Этот сайт» до правила: «${site.text}» — ${site.why}`);
   let perm = await popup.eval(js.permCard);
   check(!perm.home && !perm.rules, 'правил «через VPN» ещё нет — карточки разрешения для «доменов сайта» нет');
   site = await popup.eval(js.siteClick('siteSwitch'));
-  check(!site.vpn && site.text === 'Без VPN' && site.why === 'По правилу для target.test · без VPN' && site.remove && site.reload && site.letter === 'T',
-    `переключатель → «${site.text}»: ${site.why}; «Убрать правило» и «Обновить вкладку» на месте; буква в кружке — «${site.letter}»`);
+  check(!site.vpn && site.text === 'Без VPN' && site.why === 'По правилу для target.test · без VPN' && site.remove && site.reload && site.code === '—',
+    `кнопка «${site.text}» нажата: ${site.why}; «Убрать правило» и «Обновить вкладку» на месте; на кнопке сервера для сайта — прочерк («${site.code}»)`);
   const links = await popup.eval(`['ruleRemove', 'tdButton'].map((id) => Math.round(document.getElementById(id).getBoundingClientRect().height))`);
   check(links.every((h) => h >= 24), `ссылки «Убрать правило» и «Домены этой вкладки»: высота области нажатия ${links.join(' и ')} пикс. (не меньше 24)`);
   if (shotsDir) await popup.shot(join(shotsDir, 'popup-site.png'), 'light');
@@ -845,9 +863,12 @@ try {
     $('content').scrollTop = 0;
     const box = (node) => node.getBoundingClientRect();
     return { state: $('status').dataset.state, status: $('status').textContent, detail: $('detail').textContent, card: !$('permHome').hidden,
-      label: Math.round(box($('site').querySelector('.row-label')).bottom), view: Math.round(box($('content')).bottom) }; })()`);
-  check(fitOff.state === 'rules' && fitOff.card && fitOff.label + 8 <= fitOff.view && /^Через VPN — 1 сайт из правил$/.test(fitOff.detail),
-    `окно 400×600, «${fitOff.status}» («${fitOff.detail}»): переключатель, карточка и заголовок «Этот сайт» помещаются (низ заголовка ${fitOff.label}, край ${fitOff.view})`);
+      label: Math.round(box($('site').querySelector('.site-label')).bottom), view: Math.round(box($('content')).bottom),
+      led: $('powerZone').dataset.led + ' / ' + $('ledLabel').textContent, light: document.documentElement.dataset.light,
+      power: Math.round(box($('power')).bottom) <= Math.round(box(document.querySelector('.tabbar')).top) }; })()`);
+  check(fitOff.state === 'rules' && fitOff.card && fitOff.label + 8 <= fitOff.view && fitOff.status === 'VPN выключен' && /^работают правила: 1 сайт через VPN$/.test(fitOff.detail)
+    && fitOff.led === 'rules / правила' && fitOff.light === 'off' && fitOff.power,
+    `окно 400×600, «${fitOff.status}» («${fitOff.detail}»), лампочка «${fitOff.led}», подсветка ${fitOff.light}: строка «Российские сайты», запрос разрешения и заголовок «Этот сайт» видны на экране (низ заголовка ${fitOff.label}, край ${fitOff.view}), клавиша питания на месте`);
   await popup.eval(js.message({ type: 'toggle', enabled: true }));
   await popup.eval(`(async () => { ${wait} await wait(() => $('status').dataset.state === 'on', 15000); return 1; })()`);
   if (shotsDir) await popup.shot(join(shotsDir, 'popup-site-perm.png'), 'light');
@@ -865,7 +886,7 @@ try {
       await sleep(500); // пинг текущего сервера дописывается в статус
       $('content').scrollTop = 0;
       const box = (node) => node.getBoundingClientRect();
-      const links = [...document.querySelectorAll('#site .site-links .link')].filter((x) => !x.hidden);
+      const links = [$('tdButton'), $('ruleRemove')].filter((x) => !x.hidden);
       return { state: $('status').dataset.state, status: $('status').textContent, why: $('siteWhy').textContent, card: !$('permHome').hidden, win: innerWidth + '×' + innerHeight,
         app: Math.round(box(document.querySelector('.app')).height),
         bottom: Math.round(box($('site')).bottom), view: Math.round(box($('content')).bottom), scroll: $('content').scrollHeight - $('content').clientHeight,
@@ -907,12 +928,12 @@ try {
   check(en1.html === 'en' && en1.settings === 'Settings' && en1.value === 'en' && en1.tab === 'settings' && en1.options === 'same as Chrome, Русский, English',
     `язык English в «Настройках»: страница сразу по-английски (lang=${en1.html}, разделы: ${en1.legends}; варианты языка: ${en1.options})`);
   const en2 = await popup.eval(langOf('en'));
-  check(en2.html === 'en' && en2.home === 'Home' && /^(Connected · |Server is not responding)/.test(en2.status),
+  check(en2.html === 'en' && en2.home === 'Home' && /^(VPN is on|No response)$/.test(en2.status),
     `открытое окно расширения тоже по-английски, без перезапуска: «${en2.home}», «${en2.status}»`);
   const enTitle = await popup.eval(js.title);
   check(enTitle === 'Waysplit — connected', `подсказка значка на панели по-английски: «${enTitle}»`);
   fit = await homeFit(['on', 'warn']);
-  check(fits(fit) && fit.why.startsWith('By the rule for target.test') && fit.links.join() === 'Remove rule,Domains of this tab',
+  check(fits(fit) && fit.why.startsWith('By the rule for target.test') && fit.links.join() === 'Domains of this tab,Remove rule',
     `English: окно ${fit.win}, VPN включён, у сайта правило («${fit.why}»): ${fitText(fit)}`);
   await popup.size(400, 580, [1280, 720]);
   fit = await homeFit(['on', 'warn']);
@@ -920,7 +941,7 @@ try {
   await popup.size(400, 600);
   await popup.eval(js.message({ type: 'toggle', enabled: false }));
   fit = await homeFit(['rules']);
-  check(fits(fit) && fit.status === 'Off · rules are active', `English: окно ${fit.win}, «${fit.status}»: ${fitText(fit)}`);
+  check(fits(fit) && fit.status === 'VPN is off', `English: окно ${fit.win}, «${fit.status}»: ${fitText(fit)}`);
   await popup.eval(js.message({ type: 'toggle', enabled: true }));
   await popup.eval(`(async () => { ${wait} await wait(() => ['on', 'warn'].includes($('status').dataset.state), 15000); return 1; })()`);
   const ru1 = await opts.eval(pickLanguage('ru'));
@@ -952,7 +973,7 @@ try {
     return { lang: document.documentElement.lang, btn: $('langBtn').textContent, height: Math.round(top.getBoundingClientRect().height), rows: rows.size,
       overflow: top.scrollWidth - top.clientWidth, home: document.querySelector('.tabbar .tab[data-tab="home"]').textContent.trim(),
       setting: (await chrome.storage.local.get('settings')).settings?.language }; })()`;
-  const oneRow = (h) => h.height === 48 && h.rows === 1 && h.overflow === 0;
+  const oneRow = (h) => h.height === 44 && h.rows === 1 && h.overflow === 0;
   const hp1 = await popup.eval(headPick('English'));
   const hs1 = await popup.eval(headState('en'));
   const hf1 = await opts.eval(headState('en'));
@@ -986,7 +1007,7 @@ try {
   // Те же два замера по-английски (язык — сообщением фону, как его записывает «Настройки»).
   await popup.eval(js.message({ type: 'setSetting', key: 'language', value: 'en' }));
   fit = await homeFit(['off']);
-  check(fits(fit) && fit.status === 'Off' && fit.why === 'No rule — same as other sites: without VPN' && fit.links.join() === 'Domains of this tab',
+  check(fits(fit) && fit.status === 'VPN is off' && fit.why === 'No rule — same as other sites: without VPN' && fit.links.join() === 'Domains of this tab',
     `English: окно ${fit.win}, «${fit.status}» («${fit.why}»): ${fitText(fit)}`);
   await popup.eval(js.message({ type: 'toggle', enabled: true }));
   fit = await homeFit(['on', 'warn']);
@@ -1021,7 +1042,7 @@ try {
   check(text === 'Waysplit-OK DIRECT', `побеждает самое конкретное правило: target.test по-прежнему напрямую («${text}»)`);
   added5 = await opts.eval(js.addRule('https://www.пример.рф/страница', 'direct'));
   const row = await opts.eval(js.ruleRow('пример.рф'));
-  check(/^Добавлено 1/.test(added5) && row?.sub === 'xn--e1afmkfd.xn--p1ai' && row.favicon, `кириллический домен: «пример.рф» хранится как ${row?.sub}`);
+  check(/^Добавлено 1/.test(added5) && row?.sub === 'xn--e1afmkfd.xn--p1ai' && !row.favicon, `кириллический домен: «пример.рф» хранится как ${row?.sub}; значка сайта в строке правила нет`);
   added5 = await opts.eval(js.addSet('youtube', 'direct'));
   check(/добавлено 7/.test(added5), `набор доменов: «${added5}»`);
   if (shotsDir) {
@@ -1082,7 +1103,7 @@ try {
   await popup.goto(`chrome-extension://${id}/popup/popup.html`);
   let ru = await popup.eval(js.ruSwitch(false));
   check(ru.shown && !ru.on && !ru.setting && ru.title === 'Российские сайты — без VPN' && ru.sub === '.ru, .рф, .su, VK, Яндекс и другие' && ru.bottom < ru.view,
-    `«Главная»: строка «${ru.title}» с подписью «${ru.sub}», выключена`);
+    `«Главная»: строка «${ru.title}» с подсказкой «${ru.sub}», выключена`);
   ru = await popup.eval(js.ruSwitch(true));
   check(ru.on && ru.setting && /идут без VPN/.test(ru.toast), `переключатель включён: «${ru.toast}»`);
   [text] = await readUntil(tab, ruUrl, 'Waysplit-OK DIRECT');
@@ -1125,13 +1146,19 @@ try {
     await wait(() => $('hostState').dataset.kind === 'ok', 10000);
     out.host = $('hostState').textContent;
     out.hostColor = getComputedStyle($('hostState')).color;
+    out.done = $('step1').dataset.done;
+    out.light = document.documentElement.dataset.light;
+    out.screen = getComputedStyle(document.querySelector('.steps')).backgroundColor;
+    out.font = getComputedStyle($('hostState')).fontFamily;
     return out; })()`);
   await chrome.send('Target.closeTarget', { targetId: wel.targetId });
   [text] = await readUntil(tab, ruUrl, 'Waysplit-OK A');
   ru = await popup.eval(js.ruSwitch(false));
   check(welRu.text === 'Российские сайты — без VPN .ru, .рф, .su, VK, Яндекс и другие' && welRu.wasOn && welRu.setting === false && !ru.on && text === 'Waysplit-OK A',
     `«Начало работы»: галочка «${welRu.text}» — сняли, переключатель на «Главной» выключен, российский сайт снова через VPN («${text}»)`);
-  check(/^Компаньон на связи/.test(welRu.host) && welRu.hostColor === 'rgb(10, 125, 85)', `«Начало работы»: «${welRu.host}» — зелёным, как статус (${welRu.hostColor}; 5,15:1 на карточке)`);
+  check(/^Компаньон на связи/.test(welRu.host) && welRu.hostColor === 'rgb(28, 36, 22)' && welRu.done === 'true' && welRu.light === 'on' && welRu.screen === 'rgb(197, 209, 168)'
+    && /^"Waysplit LCD"/.test(welRu.font),
+  `«Начало работы»: «${welRu.host}» — чернилами на экране (${welRu.hostColor}), шаг отмечен, подсветка экрана горит (${welRu.screen})`);
 
   // Сообщения внизу окна: ошибка остаётся до крестика, короткое об успехе исчезает само.
   // В меню «⋯» у пункта с фокусом — синяя обводка; в «Настройках» у каждой галочки название и пояснение.
@@ -1156,7 +1183,7 @@ try {
     await wait(() => /^Ответили/.test(toastText()), 40000);
     await sleep(5600);
     short.gone = $('toast').hidden;
-    const css = [...document.styleSheets].flatMap((s) => [...s.cssRules]).find((r) => r.selectorText === '.pop-item:focus-visible');
+    const css = [...document.styleSheets].flatMap((s) => [...s.cssRules]).find((r) => r.selectorText?.includes('.pop-item:focus-visible'));
     tab('settings');
     const checks = [...document.querySelectorAll('#panel-settings .check')];
     return { err, short, focus: css ? css.style.cssText : '',
@@ -1164,7 +1191,7 @@ try {
   check(toasts.err.kind === 'error' && toasts.err.sticky === 'true' && toasts.err.close && toasts.err.stillShown && toasts.err.closed,
     `сообщение об ошибке («${toasts.err.text}») остаётся и через 6 с, закрывается крестиком`);
   check(toasts.short.sticky === 'false' && !toasts.short.close && toasts.short.gone, `короткое сообщение («${toasts.short.text}») — без крестика, исчезает само`);
-  check(/outline:\s*2px solid var\(--accent\)/.test(toasts.focus), `пункт меню «⋯» с фокусом клавиатуры — синяя обводка, как у остальных элементов («${toasts.focus}»)`);
+  check(/background:\s*var\(--ink\)/.test(toasts.focus) && /color:\s*var\(--screen\)/.test(toasts.focus), `пункт меню «⋯» с фокусом клавиатуры залит чернилами, как под мышью («${toasts.focus}»)`);
   check(toasts.opts >= 6 && toasts.named === toasts.opts, `«Настройки»: у всех ${toasts.opts} галочек и вариантов — название и пояснение отдельно`);
 
   // --- этап 6: защита, другое прокси-расширение, настройки, подписка, диагностика, копия ---
@@ -1208,7 +1235,7 @@ try {
   const deadView = await popup.eval(`(async () => { ${wait}
     await wait(() => $('status').dataset.state === 'warn', 15000);
     return { state: $('status').dataset.state, status: $('status').textContent, detail: $('detail').textContent }; })()`);
-  check(deadView.state === 'warn' && deadView.status === 'Сервер не отвечает' && /Сайты не откроются/.test(deadView.detail),
+  check(deadView.state === 'warn' && deadView.status === 'Нет ответа' && /Сайты не откроются/.test(deadView.detail),
     `окно при недоступном сервере: «${deadView.status}» — ${deadView.detail}`);
   if (shotsDir) await popup.shot(join(shotsDir, 'popup-dead.png'), 'light');
   // Сервер без ответа — словами: в строке сервера на «Серверах» и на «Главной», а не только полосками.
@@ -1219,8 +1246,8 @@ try {
     const text = row?.querySelector('.srv-meta-text');
     const cs = text ? getComputedStyle(text) : null;
     return { meta: row?.querySelector('.srv-meta')?.textContent || '', cut: cs ? cs.textOverflow + ', ' + cs.overflowX + ', ' + cs.whiteSpace : '' }; })()`);
-  const deadLabel = await popup.eval(`document.getElementById('srvLabel').textContent`);
-  check(/^нет ответа · VLESS/.test(deadMeta.meta) && deadLabel === 'Сервер · нет ответа', `сервер без ответа подписан словами: «${deadMeta.meta}»; на «Главной» — «${deadLabel}»`);
+  const deadLabel = await popup.eval(`document.getElementById('srvMs').textContent + (document.getElementById('srvMs').classList.contains('fail') ? '' : ' (не выделено)')`);
+  check(/^нет ответа · VLESS/.test(deadMeta.meta) && deadLabel === 'нет ответа', `сервер без ответа подписан словами: «${deadMeta.meta}»; на «Главной» — «${deadLabel}»`);
   check(deadMeta.cut === 'ellipsis, hidden, nowrap', `длинный адрес в строке сервера обрезается с многоточием (${deadMeta.cut})`);
   check(!/; DIRECT"/.test(await popup.eval(js.pac)), '«Не открывать сайт» (по умолчанию): запасного DIRECT в PAC нет');
   let deadErr = await tab.goto(target);
@@ -1236,12 +1263,241 @@ try {
   [text] = await readUntil(tab, target, 'Waysplit-OK A', 10000);
   check(text === 'Waysplit-OK A', `недоступный сервер убран, снова сервер A («${text}»)`);
 
-  // Настройки: тема.
-  await opts.eval(js.setSelect('theme', 'dark'));
+  // Настройки: тема нового окна — своя настройка (themeLcd), изначально тёмная, и при светлой теме системы.
+  await popup.scheme('light');
+  const theme0 = await popup.eval(`({ attr: document.documentElement.dataset.theme, body: getComputedStyle(document.body).backgroundColor })`);
+  theme0.select = await opts.eval(`(async () => { ${wait} tab('settings'); await sleep(300); return $('themeLcd').value; })()`);
+  const themeSet = (await opts.eval(js.local)).settings;
+  check(theme0.attr === 'dark' && theme0.body === 'rgb(49, 59, 72)' && theme0.select === 'dark' && themeSet.themeLcd === 'dark' && (themeSet.theme ?? 'system') === 'system',
+    `тема нового окна изначально тёмная, и при светлой теме системы (корпус ${theme0.body}); тема классического окна — «как в системе»`);
+  await opts.eval(js.setSelect('themeLcd', 'light'));
   await sleep(300);
-  check((await popup.eval('document.documentElement.dataset.theme')) === 'dark', 'тёмная тема из настроек применилась в окне');
+  const theme1 = await popup.eval(`({ attr: document.documentElement.dataset.theme, body: getComputedStyle(document.body).backgroundColor })`);
+  check(theme1.attr === 'light' && theme1.body === 'rgb(221, 225, 230)' && (await opts.eval(js.local)).settings.theme === 'system',
+    `светлая тема из настроек применилась в окне (корпус ${theme1.body}); тему классического окна это не меняет`);
   if (shotsDir) await opts.shot(join(shotsDir, 'options-settings.png'), 'light');
-  await opts.eval(js.setSelect('theme', 'system'));
+  await opts.eval(js.setSelect('themeLcd', 'system'));
+  await sleep(300);
+  await popup.scheme('dark');
+  const themeSysDark = await popup.eval(`getComputedStyle(document.body).backgroundColor`);
+  await popup.scheme('light');
+  const themeSysLight = await popup.eval(`getComputedStyle(document.body).backgroundColor`);
+  check(themeSysDark === 'rgb(49, 59, 72)' && themeSysLight === 'rgb(221, 225, 230)', `тема «как в системе»: при тёмной системе корпус ${themeSysDark}, при светлой — ${themeSysLight}`);
+  await opts.eval(js.setSelect('themeLcd', 'dark'));
+
+  // --- два оформления (версия 1.3.0, design/lcd/STYLE.md): новое окно и классическое (окно версии 1.2.1) ---
+  // ctl — страница расширения, которая сама никуда не переходит: с неё шлём команды фону.
+  const ctl = await chrome.page(`chrome-extension://${id}/welcome/welcome.html`);
+  const pathOf = async (page) => { try { return await page.eval('location.pathname + location.search + location.hash'); } catch { return ''; } };
+  // waitPage — страница перешла на адрес и окно показано с данными.
+  const waitPage = async (page, re, ms = 10000) => {
+    for (let t = 0; t < ms; t += 200) {
+      try {
+        if (re.test(await pathOf(page)) && (await page.eval(`performance.getEntriesByName('waysplit-ready').length > 0`))) return true;
+      } catch { /* страница как раз переходит */ }
+      await sleep(200);
+    }
+    return false;
+  };
+  const pickDesign = (value) => `(async () => { ${wait}
+    tab('settings');
+    const s = $('design');
+    s.scrollIntoView({ block: 'center' });
+    s.focus();
+    const before = { value: s.value, focused: document.activeElement === s, path: location.pathname, first: [...s.closest('fieldset').querySelectorAll('select')].indexOf(s) };
+    s.value = ${JSON.stringify(value)};
+    s.dispatchEvent(new Event('change'));
+    return before; })()`;
+  const designView = `(async () => { ${wait}
+    await wait(() => performance.getEntriesByName('waysplit-ready').length, 5000);
+    await sleep(300);
+    const a = document.activeElement;
+    return { path: location.pathname, search: location.search, hash: location.hash, ready: document.documentElement.classList.contains('ready'),
+      tab: document.querySelector('.tabbar .tab[aria-selected="true"]')?.dataset.tab, focus: a?.id || '', ring: !!a?.matches?.(':focus-visible'), value: $('design')?.value,
+      popup: await chrome.action.getPopup({}), setting: (await chrome.storage.local.get('settings')).settings?.design, theme: document.documentElement.dataset.theme || '' }; })()`;
+  const setDesign = async (value) => {
+    await ctl.eval(js.message({ type: 'setSetting', key: 'design', value }));
+    const re = value === 'classic' ? /^\/classic\/popup\.html/ : /^\/popup\/popup\.html/;
+    return (await waitPage(popup, re)) && (await waitPage(opts, re));
+  };
+
+  // Из нового окна — в классическое: выбор в «Настройках», окно сразу открывается в другом оформлении
+  // на вкладке «Настройки», фокус — на том же выборе; значок расширения открывает классическое окно.
+  await opts.focused();
+  const d0 = await opts.eval(pickDesign('classic'));
+  const toClassic = await waitPage(opts, /^\/classic\/popup\.html\?full/);
+  const d1 = await opts.eval(designView);
+  const popToClassic = await waitPage(popup, /^\/classic\/popup\.html/);
+  check(d0.value === 'lcd' && d0.focused && d0.first === 0 && toClassic && d1.search.includes('full') && d1.tab === 'settings' && d1.focus === 'design' && d1.ring && d1.value === 'classic' && d1.ready
+    && /\/classic\/popup\.html$/.test(d1.popup) && d1.setting === 'classic' && popToClassic,
+  `оформление: в новом окне выбрали «классическое» (выбор — первым в разделе) — страница сразу открылась в классическом окне на вкладке «${d1.tab}», фокус на выборе оформления; значок открывает ${d1.popup.replace(/^.*\/\/[^/]+\//, '')}; открытое окно тоже перешло${d1.ring && d1.focus === 'design' ? '' : ` ${JSON.stringify({ d0, d1, toClassic, popToClassic })}`}`);
+
+  // Классическое окно — короткая проверка: открывается, четыре вкладки показывают содержимое, VPN
+  // выключается и включается, правило добавляется и удаляется, тема меняется, окно на всю вкладку открывается.
+  const cl = await popup.eval(`(async () => { ${wait}
+    await wait(() => performance.getEntriesByName('waysplit-ready').length, 5000);
+    const out = { tabs: [], path: location.pathname };
+    for (const name of ['home', 'servers', 'rules', 'settings']) {
+      tab(name);
+      await sleep(300);
+      const p = $('panel-' + name);
+      if (!p.hidden && p.offsetHeight > 100 && p.innerText.trim().length > 20) out.tabs.push(name);
+    }
+    out.frozen = document.documentElement.previousSibling?.nodeType === 8 || [...document.childNodes].some((n) => n.nodeType === 8 && /КЛАССИЧЕСКОЕ ОКНО/.test(n.data));
+    out.servers = document.querySelectorAll('#srvGroups li.srv').length;
+    out.flags = document.querySelectorAll('#srvGroups .flag').length;
+    out.font = getComputedStyle(document.body).fontFamily;
+    out.lcd = !!document.querySelector('.lcd');
+    tab('home');
+    return out; })()`);
+  check(cl.path === '/classic/popup.html' && cl.tabs.join(', ') === 'home, servers, rules, settings' && cl.servers > 0 && cl.flags === cl.servers && !cl.lcd && /Segoe UI/.test(cl.font),
+    `классическое окно открывается, вкладки с содержимым: ${cl.tabs.join(', ')}; серверов ${cl.servers}, у каждого флаг; шрифт и вид прежние`);
+  const clPower = (state) => `(async () => { ${wait}
+    tab('home');
+    $('power').click();
+    await wait(() => $('status').dataset.state === ${JSON.stringify(state)}, 20000);
+    return { state: $('status').dataset.state, text: $('status').textContent }; })()`;
+  const clOff = await popup.eval(clPower('off'));
+  [text] = await readUntil(tab, target, 'Waysplit-OK DIRECT');
+  const clOn = await popup.eval(clPower('on'));
+  let textOn;
+  [textOn] = await readUntil(tab, target, 'Waysplit-OK A', 10000);
+  check(clOff.state === 'off' && text === 'Waysplit-OK DIRECT' && clOn.state === 'on' && textOn === 'Waysplit-OK A',
+    `классическое окно: VPN выключили («${clOff.text}», сайт «${text}») и включили («${clOn.text}», сайт «${textOn}»)`);
+  const clAdded = await popup.eval(js.addRule('classic-check.test', 'direct'));
+  const clRule = await popup.eval(`(async () => { ${wait}
+    const row = () => [...document.querySelectorAll('#rulesList li.rule')].find((x) => x.querySelector('.rule-domain').textContent === 'classic-check.test');
+    await wait(() => row(), 5000);
+    const out = { row: !!row(), stored: (await chrome.storage.local.get('rules')).rules.some((r) => r.domain === 'classic-check.test') };
+    row()?.querySelector('[data-action="remove"]').click();
+    await wait(() => !row(), 5000);
+    await sleep(300);
+    out.gone = !row() && !(await chrome.storage.local.get('rules')).rules.some((r) => r.domain === 'classic-check.test');
+    clearToast();
+    return out; })()`);
+  check(/^Добавлено 1/.test(clAdded) && clRule.row && clRule.stored && clRule.gone, `классическое окно: правило добавлено («${clAdded}») и удалено`);
+  await popup.eval(js.setSelect('theme', 'dark'));
+  const clTheme = { attr: await popup.eval('document.documentElement.dataset.theme'), set: (await ctl.eval(js.local)).settings };
+  await popup.eval(js.setSelect('theme', 'system'));
+  check(clTheme.attr === 'dark' && clTheme.set.theme === 'dark' && clTheme.set.themeLcd === 'dark' && (await popup.eval('document.documentElement.dataset.theme')) === undefined,
+    `классическое окно: тема меняется своей настройкой (data-theme="${clTheme.attr}"), потом снова «как в системе»; тема нового окна — ${clTheme.set.themeLcd}`);
+  // Окно на всю вкладку — в выбранном оформлении из всех трёх мест: «Развернуть», страница настроек, ссылка на «Начале работы».
+  const clSmall = await chrome.page(`chrome-extension://${id}/classic/popup.html`);
+  await clSmall.eval(`(async () => { ${wait} await wait(() => performance.getEntriesByName('waysplit-ready').length); tab('rules');
+    setTimeout(() => $('expandBtn').click(), 50); return 'ok'; })()`);
+  await sleep(1500);
+  const clExpanded = (await chrome.send('Target.getTargets')).targetInfos.find((t) => t.type === 'page' && /\/classic\/popup\.html\?full=?#rules$/.test(t.url));
+  if (clExpanded) await chrome.send('Target.closeTarget', { targetId: clExpanded.targetId });
+  try { await chrome.send('Target.closeTarget', { targetId: clSmall.targetId }); } catch { /* окно уже закрылось само */ }
+  const clOptions = await chrome.page(`chrome-extension://${id}/options/options.html`);
+  const clOptionsOk = await waitPage(clOptions, /^\/classic\/popup\.html\?full#settings$/);
+  await chrome.send('Target.closeTarget', { targetId: clOptions.targetId });
+  const clLink = await ctl.eval(`(async () => { ${wait} await wait(() => /classic/.test($('openFull').href), 5000); return $('openFull').getAttribute('href'); })()`);
+  // Открыли не то окно (старый адрес нового окна): оно само переходит в выбранное, с теми же параметрами адреса.
+  const clWrong = await chrome.page(`chrome-extension://${id}/popup/popup.html?full#rules`);
+  const clWrongOk = await waitPage(clWrong, /^\/classic\/popup\.html\?full#rules$/);
+  const clWrongTab = await clWrong.eval(`document.querySelector('.tabbar .tab[aria-selected="true"]')?.dataset.tab`);
+  await chrome.send('Target.closeTarget', { targetId: clWrong.targetId });
+  check(!!clExpanded && clOptionsOk && /\/classic\/popup\.html\?full#rules$/.test(clLink) && clWrongOk && clWrongTab === 'rules',
+    `классическое оформление: «Развернуть» (${clExpanded?.url.replace(/^.*\//, '') || 'нет вкладки'}), страница настроек и ссылка на «Начале работы» открывают классическое окно на всю вкладку; адрес нового окна сам переходит в классическое, вкладка «${clWrongTab}»`);
+
+  // Из классического окна — обратно в новое: выбор рядом с темой, переход на «Настройки», фокус на выборе.
+  const d2 = await opts.eval(pickDesign('lcd'));
+  const toLcd = await waitPage(opts, /^\/popup\/popup\.html\?full/);
+  const d3 = await opts.eval(designView);
+  const popToLcd = await waitPage(popup, /^\/popup\/popup\.html/);
+  check(d2.value === 'classic' && d2.focused && toLcd && d3.search.includes('full') && d3.tab === 'settings' && d3.focus === 'design' && d3.ring && d3.value === 'lcd' && d3.ready
+    && /\/popup\/popup\.html$/.test(d3.popup) && d3.setting === 'lcd' && d3.theme === 'dark' && popToLcd,
+  `оформление: в классическом окне выбрали «новое» — страница сразу открылась в новом окне на вкладке «${d3.tab}», фокус на выборе оформления; значок открывает ${d3.popup.replace(/^.*\/\/[^/]+\//, '')}; тема нового окна — ${d3.theme}${d3.ring && d3.focus === 'design' ? '' : ` ${JSON.stringify({ d2, d3, toLcd, popToLcd })}`}`);
+  // Адрес классического окна при выбранном новом оформлении сам переходит в новое.
+  const lcdWrong = await chrome.page(`chrome-extension://${id}/classic/popup.html?full#servers`);
+  const lcdWrongOk = await waitPage(lcdWrong, /^\/popup\/popup\.html\?full#servers$/);
+  await chrome.send('Target.closeTarget', { targetId: lcdWrong.targetId });
+  check(lcdWrongOk, 'выбрано новое оформление: адрес классического окна сам переходит в новое, на ту же вкладку');
+  // Кнопка оформления в шапке (design/lcd/STYLE.md, «Каркас окна»): значок и название — одна кнопка с
+  // меню «Вид окна» и «Тема». Меню открывается мышью и с клавиатуры, меняет те же настройки, что строки
+  // в «Настройках». После смены вида открывается другое окно на той же вкладке, фокус — на кнопке.
+  await popup.focused();
+  const lookMenu = `(async () => { ${wait}
+    await sleep(250);
+    const p = $('pop'), a = document.activeElement, b = $('lookBtn'), pr = p.getBoundingClientRect(), br = b.getBoundingClientRect();
+    return { open: p.matches(':popover-open'), expanded: b.getAttribute('aria-expanded'), groups: [...p.querySelectorAll('.pop-group')].map((x) => x.textContent).join(', '),
+      items: [...p.querySelectorAll('.pop-item')].map((x) => (x.getAttribute('aria-checked') === 'true' ? '*' : '') + x.textContent.trim()).join(', '),
+      focus: a === b ? 'кнопка' : a.textContent.trim(), ring: a.matches(':focus-visible'), groupButtons: p.querySelectorAll('button.pop-group, .pop-group[tabindex]').length,
+      under: Math.round(pr.top - br.bottom), left: Math.round(pr.left - br.left), tab: document.querySelector('.tabbar .tab[aria-selected="true"]')?.dataset.tab }; })()`;
+  const lookBox = await popup.eval(`(async () => { ${wait} tab('rules'); await sleep(200); const b = $('lookBtn'), r = b.getBoundingClientRect(), cs = getComputedStyle(b);
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2, left: Math.round(r.left), h: Math.round(r.height), radius: cs.borderRadius, border: cs.borderTopWidth, title: b.title, aria: b.getAttribute('aria-label'),
+      name: b.querySelector('.brand').textContent, tabs: (() => { const seen = []; for (const n of ['home', 'servers', 'rules', 'settings']) { tab(n); if ($('lookBtn').offsetWidth) seen.push(n); } tab('rules'); return seen.length; })() }; })()`);
+  await popup.mouse(lookBox.x, lookBox.y);
+  const lookMouse = await popup.eval(lookMenu);
+  await popup.mouse(lookBox.x, lookBox.y);
+  const lookAgain = await popup.eval(lookMenu);
+  check(lookBox.left === 16 && lookBox.h === 28 && lookBox.radius === '14px' && lookBox.border === '1px' && lookBox.title === 'Оформление' && lookBox.aria === 'Оформление' && lookBox.name === 'Waysplit' && lookBox.tabs === 4
+    && lookMouse.open && lookMouse.expanded === 'true' && lookMouse.groups === 'Вид окна, Тема' && lookMouse.items === '*новый, классический, *тёмная, светлая, как в системе' && lookMouse.focus === 'новый'
+    && lookMouse.groupButtons === 0 && lookMouse.under === 4 && lookMouse.left === 0 && !lookAgain.open && lookAgain.expanded === 'false',
+  `кнопка оформления в шапке (слева ${lookBox.left}, высота ${lookBox.h}, на всех четырёх вкладках): щелчок мышью открывает меню под кнопкой — группы «${lookMouse.groups}», значения ${lookMouse.items}; фокус на выбранном виде; второй щелчок закрывает`);
+  await popup.eval(`document.getElementById('lookBtn').focus()`);
+  await popup.key('Enter');
+  const lookKey = await popup.eval(lookMenu);
+  const lookWalk = [];
+  for (let i = 0; i < 5; i++) {
+    await popup.key('ArrowDown');
+    lookWalk.push(await popup.eval(`document.activeElement.textContent.trim()`));
+  }
+  await popup.key('Escape');
+  const lookEsc = await popup.eval(lookMenu);
+  check(lookKey.open && lookKey.focus === 'новый' && lookKey.ring && lookWalk.join(', ') === 'классический, тёмная, светлая, как в системе, новый' && !lookEsc.open && lookEsc.focus === 'кнопка' && lookEsc.ring && lookEsc.tab === 'rules',
+    `с клавиатуры: Enter на кнопке открывает меню, фокус на «${lookKey.focus}»; стрелка вниз идёт по значениям обеих групп (${lookWalk.join(', ')}); Esc закрывает меню и возвращает фокус на кнопку`);
+  // Тема из меню: меняется сразу, меню закрывается; строка «Тема» в настройках показывает то же.
+  const lookPick = (text) => `(async () => { ${wait}
+    const b = $('lookBtn'); b.focus(); b.click();
+    await wait(() => $('pop').matches(':popover-open') && $('pop').querySelector('.pop-group'), 3000);
+    const it = [...$('pop').querySelectorAll('.pop-item')].find((x) => x.textContent.trim() === ${JSON.stringify(text)});
+    setTimeout(() => it.click(), 50);
+    return !!it; })()`;
+  // Строки «Вид окна» и «Тема» в настройках показывают то же: их значения читаем на вкладке «Настройки»
+  // (там они отрисованы) и возвращаемся на прежнюю вкладку.
+  const lookState = `(async () => { ${wait} await sleep(500); const a = document.activeElement;
+    const out = { path: location.pathname, theme: document.documentElement.dataset.theme || '', open: $('pop').matches(':popover-open'), focus: a?.id || '',
+      ring: !!a?.matches?.(':focus-visible'), tab: document.querySelector('.tabbar .tab[aria-selected="true"]')?.dataset.tab,
+      settings: (({ design, theme, themeLcd }) => ({ design, theme, themeLcd }))((await chrome.storage.local.get('settings')).settings), popup: await chrome.action.getPopup({}) };
+    tab('settings');
+    await sleep(250);
+    out.select = ($('themeLcd') || $('theme')).value;
+    out.design = $('design').value;
+    tab(out.tab);
+    return out; })()`;
+  await popup.eval(lookPick('светлая'));
+  const lookLight = await popup.eval(lookState);
+  await popup.eval(lookPick('тёмная'));
+  const lookDark = await popup.eval(lookState);
+  check(lookLight.theme === 'light' && lookLight.settings.themeLcd === 'light' && lookLight.settings.theme === 'system' && !lookLight.open && lookLight.focus === 'lookBtn' && lookLight.select === 'light'
+    && lookDark.theme === 'dark' && lookDark.settings.themeLcd === 'dark' && lookDark.tab === 'rules' && lookDark.select === 'dark' && lookDark.design === 'lcd',
+  `меню кнопки оформления: «светлая» — тема нового окна сменилась сразу (${lookLight.theme}), меню закрылось, тема классического не тронута; «тёмная» — вернулась (${lookDark.theme})`);
+  // Вид из меню: из нового окна — в классическое и обратно, на той же вкладке, фокус на кнопке оформления.
+  await popup.eval(lookPick('классический'));
+  const lookToClassic = (await waitPage(popup, /^\/classic\/popup\.html/)) && (await waitPage(opts, /^\/classic\/popup\.html/));
+  const lookC = await popup.eval(lookState);
+  const lookCBox = await popup.eval(`(() => { const r = document.getElementById('lookBtn').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+  await popup.mouse(lookCBox.x, lookCBox.y);
+  const lookCMenu = await popup.eval(lookMenu);
+  await popup.key('Escape');
+  await popup.eval(lookPick('тёмная'));
+  const lookCDark = await popup.eval(lookState);
+  await popup.eval(lookPick('как в системе'));
+  const lookCSystem = await popup.eval(lookState);
+  check(lookToClassic && lookC.path === '/classic/popup.html' && lookC.tab === 'rules' && lookC.focus === 'lookBtn' && lookC.ring && lookC.settings.design === 'classic' && lookC.design === 'classic' && /\/classic\/popup\.html$/.test(lookC.popup)
+    && lookCMenu.open && lookCMenu.groups === 'Вид окна, Тема' && lookCMenu.items === 'новый, *классический, тёмная, светлая, *как в системе' && lookCMenu.focus === 'классический'
+    && lookCDark.theme === 'dark' && lookCDark.settings.theme === 'dark' && lookCDark.settings.themeLcd === 'dark' && lookCSystem.theme === '' && lookCSystem.settings.theme === 'system',
+  `меню кнопки оформления: «классический» — окно сразу классическое, вкладка «${lookC.tab}», фокус на кнопке оформления, значок открывает классическое окно; в нём та же кнопка и то же меню (${lookCMenu.items}), тема меняется своей настройкой${lookC.focus === 'lookBtn' && lookCMenu.open && lookCDark.theme === 'dark' ? '' : ` ${JSON.stringify({ lookToClassic, lookC, lookCMenu, lookCDark, lookCSystem })}`}`);
+  await popup.eval(lookPick('новый'));
+  const lookToLcd = (await waitPage(popup, /^\/popup\/popup\.html/)) && (await waitPage(opts, /^\/popup\/popup\.html/));
+  const lookL = await popup.eval(lookState);
+  check(lookToLcd && lookL.path === '/popup/popup.html' && lookL.tab === 'rules' && lookL.focus === 'lookBtn' && lookL.ring && lookL.settings.design === 'lcd' && lookL.design === 'lcd' && lookL.theme === 'dark' && /\/popup\/popup\.html$/.test(lookL.popup),
+    `меню кнопки оформления в классическом окне: «новый» — окно сразу новое, вкладка «${lookL.tab}», фокус на кнопке оформления, тема ${lookL.theme}`);
+  await popup.eval(`(async () => { ${wait} tab('home'); return 1; })()`);
+  [text] = await readUntil(tab, target, 'Waysplit-OK A', 10000);
+  check(text === 'Waysplit-OK A', `после переключений оформления VPN работает («${text}»)`);
 
   // Подписка: обновление сохраняет id серверов; в настройках — трафик и срок.
   await opts.eval(js.tab('servers'));
@@ -1253,7 +1509,8 @@ try {
   check(favAfter.groups[0] === 'Избранное' && favAfter.first.includes('Сервер B') && local.favorites.includes(srvB.key),
     `избранное после обновления подписки на месте: «${favAfter.first}»`);
   const subI = await opts.eval(js.subInfo('Тестовая подписка'));
-  check(/трафик 3,0 ГБ из 100,0 ГБ/.test(subI.head) && /до \d\d\.\d\d\.\d{4}/.test(subI.head) && /127\.0\.0\.1:\d+\/…/.test(subI.facts) && !/SECRET/.test(subI.head + subI.facts),
+  check(/^3 из 100 ГБ, до \d\d\.\d\d\.\d{4}$/m.test(subI.head) && !/сервер/.test(subI.head) && /3,0 ГБ из 100,0 ГБ/.test(subI.facts)
+    && /127\.0\.0\.1:\d+\/…/.test(subI.facts) && !/SECRET/.test(subI.head + subI.facts),
     `подписка: ${subI.head.replace(/\s+/g, ' ')}; адрес — ${subI.facts.match(/http\S+/)?.[0]}`);
   if (shotsDir) await opts.shot(join(shotsDir, 'options-servers.png'), 'light');
   const sc = await opts.eval(js.subCheck);
@@ -1270,9 +1527,9 @@ try {
   check(/Подписка «Тест HWID»: серверов 2, новых 2, пропущено 0; привязана к этому компьютеру как устройство/.test(addedH) && hw.seen.join(', ') === 'без, Windows/Chrome',
     `подписка с привязкой к устройству: «${addedH}»; запросы: ${hw.seen.join(', ')}`);
   const subHi = await opts.eval(js.subInfo('Тест HWID'));
-  check(/привязана к этому компьютеру/.test(subHi.head) && /Сообщение провайдера: Тест: пишите в поддержку/.test(subHi.head)
+  check(!/привязана/.test(subHi.head) && /Сообщение провайдера: Тест: пишите в поддержку/.test(subHi.head)
     && /подписка привязана к этому компьютеру как устройство/.test(subHi.facts) && !/HWID-TOKEN|#00ff00/.test(subHi.head + subHi.facts),
-    'в строке подписки и в её сведениях — привязка к устройству и сообщение провайдера (обычный текст)');
+    'под строкой подписки — сообщение провайдера (обычный текст); привязка к устройству — в сведениях подписки, в короткой строке её нет');
   if (shotsDir) await opts.shot(join(shotsDir, 'options-hwid.png'), 'light');
   local = await opts.eval(js.local);
   const subH = local.subscriptions.find((x) => x.name === 'Тест HWID');
@@ -1321,6 +1578,39 @@ try {
     `резервная копия: сохранили и восстановили — те же серверы и id (${restored?.result?.servers ?? restored?.error?.message})`);
   [text] = await readUntil(tab, target, 'Waysplit-OK A', 10000);
   check(text === 'Waysplit-OK A', `после восстановления VPN работает («${text}»)`);
+  // Резервная копия сохраняет и восстанавливает выбор оформления и обе темы. Старая копия (версии до
+  // 1.3.0) этих ключей не знает: оформление и тема нового окна после неё остаются как были.
+  const setMany = async (obj) => { for (const [key, value] of Object.entries(obj)) await ctl.eval(js.message({ type: 'setSetting', key, value })); };
+  await setMany({ theme: 'light', themeLcd: 'system' });
+  const movedForCopy = await setDesign('classic');
+  const copyNew = (await ctl.eval(js.message({ type: 'exportBackup' }))).result;
+  await setMany({ theme: 'system', themeLcd: 'dark' });
+  const movedBack = await setDesign('lcd');
+  const inNew = await ctl.eval(js.message({ type: 'importBackup', data: copyNew }));
+  const movedByCopy = (await waitPage(popup, /^\/classic\/popup\.html/)) && (await waitPage(opts, /^\/classic\/popup\.html/));
+  const afterNew = (await ctl.eval(js.local)).settings;
+  check(movedForCopy && movedBack && copyNew.settings.design === 'classic' && copyNew.settings.theme === 'light' && copyNew.settings.themeLcd === 'system' && inNew?.ok
+    && afterNew.design === 'classic' && afterNew.theme === 'light' && afterNew.themeLcd === 'system' && movedByCopy && /\/classic\/popup\.html$/.test(await ctl.eval('chrome.action.getPopup({})')),
+  `резервная копия с выбором оформления: в копии — ${copyNew.settings.design}, темы ${copyNew.settings.theme} и ${copyNew.settings.themeLcd}; после восстановления — ${afterNew.design}, ${afterNew.theme}, ${afterNew.themeLcd}; открытые окна перешли в классическое`);
+  const { design: _noDesign, themeLcd: _noThemeLcd, ...oldCopySettings } = copyNew.settings;
+  const inOld = await ctl.eval(js.message({ type: 'importBackup', data: { ...copyNew, settings: { ...oldCopySettings, theme: 'dark' } } }));
+  const afterOld = (await ctl.eval(js.local)).settings;
+  check(inOld?.ok && afterOld.design === 'classic' && afterOld.themeLcd === 'system' && afterOld.theme === 'dark',
+    `старая копия без выбора оформления: оформление (${afterOld.design}) и тема нового окна (${afterOld.themeLcd}) остались как были, тема классического окна — из копии (${afterOld.theme})`);
+  await setMany({ theme: 'system', themeLcd: 'dark' });
+  check(await setDesign('lcd'), 'оформление возвращено: новое окно');
+  // После восстановления копии подписки считаются необновлёнными, и расширение обновит их само, когда
+  // сработает сторож (раз в минуту). Такое обновление возвращает серверы подписки, удалённые из списка, —
+  // и дальнейшие шаги (удаление текущего сервера, пинг серверов обоих ядер) зависели бы от того, успело ли
+  // оно пройти. Поэтому обновляем подписки здесь сами и ждём: дальше до конца проверки они не обновляются.
+  for (const sub of afterRestore.subscriptions) await opts.eval(js.message({ type: 'updateSubscription', id: sub.id }));
+  let fresh = [];
+  for (let i = 0; i < 100; i++) {
+    fresh = (await opts.eval(js.local)).subscriptions;
+    if (fresh.every((x) => typeof x.updatedAt === 'number')) break;
+    await sleep(100);
+  }
+  check(fresh.every((x) => typeof x.updatedAt === 'number'), `подписки после восстановления обновлены (${fresh.length}): дальше сами не обновляются`);
   await opts.eval(js.tab('servers'));
 
   local = await opts.eval(js.local);
@@ -1346,6 +1636,43 @@ try {
   check(/^Ответили 1 из 1/.test(offPing), `пинг при выключенном VPN: «${offPing}»`);
   check(await waitPort(other.localPort, false, 5000), 'после пинга ядро снова остановлено');
   check((await popup.eval(js.status)).state === 'off', 'VPN по-прежнему выключен');
+
+  // Перезапуск фонового скрипта (VPN выключен, компаньон не запущен): фон останавливаем и будим
+  // сообщением — он начинает с init().
+  const restartSw = async () => {
+    const sws = (await chrome.send('Target.getTargets')).targetInfos.filter((t) => t.type === 'service_worker' && t.url.startsWith(`chrome-extension://${id}/`));
+    for (const w of sws) await chrome.send('Target.closeTarget', { targetId: w.targetId });
+    await sleep(500);
+    const r = await ctl.eval(js.message({ type: 'clearSiteNew', tabId: 0 }));
+    await sleep(300);
+    return r?.ok === true;
+  };
+  // Выбор оформления сохраняется после перезапуска фона: значок по-прежнему открывает выбранное окно.
+  const keptMove = await setDesign('classic');
+  const keptWoke = await restartSw();
+  const kept = { popup: await ctl.eval('chrome.action.getPopup({})'), design: (await ctl.eval(js.local)).settings.design, path: await pathOf(popup) };
+  const keptBack = await setDesign('lcd');
+  const keptWoke2 = await restartSw();
+  const kept2 = { popup: await ctl.eval('chrome.action.getPopup({})'), design: (await ctl.eval(js.local)).settings.design };
+  check(keptMove && keptWoke && /\/classic\/popup\.html$/.test(kept.popup) && kept.design === 'classic' && /^\/classic\/popup\.html/.test(kept.path)
+    && keptBack && keptWoke2 && /\/popup\/popup\.html$/.test(kept2.popup) && kept2.design === 'lcd',
+  `выбор оформления сохраняется после перезапуска фонового скрипта: было классическое — значок открывает ${kept.popup.replace(/^.*\/\/[^/]+\//, '')}; вернули новое — ${kept2.popup.replace(/^.*\/\/[^/]+\//, '')}`);
+  // Перенос темы при первом запуске новой версии: в хранилище прежняя настройка темы и нет темы нового
+  // окна. Была светлая — в новом окне светлая; была тёмная или не была выбрана — тёмная.
+  const baseSettings = (await ctl.eval(js.local)).settings;
+  const { themeLcd: _oldLcd, theme: _oldTheme, ...noThemes } = baseSettings;
+  const carried = [];
+  for (const [was, want] of [['light', 'light'], ['dark', 'dark'], [null, 'dark']]) {
+    await ctl.eval(`chrome.storage.local.set({ settings: ${JSON.stringify(was ? { ...noThemes, theme: was } : noThemes)} })`);
+    const woke = await restartSw();
+    const got = (await ctl.eval(js.local)).settings;
+    await sleep(300);
+    const shown = await popup.eval('document.documentElement.dataset.theme');
+    carried.push({ was: was || 'не выбрана', got: got.themeLcd, shown, classic: got.theme ?? 'system', ok: woke && got.themeLcd === want && shown === want && (got.theme ?? 'system') === (was || 'system') });
+  }
+  await ctl.eval(`chrome.storage.local.set({ settings: ${JSON.stringify(baseSettings)} })`);
+  check(carried.every((x) => x.ok), `перенос темы при первом запуске новой версии: ${carried.map((x) => `была ${x.was} — в новом окне ${x.got}`).join('; ')}; тема классического окна не менялась`);
+  check((await restartSw()) && (await ctl.eval(js.local)).settings.themeLcd === baseSettings.themeLcd && (await waitPage(popup, /^\/popup\/popup\.html/)), 'настройки возвращены, окно новое');
 
   // --- восстановление после остановки фона и закрытие Chrome ---
   st = await popup.eval(js.power(['on', 'warn', 'error']));
@@ -1380,7 +1707,7 @@ try {
   check(/Xray/.test(metaX), `в окне у сервера пометка ядра: «${metaX}»`);
   if (shotsDir) await popup.shot(join(shotsDir, 'popup-xray.png'), 'light');
   const pingX = await popup.eval(js.pingAll);
-  check(/^Ответили 2 из 2/.test(pingX), `пинг серверов обоих ядер: «${pingX}»`);
+  check(/^Ответили 2 из 2/.test(pingX), `пинг серверов обоих ядер: «${pingX}» (серверы: ${(await popup.eval(js.local)).servers.map((x) => x.name).join(', ')})`);
   await popup.eval(js.message({ type: 'select', id: other.id }));
   [text] = await readUntil(tab, target, `Waysplit-OK ${letter}`, 10000);
   check(text === `Waysplit-OK ${letter}` && await waitPort(srvX.localPort, false, 10000), `обратно на sing-box («${text}») — Xray остановлен, он больше не нужен`);
@@ -1405,22 +1732,39 @@ try {
   await barePopup.size(400, 600);
   const bare = await barePopup.eval(`(async () => { ${wait}
     await wait(() => !$('problem').hidden, 10000);
-    return { problem: $('problem').hidden ? '' : $('problemText').textContent, color: getComputedStyle($('problemText')).color, steps: $('steps').children.length,
-      link: $('downloadRow').hidden ? '' : $('download').href, label: $('download').textContent, page: $('releasePage').href }; })()`);
+    await sleep(400); // подсветка включается плавно, за 150 мс
+    globalThis.__fresh = { path: location.pathname, theme: document.documentElement.dataset.theme, body: getComputedStyle(document.body).backgroundColor,
+      popup: await chrome.action.getPopup({}), settings: (await chrome.storage.local.get('settings')).settings || {} };
+    return { problem: $('problem').hidden ? '' : $('problemText').textContent, color: getComputedStyle($('status')).color, steps: $('steps').children.length,
+      link: $('downloadRow').hidden ? '' : $('download').href, label: $('download').textContent, page: $('releasePage').href,
+      status: $('status').textContent, detail: $('detail').textContent, led: $('powerZone').dataset.led, ledLabel: $('ledLabel').textContent,
+      light: document.documentElement.dataset.light, screen: getComputedStyle($('content')).backgroundColor, twice: !$('problemText').hidden }; })()`);
   check(/не установлен/.test(bare.problem) && bare.steps === 3 && bare.label === 'Скачать'
     && /\/releases\/latest\/download\/Waysplit-companion\.zip$/.test(bare.link) && /\/releases\/latest$/.test(bare.page),
   `без компаньона окно сразу показывает шаги установки и кнопку «Скачать» с архивом последнего выпуска («${bare.problem}», шагов ${bare.steps})`);
-  check(bare.color === 'rgb(179, 38, 30)', `текст ошибки в красной рамке на «Главной» — ${bare.color} (5,72:1 на розовой подложке)`);
+  check(bare.status === 'Нет компаньона' && /не установлен/.test(bare.detail) && bare.led === 'error' && bare.ledLabel === 'ошибка' && bare.light === 'on'
+    && bare.screen === 'rgb(197, 209, 168)' && bare.color === 'rgb(28, 36, 22)' && !bare.twice,
+  `без компаньона и при выключенном VPN это ошибка: крупно «${bare.status}», ниже «${bare.detail}», лампочка «${bare.ledLabel}», экран горит (${bare.screen}); причина не повторяется в рамке`);
   if (shotsDir) await barePopup.shot(join(shotsDir, 'popup-no-companion.png'), 'light');
+  await barePopup.scheme('light');
+  const freshInstall = await barePopup.eval(`({ ...__fresh, bodyLight: getComputedStyle(document.body).backgroundColor })`);
+  check(freshInstall.path === '/popup/popup.html' && /\/popup\/popup\.html$/.test(freshInstall.popup) && freshInstall.theme === 'dark' && freshInstall.bodyLight === 'rgb(49, 59, 72)'
+    && (freshInstall.settings.design ?? 'lcd') === 'lcd' && freshInstall.settings.themeLcd === 'dark',
+  `новая установка: окно новое, корпус тёмный и при светлой теме системы (${freshInstall.bodyLight}); в настройках оформление ${freshInstall.settings.design ?? 'не записано (действует новое)'}, тема ${freshInstall.settings.themeLcd}`);
   const bareWelcome = await chrome.page(`chrome-extension://${bareId}/welcome/welcome.html`);
+  await bareWelcome.scheme('light');
   const bw = await bareWelcome.eval(`(async () => { ${wait}
     await wait(() => $('hostState').dataset.kind === 'error', 10000);
     return { state: $('hostState').textContent, howto: !$('howto').hidden, steps: $('installSteps').children.length,
+      theme: document.documentElement.dataset.theme, body: getComputedStyle(document.querySelector('.phone')).backgroundColor, pageBg: getComputedStyle(document.body).backgroundColor,
+      ready: document.documentElement.classList.contains('ready'), open: $('openFull').getAttribute('href'),
       link: $('download').href, label: $('download').textContent, page: $('releasePage').href,
       cmd: /powershell|setup\\.ps1/i.test(document.body.innerText) }; })()`);
   check(bw.howto && bw.steps === 3 && bw.label === 'Скачать' && /\/releases\/latest\/download\/Waysplit-companion\.zip$/.test(bw.link)
     && /\/releases\/latest$/.test(bw.page) && !bw.cmd,
   `«Начало работы» без компаньона: шаги и кнопка «Скачать», без команд PowerShell («${bw.state}»)`);
+  check(bw.theme === 'dark' && bw.body === 'rgb(49, 59, 72)' && bw.pageBg === 'rgb(20, 24, 29)' && bw.ready && /\/popup\/popup\.html\?full#rules$/.test(bw.open),
+    `«Начало работы» после установки с нуля: тема нового окна, тёмная и при светлой теме системы (корпус ${bw.body}, страница ${bw.pageBg}); ссылка «открыть» ведёт в новое окно`);
   if (shotsDir) await bareWelcome.shot(join(shotsDir, 'welcome-no-companion.png'), 'light');
   await chrome.send('Extensions.uninstall', { id: bareId });
 
@@ -1438,9 +1782,9 @@ try {
     const e1 = await enPop.eval(`(async () => { ${wait}
       await wait(() => !$('problem').hidden, 10000);
       return { ui: chrome.i18n.getUILanguage(), setting: (await chrome.storage.local.get('settings')).settings?.language, html: document.documentElement.lang,
-        home: document.querySelector('.tabbar .tab[data-tab="home"]').textContent.trim(), problem: $('problemText').textContent, hint: $('hint').textContent,
+        home: document.querySelector('.tabbar .tab[data-tab="home"]').textContent.trim(), problem: $('problemText').textContent, hint: $('hint').textContent, status: $('status').textContent,
         label: $('download').textContent, steps: [...$('steps').children].map((li) => li.textContent), title: await chrome.action.getTitle({}) }; })()`);
-    check(/^en/.test(e1.ui) && e1.setting === 'auto' && e1.html === 'en' && e1.home === 'Home' && e1.problem === 'Companion is not installed'
+    check(/^en/.test(e1.ui) && e1.setting === 'auto' && e1.html === 'en' && e1.home === 'Home' && e1.status === 'No companion' && e1.problem === 'Companion is not installed'
       && e1.label === 'Download' && e1.steps.length === 3 && e1.title === 'Waysplit — off',
     `английский Chrome (${e1.ui}), новая установка: язык «как в Chrome», окно по-английски — «${e1.problem}», «${e1.hint}», кнопка «${e1.label}», значок «${e1.title}»`);
     if (shotsDir) await enPop.shot(join(shotsDir, 'popup-no-companion-en.png'), 'light');
@@ -1582,11 +1926,25 @@ try {
   // «Домены этой вкладки»: сайты, к которым обращалась вкладка (свой — первым), с пометкой, если
   // сайт идёт по правилу — своему или по «домену сайта» чужого правила.
   const tdl = await home.eval(`(async () => { ${wait}
+    $('tdButton').focus();
     $('tdButton').click();
-    await wait(() => $('tdList').children.length > 0, 5000);
-    return { note: $('tdNote').textContent, rows: [...$('tdList').children].map((li) => li.querySelector('.td-name').textContent + (li.querySelector('.td-rule') ? ' — ' + li.querySelector('.td-rule').textContent : '')) }; })()`);
+    await wait(() => $('tdList')?.children.length > 0, 5000);
+    const sc = document.querySelector('.screen.td-screen');
+    const out = { note: $('tdNote').textContent, rows: [...$('tdList').children].map((li) => li.querySelector('.td-name').textContent + (li.querySelector('.td-rule') ? ' — ' + li.querySelector('.td-rule').textContent : '')),
+      title: sc?.querySelector('.screen-title').textContent, sub: sc?.querySelector('.screen-sub').textContent, onHome: !!$('panel-home').querySelector('#tdList, .td-list'),
+      rowH: [...new Set([...$('tdList').querySelectorAll('label')].map((l) => l.offsetHeight))].join(','), icons: sc.querySelectorAll('img, .favicon').length,
+      actions: !$('tdActions').hidden && $('tdActions').contains($('tdAction')) && $('tdAdd').textContent, listScrolls: getComputedStyle($('tdList')).overflowY,
+      bodyScrolls: getComputedStyle(sc.querySelector('.screen-body')).overflowY, flags: /\\p{Regional_Indicator}/u.test(sc.innerText + [...$('tdAction').options].map((o) => o.textContent).join('')) };
+    document.querySelector('.screen .back-key').click();
+    await wait(() => !document.querySelector('.screen'), 3000);
+    out.closed = !document.querySelector('.screen');
+    out.focusBack = document.activeElement === $('tdButton');
+    return out; })()`);
   check(tdl.rows.join('; ') === 'page.test — через VPN; cloudfront.net; google-analytics.com; media-cdn.test — через VPN' && /^Вкладка обращалась к 4 сайтам/.test(tdl.note),
     `«Домены этой вкладки»: ${tdl.rows.join('; ')}`);
+  check(tdl.title === 'Домены этой вкладки' && tdl.sub === 'page.test' && !tdl.onHome && tdl.rowH === '36' && tdl.icons === 0 && tdl.actions === 'Добавить правила'
+    && tdl.listScrolls === 'auto' && tdl.bodyScrolls === 'hidden' && !tdl.flags && tdl.closed && tdl.focusBack,
+  `«Домены этой вкладки» — вложенный экран («${tdl.title}», «${tdl.sub}»): строки ${tdl.rowH} пикс., значков сайтов нет, внизу выбор действия и «${tdl.actions}», прокручивается только список; «назад» вернул фокус на ссылку`);
   [text] = await readUntil(tab2, `http://free.example:${sitePort}/`, 'Waysplit-OK DIRECT', 5000);
   check(text === 'Waysplit-OK DIRECT', `сайты без правил по-прежнему напрямую («${text}»)`);
 

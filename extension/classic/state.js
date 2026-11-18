@@ -1,0 +1,131 @@
+// КЛАССИЧЕСКОЕ ОКНО: окно версии 1.2.1, заморожено (design/lcd/STYLE.md, «Два оформления»).
+// Новые функции сюда не добавляются; правки — только такие, без которых окно перестанет работать.
+// Новое окно — в папке popup. Чем этот файл отличается от версии 1.2.1, записано в PROGRESS.md.
+
+// Данные окна и переходы: вкладки внизу и вложенные экраны поверх вкладки (SPEC-POPUP.md).
+// Окно только показывает данные из chrome.storage и шлёт команды фону (lib/format.js, send).
+
+import { normalize } from '../lib/storage.js';
+import { siteData } from '../lib/sitedomains.js';
+import { t, usePageLanguage } from '../lib/i18n.js';
+import { $, el, setIcon, toast } from './ui.js';
+
+// S — всё, что показывает окно. site — открытая вкладка браузера: { host, tabId } (только http(s));
+// full — окно развёрнуто на всю вкладку (popup.html?full).
+// siteNew — { id вкладки: [новые «домены сайта»] }: подсказка «обновите вкладку» на «Главной».
+// ruDomains — домены переключателя «Российские сайты — без VPN» (набор из lib/domain-sets.json):
+// по ним окно показывает маршрут сайта так же, как его решит PAC.
+export const S = { view: normalize(), status: null, site: null, full: false, siteNew: {}, ruDomains: [] };
+
+let ruLoading = null; // файл самого расширения — читается один раз
+const loadRu = () => (ruLoading ??= fetch(chrome.runtime.getURL('lib/domain-sets.json')).then((r) => r.json()).then((j) => siteData(j).ruDirect, () => []));
+
+export async function loadData() {
+  const [local, session, ru] = await Promise.all([chrome.storage.local.get(null), chrome.storage.session.get(['status', 'siteNew']), loadRu()]);
+  S.ruDomains = ru;
+  S.view = normalize(local);
+  S.status = session.status || null;
+  S.siteNew = session.siteNew || {};
+  // Язык сменили (в «Настройках» или восстановлением из копии): надписи разметки уже заменены;
+  // открытые экраны и сообщение внизу собраны на прежнем языке — закрыть, вкладку перерисовать.
+  if (usePageLanguage(S.view.settings.language)) {
+    closeAllScreens();
+    toast('');
+  }
+  renderVisible();
+}
+
+export const currentServer = () => S.view.servers.find((s) => s.id === S.view.currentServerId) || null;
+export const serverById = (id) => S.view.servers.find((s) => s.id === id) || null;
+export const isFav = (s) => S.view.favorites.includes(s.key);
+export const vpnOn = () => S.view.enabled && currentServer() !== null;
+
+// --- вкладки ---
+
+const tabs = new Map(); // имя → render()
+let active = null;
+
+export function defineTab(name, render) {
+  tabs.set(name, render);
+}
+
+export const activeTab = () => active;
+
+export function showTab(name) {
+  if (!tabs.has(name)) name = 'home';
+  closeAllScreens();
+  active = name;
+  for (const t of document.querySelectorAll('.tabbar .tab')) {
+    const on = t.dataset.tab === name;
+    t.setAttribute('aria-selected', String(on));
+    t.tabIndex = on ? 0 : -1;
+    $(`panel-${t.dataset.tab}`).hidden = !on;
+  }
+  $('content').scrollTop = 0;
+  if (S.full) history.replaceState(null, '', `${location.pathname}${location.search}#${name}`);
+  tabs.get(name)();
+}
+
+// renderVisible — после изменения данных: видимая вкладка и открытые экраны.
+export function renderVisible() {
+  if (active) tabs.get(active)();
+  for (const sc of stack) sc.render();
+}
+
+// --- вложенные экраны: выбор сервера, добавление, подписка, диагностика ---
+
+const stack = [];
+
+// openScreen({ title, sub, actions, build(screen), render(screen) }) — экран поверх вкладки,
+// вверху стрелка «назад» (и Esc). build — один раз, render — при каждом изменении данных.
+export function openScreen({ title, sub = '', actions = [], build = null, render = null, className = '' }) {
+  const back = el('button', { type: 'button', className: 'icon-btn back', title: t('common.back.title') });
+  back.setAttribute('aria-label', t('common.back'));
+  setIcon(back, 'back');
+  const titleEl = el('h2', { className: 'screen-title', textContent: title });
+  const subEl = el('span', { className: 'screen-sub', textContent: sub });
+  const body = el('div', { className: 'screen-body' });
+  const sec = el('section', { className: `screen ${className}`.trim() },
+    el('header', { className: 'screen-head' }, back, el('div', { className: 'screen-titles' }, titleEl, subEl), ...actions),
+    body);
+  sec.setAttribute('role', 'dialog');
+  sec.setAttribute('aria-label', title);
+  sec.tabIndex = -1; // фокус — на сам экран: так клавиатура и чтение с экрана начинают с него
+  const screen = {
+    sec,
+    body,
+    onClose: null,
+    setTitle: (text) => { titleEl.textContent = text; sec.setAttribute('aria-label', text); },
+    setSub: (text) => { subEl.textContent = text; },
+    render: () => render?.(screen),
+  };
+  back.addEventListener('click', closeScreen);
+  if (stack.length) stack[stack.length - 1].sec.inert = true;
+  else for (const id of ['content', 'top']) $(id).inert = true;
+  stack.push(screen);
+  $('screens').append(sec);
+  build?.(screen);
+  screen.render();
+  sec.focus();
+  return screen;
+}
+
+export function closeScreen() {
+  const sc = stack.pop();
+  if (!sc) return;
+  sc.sec.remove();
+  sc.onClose?.();
+  if (stack.length) {
+    const top = stack[stack.length - 1];
+    top.sec.inert = false;
+    top.sec.focus();
+  } else {
+    for (const id of ['content', 'top']) $(id).inert = false;
+  }
+}
+
+export function closeAllScreens() {
+  while (stack.length) closeScreen();
+}
+
+export const screenOpen = () => stack.length > 0;

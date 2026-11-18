@@ -1,243 +1,437 @@
-/* Общее для окна расширения и «Начала работы»: цвета (светлая и тёмная тема), шрифты, кнопки. */
+/* Общее для окна расширения и страницы «Начало работы»: стиль «кнопочный телефон»
+   (design/lcd/STYLE.md). Корпус — тёмный или светлый (тема), в нём зеленоватый одноцветный экран:
+   элемент с классом lcd. Подсветка экрана: data-light="on" у <html> — горит, иначе погашена.
+   Здесь — шрифты, цвета и общие детали экрана; каркас окна — popup/popup.css, страница —
+   welcome/welcome.css. */
 
-/* Chrome на Windows не рисует эмодзи-флаги — берём их из шрифта Twemoji Country Flags
-   (только символы флагов; остальной текст — системным шрифтом). Лицензия: fonts/LICENSE-*.md */
+/* --- шрифты (лежат в extension/fonts, из сети ничего не загружается) ---
+   "Waysplit LCD" — шрифт экрана: Pixelify Sans с исправленной кириллицей (design/lcd/fonts/README.md;
+   из сети или из npm его брать нельзя: в исходном шрифте ошибки в русских буквах).
+   "Golos Text" — шрифт корпуса. Лицензии (SIL OFL 1.1): fonts/LICENSE-PixelifySans.md,
+   fonts/LICENSE-GolosText.md. */
 @font-face {
-  font-family: "Twemoji Country Flags";
-  unicode-range: U+1F1E6-1F1FF, U+1F3F4, U+E0062-E0063, U+E0065, U+E0067, U+E006C, U+E006E, U+E0073-E0074, U+E0077, U+E007F;
-  src: url("../fonts/TwemojiCountryFlags.woff2") format("woff2");
-  font-display: swap;
+  font-family: "Waysplit LCD";
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+  src: url("../fonts/pixelify-sans-cyrillic-500.woff2") format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: "Waysplit LCD";
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+  src: url("../fonts/pixelify-sans-latin-500.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Waysplit LCD";
+  font-style: normal;
+  font-weight: 600;
+  font-display: block;
+  src: url("../fonts/pixelify-sans-cyrillic-600.woff2") format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: "Waysplit LCD";
+  font-style: normal;
+  font-weight: 600;
+  font-display: block;
+  src: url("../fonts/pixelify-sans-latin-600.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Waysplit LCD";
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url("../fonts/pixelify-sans-cyrillic-700.woff2") format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: "Waysplit LCD";
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url("../fonts/pixelify-sans-latin-700.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
+@font-face {
+  font-family: "Golos Text";
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+  src: url("../fonts/golos-text-cyrillic-500.woff2") format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: "Golos Text";
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+  src: url("../fonts/golos-text-latin-500.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Golos Text";
+  font-style: normal;
+  font-weight: 600;
+  font-display: block;
+  src: url("../fonts/golos-text-cyrillic-600.woff2") format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: "Golos Text";
+  font-style: normal;
+  font-weight: 600;
+  font-display: block;
+  src: url("../fonts/golos-text-latin-600.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* --- цвета. Экран одинаков в обеих темах; тема меняет только корпус. Новое оформление изначально
+   тёмное: без data-theme у <html> и с data-theme="dark" корпус тёмный, с "light" — светлый, с
+   "system" — как в системе (lib/theme.js, настройка themeLcd). --- */
 :root {
-  --bg: #f4f6fa;
-  --card: #ffffff;
-  --text: #172033;
-  --muted: #5d6b82;
-  --line: #e2e7f0;
-  --hover: #f0f3f9;
-  --accent: #2563eb;
-  --accent-soft: #e8efff;
-  --warn: #b97f04;
-  --warn-bg: #fff6dd;
-  --err: #d23b3b;
-  --err-bg: #fdecec;
-  --code-bg: #eef2f8;
-  --idle: #c3cad6;
-  /* Цвета, подобранные по контрасту (проверка доступности, ноябрь 2026): текст на цветных
-     подложках и главный статус — не ниже 4,5:1, границы элементов — чтобы читалась форма. */
-  --btn: #2563eb;            /* фон залитой кнопки: белый текст 5,17 */
-  --btn-hover: #1d4ed8;
-  --warn-text: #7a5200;      /* текст на --warn-bg: 6,42 */
-  --err-text: #b3261e;       /* текст на --err-bg: 5,72; на карточке: 6,54 */
-  --status-ok: #0a7d55;      /* главный статус на --bg: 4,76 */
-  --status-warn: #8a5d00;    /* главный статус на --bg: 5,32 */
-  --switch-off: #8c96a8;     /* дорожка выключенного переключателя: 2,98 к карточке */
-  --field-line: #b9c1cf;     /* границы полей и кнопок-контуров: 1,81 к карточке */
-  --placeholder: #757575;    /* подсказка в полях: 4,61 */
-  --toast-err-text: #ffffff; /* текст красного сообщения: 4,74 */
-  --brand-1: #2563eb;
-  --brand-2: #0d9488;
-  --teal: #0d9488;
-  --grad: linear-gradient(135deg, #2563eb 0%, #1d6fd0 45%, #0d9488 100%);
-  --bar4: #16a34a;
-  --bar3: #65a30d;
-  --bar2: #d97706;
-  --bar1: #dc2626;
-  --bar-off: #d5dbe5;
-  --bg-full: #e9edf4;
-  --shadow: 0 8px 28px rgb(23 32 51 / 0.16);
-  --font: "Twemoji Country Flags", "Segoe UI", system-ui, sans-serif;
-  --mono: Consolas, "Cascadia Mono", monospace;
-  color-scheme: light;
-}
-
-/* Тёмная тема: по системе (если в настройках не выбрана светлая) или выбрана явно. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #11151d;
-    --card: #1a202b;
-    --text: #e8edf6;
-    --muted: #93a0b5;
-    --line: #2a3242;
-    --hover: #222a37;
-    --accent: #4f86f7;
-    --accent-soft: #1f2c47;
-    --warn: #e0a826;
-    --warn-bg: #3a3017;
-    --err: #f06a6a;
-    --err-bg: #3a1f23;
-    --code-bg: #232b38;
-    --idle: #4a5568;
-    --btn: #2f6ae6;            /* белый текст 4,86 (на --accent было 3,45) */
-    --btn-hover: #2a5fd3;
-    --warn-text: #e0a826;      /* на --warn-bg: 6,07 */
-    --err-text: #f06a6a;       /* на --err-bg: 4,98; на карточке: 5,43 */
-    --status-ok: #2fc48d;      /* 8,18 */
-    --status-warn: #e0a826;    /* 8,53 */
-    --switch-off: #5f6b80;     /* 3,04 к карточке */
-    --field-line: #414c60;     /* 1,89 к карточке */
-    --placeholder: #9aa6b8;    /* 6,63 (цвет Chrome #757575 давал 3,55) */
-    --toast-err-text: #11151d; /* на --err: 6,07 (белый давал 3,01) */
-  --brand-1: #3b74f0;
-  --brand-2: #14a597;
-  --teal: #2dd4bf;
-  --grad: linear-gradient(135deg, #2f6ae6 0%, #2167c4 45%, #0f9b8e 100%);
-  --bar4: #34d27f;
-  --bar3: #a3d64a;
-  --bar2: #f0a63a;
-  --bar1: #f06a6a;
-  --bar-off: #3a4456;
-  --bg-full: #0b0f15;
-  --shadow: 0 10px 30px rgb(0 0 0 / 0.5);
-    color-scheme: dark;
-  }
-}
-
-:root[data-theme="dark"] {
-  --bg: #11151d;
-  --card: #1a202b;
-  --text: #e8edf6;
-  --muted: #93a0b5;
-  --line: #2a3242;
-  --hover: #222a37;
-  --accent: #4f86f7;
-  --accent-soft: #1f2c47;
-  --warn: #e0a826;
-  --warn-bg: #3a3017;
-  --err: #f06a6a;
-  --err-bg: #3a1f23;
-  --code-bg: #232b38;
-  --idle: #4a5568;
-  --btn: #2f6ae6;
-  --btn-hover: #2a5fd3;
-  --warn-text: #e0a826;
-  --err-text: #f06a6a;
-  --status-ok: #2fc48d;
-  --status-warn: #e0a826;
-  --switch-off: #5f6b80;
-  --field-line: #414c60;
-  --placeholder: #9aa6b8;
-  --toast-err-text: #11151d;
-  --brand-1: #3b74f0;
-  --brand-2: #14a597;
-  --teal: #2dd4bf;
-  --grad: linear-gradient(135deg, #2f6ae6 0%, #2167c4 45%, #0f9b8e 100%);
-  --bar4: #34d27f;
-  --bar3: #a3d64a;
-  --bar2: #f0a63a;
-  --bar1: #f06a6a;
-  --bar-off: #3a4456;
-  --bg-full: #0b0f15;
-  --shadow: 0 10px 30px rgb(0 0 0 / 0.5);
+  --lcd: #c5d1a8;            /* фон экрана, подсветка горит */
+  --lcd-off: #aab49b;        /* фон экрана, подсветка погашена */
+  --ink: #1c2416;            /* текст, рамки, значки, заливка выделенного: 9,9 к --lcd, 7,4 к --lcd-off */
+  --ink-muted-on: #4b543f;   /* приглушённый текст при подсветке: 4,9 */
+  --ink-muted-off: #384131;  /* он же без подсветки: 4,9 */
+  --ink-faint: rgb(28 36 22 / 0.25);
+  --ink-hover: rgb(28 36 22 / 0.12);
+  --ink-fill-hover: #2b3622;
+  --body: #313b48;
+  --body-text: #e4e7ea;
+  --body-muted: #aeb7c2;
+  --bezel: #1b222b;
+  --line: #8793a1;
+  --key: #414d5c;
+  --key-text: #e4e7ea;
+  --key-shadow: none;
+  --key-shadow-h: 0px;
+  --key-on: #e4e7ea;
+  --key-on-text: #1b222b;
+  --power: #e4e7ea;
+  --power-icon: #1b222b;
+  --power-shadow: 0 4px 0 #1b222b;
+  --led-on: #4fd38a;
+  --led-rules: #f2b544;
+  --led-error: #f0705a;
+  --led-off: #566373;
+  --page: #14181d;
+  --font-lcd: "Waysplit LCD", Consolas, monospace;
+  --font-body: "Golos Text", "Segoe UI", system-ui, sans-serif;
+  /* Экран сейчас: фон и приглушённый текст зависят от подсветки. */
+  --screen: var(--lcd-off);
+  --ink-muted: var(--ink-muted-off);
   color-scheme: dark;
 }
+:root[data-theme="light"] {
+  --body: #dde1e6;
+  --body-text: #1f2730;
+  --body-muted: #55606d;
+  --bezel: #1b222b;
+  --line: #6b7684;
+  --key: #c6ccd3;
+  --key-text: #1f2730;
+  --key-shadow: 0 2px 0 #a4adb8;
+  --key-shadow-h: 2px;
+  --key-on: #313b48;
+  --key-on-text: #e4e7ea;
+  --power: #313b48;
+  --power-icon: #e4e7ea;
+  --power-shadow: 0 4px 0 #1b222b;
+  --led-on: #0e8a4c;
+  --led-rules: #b26a00;
+  --led-error: #c2362b;
+  --led-off: #a4adb8;
+  --page: #c9ced5;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    --body: #dde1e6;
+    --body-text: #1f2730;
+    --body-muted: #55606d;
+    --bezel: #1b222b;
+    --line: #6b7684;
+    --key: #c6ccd3;
+    --key-text: #1f2730;
+    --key-shadow: 0 2px 0 #a4adb8;
+    --key-shadow-h: 2px;
+    --key-on: #313b48;
+    --key-on-text: #e4e7ea;
+    --power: #313b48;
+    --power-icon: #e4e7ea;
+    --power-shadow: 0 4px 0 #1b222b;
+    --led-on: #0e8a4c;
+    --led-rules: #b26a00;
+    --led-error: #c2362b;
+    --led-off: #a4adb8;
+    --page: #c9ced5;
+    color-scheme: light;
+  }
+}
+:root[data-light="on"] { --screen: var(--lcd); --ink-muted: var(--ink-muted-on); }
 
+/* --- основа --- */
 * { box-sizing: border-box; }
 [hidden] { display: none !important; } /* иначе display у блоков перебивает hidden */
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font: 14px/1.45 var(--font);
-}
-
+body { margin: 0; background: var(--body); color: var(--body-text); font: 500 14px/18px var(--font-body); }
+/* Пока страница не готова — тема не прочитана, окно не сверилось с настройкой «Оформление»
+   (lib/design.js), — она не показывается: ни чужое окно, ни чужая тема не мелькают. */
+html:not(.ready) body { visibility: hidden; }
 p { margin: 0; }
-/* select — тоже: иначе в выпадающих списках флаги стран вместо картинки рисуются буквами («DE»). */
 button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--body-text); outline-offset: 2px; }
 
-.btn {
+/* Значки — линиями, цвет от текста. */
+.ic { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* Кнопка языка на корпусе: 40×28, радиус 14, рамка 1. */
+.lang-btn {
   appearance: none;
-  border: 0;
-  border-radius: 8px;
-  padding: 9px 14px;
-  background: var(--btn);
-  color: #fff;
-  font-weight: 600;
+  flex: none;
+  width: 40px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: none;
+  color: var(--body-text);
+  font: 600 12px/1 var(--font-body);
   cursor: pointer;
 }
-.btn:hover { background: var(--btn-hover); }
-.btn:disabled { opacity: 0.6; cursor: default; }
-.btn:focus-visible, .link:focus-visible, .ghost:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.btn-small { padding: 6px 10px; font-size: 13px; }
+.lang-btn:hover { background: color-mix(in srgb, var(--body-text) 12%, transparent); }
 
-.ghost {
+/* --- экран: пиксельный шрифт, один цвет чернил, без скруглений и теней --- */
+.lcd, .pop, .toast { font: 500 14px/18px var(--font-lcd); color: var(--ink); }
+.lcd { background: var(--screen); transition: background-color 150ms; }
+.lcd :focus-visible, .pop :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.lcd ::selection, .pop ::selection { background: var(--ink); color: var(--screen); }
+.lcd :disabled, .pop :disabled { opacity: 0.5; cursor: default; }
+
+/* Скруглений на экране нет (радио — единственное круглое). */
+.lcd button, .lcd input, .lcd select, .lcd textarea, .pop button { border-radius: 0; }
+
+/* Разделитель: пунктир. */
+.lcd hr { border: 0; border-top: 2px dotted var(--ink); margin: 0; }
+
+/* Кнопки. Основная залита, контурная — рамка; высота 28. При нажатии заливка меняется местами.
+   Квадратная «плюс» — btn-plus, 32×32. */
+.lcd .btn, .lcd .ghost {
   appearance: none;
-  border: 1px solid var(--field-line);
-  border-radius: 8px;
-  padding: 6px 10px;
-  background: var(--card);
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 2px solid var(--ink);
+  font: 600 13px/18px var(--font-lcd);
+  text-decoration: none;
   cursor: pointer;
 }
-.ghost:hover { background: var(--hover); }
-.ghost:disabled { opacity: 0.55; cursor: default; }
-.ghost.danger { color: var(--err); }
-
-/* Текстовая ссылка-кнопка: область нажатия — не ниже 24 пикс. (сам текст остаётся как был). */
-.link {
+.lcd .btn { background: var(--ink); color: var(--screen); }
+.lcd .btn:hover:not(:disabled) { background: var(--ink-fill-hover); border-color: var(--ink-fill-hover); }
+.lcd .btn:active:not(:disabled) { background: var(--screen); color: var(--ink); border-color: var(--ink); }
+.lcd .ghost { background: none; color: var(--ink); }
+.lcd .ghost:hover:not(:disabled) { background: var(--ink-hover); }
+.lcd .ghost:active:not(:disabled) { background: var(--ink); color: var(--screen); }
+.lcd .btn-plus { width: 32px; min-height: 32px; padding: 0; }
+/* Ссылка: 13 / 18, жирность 600; область нажатия не ниже 24. Внутри текста — с подчёркиванием. */
+.lcd .link {
+  appearance: none;
   display: inline-flex;
   align-items: center;
   min-height: 24px;
+  padding: 0;
   border: 0;
   background: none;
-  padding: 0;
-  color: var(--accent);
-  font-weight: 600;
+  color: var(--ink);
+  font: 600 13px/18px var(--font-lcd);
+  text-decoration: underline;
+  text-underline-offset: 2px;
   cursor: pointer;
 }
-.link:hover { text-decoration: underline; }
+.lcd .link:hover { background: var(--ink-hover); }
+.lcd a { color: var(--ink); text-underline-offset: 2px; }
+.lcd .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
-/* Подсказка в полях: свой цвет — в тёмной теме цвет Chrome (#757575) слишком бледный. */
-::placeholder { color: var(--placeholder); opacity: 1; }
-
-textarea, .search {
+/* Поле ввода и textarea. */
+.lcd input[type="text"], .lcd input[type="search"], .lcd input[type="number"], .lcd input:not([type]), .lcd textarea {
   width: 100%;
-  border: 1px solid var(--field-line);
-  border-radius: 8px;
-  background: var(--card);
-  padding: 7px 9px;
+  height: 32px;
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  background: var(--screen);
+  color: var(--ink);
+  caret-color: var(--ink);
+  padding: 0 8px;
+  font: 500 14px/18px var(--font-lcd);
+  transition: background-color 150ms;
 }
-textarea { resize: vertical; min-height: 64px; font: 12px/1.4 var(--mono); }
-textarea:focus-visible, .search:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+.lcd textarea { height: auto; min-height: 64px; padding: 5px 8px; resize: vertical; }
+.lcd ::placeholder { color: var(--ink-muted); opacity: 1; }
+.lcd input[type="search"]::-webkit-search-cancel-button { appearance: none; }
 
-.add-result { font-size: 13px; }
-.add-result[data-kind="error"] { color: var(--err); }
+/* Выпадающий список: родной select, закрытый вид как у поля, справа свой уголок вниз. */
+.lcd select {
+  appearance: none;
+  height: 32px;
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  background: var(--screen) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231C2416' stroke-width='3' stroke-linecap='square'%3E%3Cpath d='M5 9l7 7 7-7'/%3E%3C/svg%3E") no-repeat right 8px center / 12px 12px;
+  color: var(--ink);
+  padding: 0 28px 0 8px;
+  font: 500 14px/18px var(--font-lcd);
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: background-color 150ms;
+}
+/* Список вариантов рисует система: ему — цвета экрана (пиксельный шрифт в нём не действует). */
+.lcd option { background: var(--lcd); color: var(--ink); }
 
-/* --- значки и всплывающее меню: общие для окна и страницы «Начало работы» (кнопка языка) --- */
-.ic { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+/* Флажок: квадрат 20 с рамкой 2, включён — галочка линией 4 с прямыми концами. check-box — такой же
+   квадрат у кнопки-переключателя (aria-checked). */
+.lcd input[type="checkbox"], .lcd .check-box {
+  appearance: none;
+  flex: none;
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  background: none center / 16px 16px no-repeat;
+  cursor: pointer;
+}
+.lcd input[type="checkbox"]:checked, .lcd [aria-checked="true"] > .check-box {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%231C2416' stroke-width='4' stroke-linecap='butt' stroke-linejoin='miter'%3E%3Cpath d='M1.5 8.5l4.5 4.5 8.5-9.5'/%3E%3C/svg%3E");
+}
+/* Радио: круг 20 с рамкой 2, выбран — точка 8 в центре. Единственное круглое на экране. */
+.lcd input[type="radio"] {
+  appearance: none;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+.lcd input[type="radio"]:checked { background: radial-gradient(circle, var(--ink) 0 4px, transparent 4.5px); }
+/* Вариант с радио или флажком: слева сам элемент, справа название 14 / 20 и пояснение 13 / 16.
+   Нажимается вся строка. */
+.lcd .check { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+.lcd .check:hover input { background-color: var(--ink-hover); }
+.lcd .opt { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.lcd .opt-name { font: 600 14px/20px var(--font-lcd); }
+.lcd .opt-note { font: 500 13px/16px var(--font-lcd); }
+
+/* Пояснения и подсказки: 13 / 16. */
+.lcd .hint, .lcd .note { font: 500 13px/16px var(--font-lcd); }
+.lcd code { padding: 0 3px; background: var(--ink-hover); font: inherit; }
+.lcd .add-result { font: 500 13px/16px var(--font-lcd); overflow-wrap: anywhere; }
+
+/* Сигнал: четыре столбика шириной 3, высотой 5, 8, 11, 14, промежуток 2. Погасшие — на четверть. */
+.bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; flex: none; }
+.bars i { width: 3px; background: currentColor; opacity: 0.25; }
+.bars i:nth-child(1) { height: 5px; }
+.bars i:nth-child(2) { height: 8px; }
+.bars i:nth-child(3) { height: 11px; }
+.bars i:nth-child(4) { height: 14px; }
+.bars i.on { opacity: 1; }
+
+/* Код страны вместо флага: рамка 2, 26×18, две буквы 12 / 14. Флага нет — рамки нет, место остаётся. */
+.cc {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 18px;
+  border: 2px solid currentColor;
+  font: 600 12px/14px var(--font-lcd);
+}
+.cc.none { border-color: transparent; }
+
+/* Заметка: полоса слева 4, отступ 8, текст 13 / 16. */
+.lcd .lcd-note { border-left: 4px solid var(--ink); padding-left: 8px; font: 500 13px/16px var(--font-lcd); overflow-wrap: anywhere; }
+/* Предупреждение с действием: рамка 2, слева восклицательный знак в залитом квадрате 20, текст
+   13 / 16, под ним кнопки. */
+.lcd .lcd-alert {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  border: 2px solid var(--ink);
+  padding: 8px 8px 8px 36px;
+  font: 500 13px/16px var(--font-lcd);
+  overflow-wrap: anywhere;
+}
+.lcd .lcd-alert::before {
+  content: "!";
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  width: 20px;
+  height: 20px;
+  background: var(--ink);
+  color: var(--screen);
+  font: 600 15px/20px var(--font-lcd);
+  text-align: center;
+}
+.lcd .lcd-alert strong { font-weight: 600; }
+.lcd .lcd-alert .btn, .lcd .lcd-alert .ghost, .lcd .lcd-alert .link { justify-self: start; }
+
+/* Всплывающее меню: фон экрана, рамка 2, тень уголком. Пункт 32, под мышью и в фокусе залит. */
 .pop {
   position: fixed;
   inset: auto;
   margin: 0;
   min-width: 200px;
   max-width: 300px;
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--card);
-  color: var(--text);
-  box-shadow: var(--shadow);
+  padding: 0;
+  border: 2px solid var(--ink);
+  background: var(--screen);
+  box-shadow: 4px 4px 0 rgb(0 0 0 / 0.35);
 }
-.pop hr { border: 0; border-top: 1px solid var(--line); margin: 4px 2px; }
+.pop hr { border: 0; border-top: 2px dotted var(--ink); margin: 0; }
 .pop-item {
   appearance: none;
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 8px 10px;
+  min-height: 32px;
+  padding: 0 10px;
   border: 0;
-  border-radius: 7px;
   background: none;
+  color: var(--ink);
+  font: 500 14px/18px var(--font-lcd);
   text-align: left;
-  font-size: 13.5px;
   cursor: pointer;
 }
-.pop-item:hover { background: var(--hover); }
-.pop-item:focus-visible { background: var(--hover); outline: 2px solid var(--accent); outline-offset: -2px; }
-.pop-item:disabled { opacity: 0.45; cursor: default; background: none; }
-.pop-item.danger { color: var(--err); }
-.pop-item .tick { width: 16px; height: 16px; visibility: hidden; color: var(--accent); }
+.pop-item:hover:not(:disabled), .pop-item:focus-visible { background: var(--ink); color: var(--screen); outline: none; }
+/* Меню кнопки оформления: две группы значений. Подпись группы не нажимается: 13 / 500, приглушённо. */
+.pop-group { padding: 8px 12px 2px 10px; font: 500 13px/16px var(--font-lcd); color: var(--ink-muted); }
+.pop.pop-look { min-width: 196px; padding: 2px 0 4px; }
+.pop.pop-look hr { margin: 4px 10px; }
+/* Значения в меню оформления — 14 / 600, как в макете menu.html (решение автора 2026-11-18; в остальных меню пункты 14 / 500). */
+.pop.pop-look .pop-item { padding: 0 12px 0 10px; font-weight: 600; }
+.pop-item .tick { width: 16px; height: 16px; visibility: hidden; stroke-width: 4; stroke-linecap: butt; stroke-linejoin: miter; }
 .pop-item[aria-checked="true"] .tick { visibility: visible; }
+
+/* Полоса прокрутки на экране: ширина 4, бегунок чернилами, дорожка на четверть. Видна всегда,
+   когда содержимое не помещается. */
+.lcd::-webkit-scrollbar, .lcd ::-webkit-scrollbar { width: 4px; height: 4px; }
+.lcd::-webkit-scrollbar-thumb, .lcd ::-webkit-scrollbar-thumb { background: var(--ink); }
+.lcd::-webkit-scrollbar-track, .lcd ::-webkit-scrollbar-track { background: var(--ink-faint); }
+
+/* Анимаций две: смена подсветки и нажатие клавиши. Просили меньше движения — нет ни одной. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}

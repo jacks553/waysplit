@@ -127,7 +127,7 @@ test('перевод: вставки, склонения, запасной яз�
   assert.equal(t('rules.removed', { domain: 'example.com' }), 'Правило удалено: example.com');
   assert.deepEqual([1, 2, 5, 11, 21, 22, 0].map((n) => t('n.siteDomains', { n })),
     ['+1 домен сайта', '+2 домена сайта', '+5 доменов сайта', '+11 доменов сайта', '+21 домен сайта', '+22 домена сайта', '+0 доменов сайта']);
-  assert.equal(t('home.detail.rules', { n: 3 }), 'Через VPN — 3 сайта из правил');
+  assert.equal(t('home.lcd.rules.detail', { n: 3 }), 'работают правила: 3 сайта через VPN');
   assert.equal(t('нет.такого.ключа'), 'нет.такого.ключа', 'пропуск виден сразу: показан сам ключ');
   assert.equal(t('rules.removed'), 'Правило удалено: {domain}', 'вставка без значения остаётся как есть');
 
@@ -242,7 +242,7 @@ test('манифест: описание — из _locales (ru и en), разр�
   assert.equal(text('en'), 'VPN for Chrome via your own VLESS, XHTTP and Hysteria2 servers: some sites through VPN, some without. Needs a Windows companion.');
   for (const lang of ['ru', 'en']) assert.ok(text(lang).length <= 132, `${lang}: краткое описание — не длиннее 132 знаков`);
   // Перевод не должен требовать новых разрешений.
-  assert.deepEqual(manifest.permissions, ['nativeMessaging', 'proxy', 'storage', 'alarms', 'activeTab', 'privacy', 'favicon']);
+  assert.deepEqual(manifest.permissions, ['nativeMessaging', 'proxy', 'storage', 'alarms', 'activeTab', 'privacy', 'favicon']); // как в 1.2.1: значки сайтов показывает классическое окно
   assert.deepEqual(manifest.optional_permissions, ['webRequest']);
   assert.deepEqual(manifest.optional_host_permissions, ['<all_urls>']);
   assert.equal(manifest.host_permissions, undefined);

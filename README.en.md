@@ -4,7 +4,9 @@
 
 I made Waysplit for myself. I wanted the sites I choose to go through a VPN and the rest to go without it. Only through my own VLESS servers, not someone else's. It works only in Chrome and does not touch the rest of the computer. I use it myself and gave it to friends to try.
 
-<img src="docs/img/home-en.png" width="320" alt="The Waysplit popup: the VPN is on, a server is chosen, below is the rule for the open site">
+<img src="docs/img/home-en.png" width="320" alt="The Waysplit popup styled as a push-button phone: the greenish screen says the VPN is on, below is the rule for the open site, under the screen are the power key and the tabs">
+
+The popup has two designs: the new one in the picture and the classic one. To change the design or the theme, click the Waysplit name in the popup header.
 
 ## What you need
 

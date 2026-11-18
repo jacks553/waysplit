@@ -22,6 +22,7 @@ export async function loadData() {
   S.view = normalize(local);
   S.status = session.status || null;
   S.siteNew = session.siteNew || {};
+  updateLight();
   // Язык сменили (в «Настройках» или восстановлением из копии): надписи разметки уже заменены;
   // открытые экраны и сообщение внизу собраны на прежнем языке — закрыть, вкладку перерисовать.
   if (usePageLanguage(S.view.settings.language)) {
@@ -29,6 +30,12 @@ export async function loadData() {
     toast('');
   }
   renderVisible();
+}
+
+// updateLight — подсветка экрана, одна на все вкладки: горит, когда VPN включён и при ошибке (в том
+// числе когда компаньона нет — S.hostProblem, его ставит «Главная»), иначе погашена.
+export function updateLight() {
+  document.documentElement.dataset.light = S.view?.enabled || S.status?.state === 'error' || S.hostProblem ? 'on' : 'off';
 }
 
 export const currentServer = () => S.view.servers.find((s) => s.id === S.view.currentServerId) || null;
@@ -58,6 +65,7 @@ export function showTab(name) {
     $(`panel-${t.dataset.tab}`).hidden = !on;
   }
   $('content').scrollTop = 0;
+  for (const box of document.querySelectorAll('.panel-scroll')) box.scrollTop = 0;
   if (S.full) history.replaceState(null, '', `${location.pathname}${location.search}#${name}`);
   tabs.get(name)();
 }
@@ -73,17 +81,20 @@ export function renderVisible() {
 const stack = [];
 
 // openScreen({ title, sub, actions, build(screen), render(screen) }) — экран поверх вкладки,
-// вверху стрелка «назад» (и Esc). build — один раз, render — при каждом изменении данных.
-export function openScreen({ title, sub = '', actions = [], build = null, render = null, className = '' }) {
-  const back = el('button', { type: 'button', className: 'icon-btn back', title: t('common.back.title') });
+// вверху клавиша «назад» (и Esc). build — один раз, render — при каждом изменении данных.
+// Содержимое экрана (screen.body) прокручивается целиком. fixed: true — не прокручивается: экран сам
+// ставит внутрь список с классом panel-scroll, остальное стоит на месте (выбор сервера, домены вкладки).
+export function openScreen({ title, sub = '', actions = [], build = null, render = null, className = '', fixed = false }) {
+  const back = el('button', { type: 'button', className: 'back-key', title: t('common.back.title') });
   back.setAttribute('aria-label', t('common.back'));
   setIcon(back, 'back');
   const titleEl = el('h2', { className: 'screen-title', textContent: title });
   const subEl = el('span', { className: 'screen-sub', textContent: sub });
-  const body = el('div', { className: 'screen-body' });
+  const frame = el('div', { className: 'screen-body lcd' });
+  const body = fixed ? frame : frame.appendChild(el('div', { className: 'panel-scroll screen-scroll' }));
   const sec = el('section', { className: `screen ${className}`.trim() },
     el('header', { className: 'screen-head' }, back, el('div', { className: 'screen-titles' }, titleEl, subEl), ...actions),
-    body);
+    frame);
   sec.setAttribute('role', 'dialog');
   sec.setAttribute('aria-label', title);
   sec.tabIndex = -1; // фокус — на сам экран: так клавиатура и чтение с экрана начинают с него
@@ -96,6 +107,7 @@ export function openScreen({ title, sub = '', actions = [], build = null, render
     render: () => render?.(screen),
   };
   back.addEventListener('click', closeScreen);
+  screen.opener = focusPath(document.activeElement); // куда вернуть фокус, когда экран закроют
   if (stack.length) stack[stack.length - 1].sec.inert = true;
   else for (const id of ['content', 'top']) $(id).inert = true;
   stack.push(screen);
@@ -118,6 +130,21 @@ export function closeScreen() {
   } else {
     for (const id of ['content', 'top']) $(id).inert = false;
   }
+  // Фокус — туда, откуда экран открыли (кнопка, строка списка): клавиатура продолжает с того же места.
+  const opener = sc.opener && document.querySelector(sc.opener);
+  if (opener && opener.offsetWidth && !opener.closest('[inert]')) opener.focus();
+}
+
+// focusPath — как найти элемент снова: списки перерисовываются, и сам элемент к закрытию экрана
+// может быть уже другим. По id, либо по действию внутри строки списка или блока подписки.
+function focusPath(node) {
+  if (!node || node === document.body) return '';
+  if (node.id) return `#${CSS.escape(node.id)}`;
+  const row = node.closest('li[data-id], [data-sub]');
+  const key = row ? (row.dataset.id ? `li[data-id="${CSS.escape(row.dataset.id)}"]` : `[data-sub="${CSS.escape(row.dataset.sub)}"]`) : '';
+  if (!key) return '';
+  if (node === row) return key;
+  return node.dataset.action ? `${key} [data-action="${CSS.escape(node.dataset.action)}"]` : key;
 }
 
 export function closeAllScreens() {

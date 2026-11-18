@@ -1,5 +1,26 @@
 # Изменения
 
+## 1.3.0: новое оформление окна
+
+Расширение обновится из Chrome Web Store само, когда Google проверит версию 1.3.0. Компаньон 1.3.0 отличается от 1.2.1 только номером версии. Обновлять его не нужно.
+
+- Окно выглядит как кнопочный телефон. Всё, что читают и настраивают, находится на зеленоватом экране с пиксельным шрифтом.
+- VPN включает круглая клавиша питания под экраном. Рядом с ней лампочка: зелёная, когда VPN включён, жёлтая, когда работают только правила, красная при ошибке.
+- В списках перед именем сервера стоит код страны из двух букв. Флагов в новом окне нет.
+- При ошибке на экране крупно и коротко написано, что случилось, например "Нет ответа" или "Нет компаньона". Причина стоит строкой ниже.
+- "Домены этой вкладки" открываются отдельным экраном. Если список пуст, там есть кнопка "Обновить вкладку".
+- Страница "Начало работы" выглядит так же, как окно.
+
+Вид окна и тема меняются в меню, которое открывается нажатием на название Waysplit в шапке окна. То же самое есть в настройках: Настройки, Оформление.
+
+Корпус окна изначально тёмный. Светлый выбирается в этом меню, в группе "Тема". У тех, кто раньше сам выбрал светлую тему, окно останется светлым.
+
+Прежний вид можно вернуть там же: "Вид окна", классический. Классическое окно выглядит как в версии 1.2.1. В его шапке есть такая же кнопка, по ней можно вернуться к новому виду. Серверы, правила и настройки у двух видов общие.
+
+### In English
+
+Version 1.3.0 gives the popup a new design. It looks like a push-button phone with a greenish screen, a power key and a status lamp. Lists show country codes instead of flags. Errors get short names in large letters. "Domains of this tab" opens as a separate screen with a "Reload tab" button. The "Getting started" page has the same look. The design and the theme are changed in the menu that opens when you click the Waysplit name in the popup header. The same choices are in the settings, in the Appearance section. The body is dark by default, and the light one is chosen in that menu. To get the old look back, choose classic there. The classic popup looks as in version 1.2.1 and has the same button in its header. The companion is unchanged except for its version number.
+
 ## 1.2.1: кнопка языка в шапке
 
 Расширение обновится из Chrome Web Store само, когда Google проверит версию 1.2.1. Компаньон 1.2.1 отличается от 1.2.0 только номером версии. Обновлять его не нужно.

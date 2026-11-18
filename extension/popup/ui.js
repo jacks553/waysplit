@@ -1,15 +1,17 @@
-// Общее для окна: элементы, значки, флаги, полоски пинга, меню «⋯», окно вопроса, сообщения,
-// значки сайтов.
+// Общее для окна: элементы, значки, код страны, столбики сигнала, меню, окно вопроса, сообщения.
 
-import { pingBars, splitFlag } from '../lib/format.js';
-import { toUnicode } from '../lib/domains.js';
+import { countryCode, noFlags, pingBars } from '../lib/format.js';
 import { t } from '../lib/i18n.js';
 
 export const $ = (id) => document.getElementById(id);
 
 // el('li', { className: 'x' }, child, 'текст') — элемент со свойствами и детьми.
+// Текст и подсказка (title) — без флагов-эмодзи: флаг в имени сервера заменяется кодом страны
+// (design/lcd/STYLE.md: флаг не показывается нигде). Значение поля ввода не трогаем: там имя как есть.
 export function el(tag, props = {}, ...children) {
-  const e = Object.assign(document.createElement(tag), props);
+  const clean = { ...props };
+  for (const key of ['textContent', 'title']) if (typeof clean[key] === 'string') clean[key] = noFlags(clean[key]);
+  const e = Object.assign(document.createElement(tag), clean);
   e.append(...children.filter((c) => c !== null && c !== undefined && c !== false));
   return e;
 }
@@ -23,16 +25,15 @@ const ICONS = {
   help: '<circle cx="12" cy="12" r="8.6"/><path d="M9.6 9.6a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1.1.9-1.1 1.6v.4"/><path d="M12 16.9h.01"/>',
   expand: '<path d="M14 4h6v6"/><path d="M20 4l-6.5 6.5"/><path d="M10 20H4v-6"/><path d="M4 20l6.5-6.5"/>',
   back: '<path d="M14.5 5.5 8 12l6.5 6.5"/>',
-  more: '<g fill="currentColor" stroke="none"><circle cx="5.6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.4" cy="12" r="1.6"/></g>',
-  star: '<path d="M12 4.2l2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 16.6l-4.8 2.5.9-5.4-3.9-3.8 5.4-.8z"/>',
-  trash: '<path d="M5 7.2h14"/><path d="M9.8 7.2V5h4.4v2.2"/><path d="M7 7.2l.9 12.3h8.2L17 7.2"/><path d="M10.4 10.8v5.4M13.6 10.8v5.4"/>',
+  more: '<g fill="currentColor" stroke="none"><rect x="3" y="10" width="4" height="4"/><rect x="10" y="10" width="4" height="4"/><rect x="17" y="10" width="4" height="4"/></g>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  star: '<path d="M12 3L14.2 8.9L20.6 9.2L15.6 13.2L17.3 19.3L12 15.8L6.7 19.3L8.4 13.2L3.4 9.2L9.8 8.9Z"/>',
+  trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5M14 11v5"/>',
   chev: '<path d="M9.5 6l6 6-6 6"/>',
   down: '<path d="M6.5 9.5l5.5 5.5 5.5-5.5"/>',
   ext: '<path d="M13.5 4.5H19.5V10.5"/><path d="M19.5 4.5l-8 8"/><path d="M17 13.5v6H4.5V7H10.5"/>',
   refresh: '<path d="M19 12a7 7 0 1 1-2.05-4.95"/><path d="M19.2 4.5v4h-4"/>',
-  direct: '<circle cx="12" cy="12" r="8"/><path d="M6.4 17.6 17.6 6.4"/>',
   check: '<path d="M5 12.6l4.4 4.4L19 7.4"/>',
-  search: '<circle cx="10.8" cy="10.8" r="6"/><path d="M15.3 15.3 20 20"/>',
   close: '<path d="M6.8 6.8l10.4 10.4M17.2 6.8 6.8 17.2"/>',
 };
 
@@ -45,14 +46,14 @@ export function setIcon(node, name, cls) {
   node.insertAdjacentHTML('afterbegin', icon(name, cls));
 }
 
-// flagEl — флаг страны из имени сервера; нет флага — первая буква имени в кружке.
-export function flagEl(server, cls = '') {
-  const { flag, name } = splitFlag(server?.name);
-  if (flag) return el('span', { className: `flag ${cls}`.trim(), textContent: flag });
-  return el('span', { className: `flag letter ${cls}`.trim(), textContent: (name.trim()[0] || '?').toUpperCase() });
+// ccEl — код страны в рамке (design/lcd/STYLE.md, «Код страны»). Флага в имени нет — рамки нет,
+// место остаётся: имена в списке стоят ровно.
+export function ccEl(server, cls = '') {
+  const code = countryCode(server?.name);
+  return el('span', { className: `cc${code ? '' : ' none'} ${cls}`.trim(), textContent: code });
 }
 
-// barsEl — четыре полоски задержки: цвет от зелёного до красного, серые — нет ответа.
+// barsEl — сигнал: четыре столбика, чем меньше задержка, тем больше горит; все погасшие — нет ответа.
 export function barsEl(server) {
   const b = pingBars(server);
   const node = el('span', { className: 'bars', title: b.title });
@@ -125,8 +126,8 @@ export const menuOpen = () => pop().matches(':popover-open');
 // ask({ title, text, ok, danger, value }) → true / строка (если задан value — поле ввода) / null.
 export function ask({ title, text = '', ok = t('common.ok'), danger = false, value = null }) {
   const dlg = $('dlg');
-  $('dlgTitle').textContent = title;
-  $('dlgText').textContent = text;
+  $('dlgTitle').textContent = noFlags(title);
+  $('dlgText').textContent = noFlags(text);
   $('dlgText').hidden = !text;
   const input = $('dlgInput');
   input.hidden = value === null;
@@ -168,6 +169,7 @@ export function toast(text, kind = '', { action = null } = {}) {
     box.replaceChildren();
     return;
   }
+  text = noFlags(text);
   const sticky = kind === 'error' || kind === 'keep' || !!action || text.length > TOAST_SHORT;
   const parts = [el('span', { className: 'toast-text', textContent: text })];
   if (action) {
@@ -194,56 +196,3 @@ export function toast(text, kind = '', { action = null } = {}) {
 
 // toastOpen — сообщение показано и само не исчезнет (Esc его закрывает).
 export const toastOpen = () => !$('toast').hidden && $('toast').dataset.sticky === 'true';
-
-// --- значки сайтов: только из памяти самого Chrome (разрешение favicon, адрес /_favicon/) ---
-// Ни одного запроса в интернет: Chrome отдаёт значок, если сайт уже открывался. Незнакомому сайту
-// Chrome отдаёт свой серый значок по умолчанию — его узнаём по точкам и рисуем букву домена.
-
-const favCache = new Map(); // домен → Promise(адрес значка или '' — значка нет)
-let defaultSig = null;
-
-const favUrl = (page) => chrome.runtime.getURL(`/_favicon/?pageUrl=${encodeURIComponent(page)}&size=32`);
-
-async function signature(url) {
-  const img = new Image();
-  img.src = url;
-  await img.decode();
-  const c = document.createElement('canvas');
-  c.width = 16;
-  c.height = 16;
-  const ctx = c.getContext('2d', { willReadFrequently: true });
-  ctx.drawImage(img, 0, 0, 16, 16);
-  return ctx.getImageData(0, 0, 16, 16).data.join(',');
-}
-
-async function lookup(domain) {
-  if (!domain.includes('.')) return ''; // зона (ru, рф) — без значка
-  try {
-    defaultSig ??= signature(favUrl('https://waysplit-no-such-site.invalid/'));
-    const base = await defaultSig;
-    for (const page of [`https://${domain}/`, `https://www.${domain}/`]) {
-      const url = favUrl(page);
-      if ((await signature(url)) !== base) return url;
-    }
-  } catch {
-    // нет разрешения или картинка не читается — буква
-  }
-  return '';
-}
-
-// faviconEl — значок сайта: сразу буква, значок из памяти Chrome — когда найдётся. label — домен,
-// который показан рядом: буква берётся из него (значок ищем по сайту example.org, а рядом написано
-// shop.example.org — буква «S»).
-export function faviconEl(domain, label = domain) {
-  const shown = toUnicode(label);
-  const node = el('span', { className: 'favicon letter', textContent: (shown.replace(/^www\./, '')[0] || '?').toUpperCase() });
-  node.setAttribute('aria-hidden', 'true');
-  const show = (url) => {
-    if (!url) return;
-    node.classList.remove('letter');
-    node.replaceChildren(el('img', { src: url, alt: '', width: 16, height: 16 }));
-  };
-  if (!favCache.has(domain)) favCache.set(domain, lookup(domain));
-  favCache.get(domain).then(show);
-  return node;
-}

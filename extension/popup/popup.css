@@ -1,573 +1,585 @@
-/* Окно расширения (SPEC-POPUP.md). Общие цвета, шрифты и кнопки — lib/common.css.
-   Окно — постоянного размера 400×600 (выше Chrome окно расширения не делает): шапка, вкладка
-   (прокручивается), панель вкладок внизу. html.full — тот же интерфейс на всю вкладку браузера. */
+/* Окно расширения в стиле «кнопочный телефон» (design/lcd/STYLE.md): каркас, «Главная», вкладки и
+   вложенные экраны. Цвета, шрифты и общие детали экрана (кнопки, поля, флажки, заметки, меню) —
+   lib/common.css. Экран — элемент с классом lcd: содержимое вкладки или тело вложенного экрана. */
 
+/* --- каркас: шапка 44, экран в рамке, зона клавиши питания (только «Главная»), клавиши вкладок 68 --- */
 html, body { margin: 0; }
 .app {
   position: relative;
   width: 400px;
   height: 600px;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
-  background: var(--bg);
+  background: var(--body);
 }
 /* Невысокий экран (например, 1920×1080 при масштабе 150 % — для Chrome это 1280×720): под значком
    расширения до панели задач остаётся около 584 пикселей, окно в 600 Chrome обрезал бы и добавил
    полосу прокрутки. Там окно прежней высоты — 580. (Через vh так не сделать: окно, высота
    которого зависит от него самого, Chrome схлопывает до 25 пикселей.) */
 @media (max-device-height: 750px) { .app { height: 580px; } }
-html.full body { background: var(--bg-full); min-height: 100vh; }
-html.full .app { width: min(100%, 760px); height: 100vh; margin: 0 auto; box-shadow: 0 0 0 1px var(--line); }
+/* На всю вкладку: корпус шириной до 760 по центру, вокруг — фон страницы. */
+html.full body { background: var(--page); min-height: 100vh; }
+html.full .app { width: min(100%, 760px); height: 100vh; margin: 0 auto; }
 
-/* --- значки и кнопки-значки --- */
+.top { flex: none; display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 10px 0 16px; }
+/* Кнопка оформления: значок-развилка 20, название 15 / 600 и уголок вниз 14 — одна кнопка с меню
+   «Вид окна» и «Тема». Высота 28, радиус 14, рамка 1, как у кнопки языка; левый край — вровень с
+   рамкой экрана. При наведении и пока меню открыто — тот же фон, что у кнопки языка при наведении. */
+.look-btn {
+  appearance: none;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  margin-right: auto;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: none;
+  color: var(--body-text);
+  font: 600 15px/1 var(--font-body);
+  cursor: pointer;
+}
+.look-btn:hover, .look-btn[aria-expanded="true"] { background: color-mix(in srgb, var(--body-text) 12%, transparent); }
+.logo { display: block; flex: none; width: 20px; height: 20px; fill: none; stroke: var(--body-text); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.look-btn .chev { color: var(--body-muted); }
+.look-btn .chev .ic { width: 14px; height: 14px; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Кнопка-значок. На корпусе (шапка окна и вложенного экрана) — 36×36, значок 20. На экране — 24×24,
+   цвет текста строки; меню — три квадрата 4×4. */
 .icon-btn {
   appearance: none;
-  border: 0;
-  background: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  padding: 0;
+  flex: none;
   display: grid;
   place-items: center;
-  color: var(--muted);
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--body-muted);
   cursor: pointer;
-  flex: none;
 }
-.icon-btn:hover { background: var(--hover); color: var(--text); }
-.icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+.icon-btn:hover { background: color-mix(in srgb, var(--body-text) 12%, transparent); color: var(--body-text); }
+.icon-btn:focus-visible { outline-offset: 0; }
 .icon-btn:disabled { opacity: 0.5; cursor: default; }
-.icon-btn.danger:hover { color: var(--err); }
-/* Кнопка языка в шапке: буквы RU или EN в кнопке того же размера, что соседние. Тонкая рамка
-   (цвет границ полей, он подобран по контрасту в обеих темах) показывает, что это кнопка, а не надпись. */
-.lang-btn { font-size: 12px; font-weight: 700; letter-spacing: 0.3px; line-height: 1; border: 1px solid var(--field-line); }
-.chev { display: inline-grid; color: var(--muted); }
-.chev .ic { width: 18px; height: 18px; }
-.chev.small .ic { width: 15px; height: 15px; }
+.lcd .icon-btn { width: 24px; height: 24px; border-radius: 0; color: inherit; }
+.lcd .icon-btn:hover { background: var(--ink-hover); color: inherit; }
+.lcd .icon-btn:focus-visible { outline: 2px solid currentColor; outline-offset: 0; }
+.lcd .icon-btn .ic { width: 18px; height: 18px; stroke-width: 2; stroke-linecap: square; stroke-linejoin: miter; }
+.lcd .icon-btn[data-action="more"] .ic, .lcd .icon-btn[data-action="subMore"] .ic, .lcd #rulesMore .ic { width: 24px; height: 24px; }
+/* Уголок: линия 3 с прямыми концами. */
+.chev { display: inline-grid; flex: none; }
+.chev .ic { width: 12px; height: 12px; stroke-width: 3; stroke-linecap: square; stroke-linejoin: miter; }
 
-/* --- шапка --- */
-.top {
+/* Экран. На «Главной» он высотой с содержимое, остальное место — зоне клавиши питания (не меньше
+   116); не помещается — содержимое прокручивается внутри экрана. На остальных вкладках экран
+   занимает всё место до клавиш вкладок, отступ снизу 12. */
+.content {
+  flex: 0 1 auto;
+  min-height: 0;
+  margin: 4px 16px 0;
+  border: 6px solid var(--bezel);
+  border-radius: 12px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.app:has(#panel-home[hidden]) .content { flex: 1 1 0; margin-bottom: 12px; display: flex; flex-direction: column; overflow: hidden; }
+.app:has(#panel-home[hidden]) .power-zone { display: none; }
+/* Вкладка занимает весь экран: заголовок и строки под ним стоят на месте, прокручивается список
+   (panel-scroll). */
+.panel { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 12px; }
+.panel > .search, .panel > hr, .panel > form { flex: none; }
+/* Список, который прокручивается, — на вкладке и на вложенном экране. Справа место под полосу
+   прокрутки: 6 до полосы и 4 сама полоса. */
+.panel-scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  /* поля — чтобы обводка фокуса у краёв списка не обрезалась */
+  margin: -4px 0 -4px -4px;
+  padding: 4px 6px 4px 4px;
+}
+.panel-scroll > * { flex: none; }
+
+.power-zone { flex: 1 0 116px; display: flex; align-items: center; justify-content: center; gap: 14px; }
+.led-box { width: 72px; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.led { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--led-off); }
+.power-zone[data-led="on"] .led, .power-zone[data-led="blink"] .led { background: var(--led-on); }
+.power-zone[data-led="rules"] .led { background: var(--led-rules); }
+.power-zone[data-led="error"] .led { background: var(--led-error); }
+.power-zone[data-led="blink"] .led { animation: led-blink 1s steps(1, end) infinite; }
+@keyframes led-blink { 50% { background: var(--led-off); } }
+.led-label { font: 500 11.5px/14px var(--font-body); color: var(--body-muted); white-space: nowrap; }
+.power {
+  appearance: none;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 88px;
+  height: 88px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--power);
+  color: var(--power-icon);
+  box-shadow: var(--power-shadow);
+  cursor: pointer;
+  transition: transform 60ms, box-shadow 60ms;
+}
+.power svg { width: 36px; height: 36px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+.power:active:not(:disabled) { transform: translateY(4px); box-shadow: none; }
+.power:disabled { opacity: 0.5; cursor: default; }
+.power:focus-visible { outline-offset: 3px; }
+
+.tabbar { flex: none; display: flex; gap: 8px; height: 68px; padding: 0 16px 14px; }
+.tab {
+  appearance: none;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 54px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: var(--key);
+  color: var(--key-text);
+  box-shadow: var(--key-shadow);
+  font: 500 11px/14px var(--font-body);
+  cursor: pointer;
+  transition: transform 60ms, box-shadow 60ms;
+}
+.tab-icon { display: grid; place-items: center; }
+.tab-icon .ic { width: 19px; height: 19px; stroke-width: 1.9; }
+.tab[aria-selected="true"] { background: var(--key-on); color: var(--key-on-text); box-shadow: none; font-weight: 600; }
+.tab:active:not([aria-selected="true"]) { transform: translateY(var(--key-shadow-h)); box-shadow: none; }
+
+/* Сообщение внизу окна: залито чернилами, текст цвета экрана, стоит над клавишами вкладок. Ошибка —
+   слева восклицательный знак. Сообщение, которое само не исчезает: справа крестик и, если есть,
+   действие («Вернуть», «Открыть настройки»). */
+.toast {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 76px;
+  z-index: 5;
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 48px;
-  padding: 0 8px 0 14px;
-  background: var(--card);
-  border-bottom: 1px solid var(--line);
+  padding: 8px 10px;
+  background: var(--ink);
+  color: var(--screen);
+  font: 500 13px/16px var(--font-lcd);
+  overflow-wrap: anywhere;
 }
-.logo { display: block; border-radius: 6px; }
-.brand { font-weight: 700; font-size: 16px; letter-spacing: -0.1px; margin-right: auto; }
+.toast[data-kind="error"]::before { content: "!"; flex: none; width: 20px; height: 20px; background: var(--screen); color: var(--ink); font: 600 15px/20px var(--font-lcd); text-align: center; }
+.toast-text { flex: 1; min-width: 0; }
+.toast-action, .toast-close { appearance: none; flex: none; border: 0; border-radius: 0; background: none; color: inherit; cursor: pointer; }
+.toast-action { min-height: 24px; padding: 2px 8px; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.toast-close { display: grid; place-items: center; width: 24px; height: 24px; margin-right: -4px; padding: 0; }
+.toast-close .ic { width: 16px; height: 16px; }
+.toast-action:hover, .toast-close:hover { background: color-mix(in srgb, currentColor 16%, transparent); }
+.toast :focus-visible { outline: 2px solid var(--screen); outline-offset: 2px; }
 
-/* --- содержимое вкладки --- */
-.content { overflow-y: auto; overscroll-behavior: contain; }
-.panel { display: grid; gap: 12px; padding: 14px 14px 18px; align-content: start; }
-.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; }
-.panel-head h2 { margin: 0; font-size: 17px; font-weight: 650; }
-.count { color: var(--muted); font-weight: 500; font-size: 14px; margin-left: 2px; }
-.tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.hint, .empty { color: var(--muted); font-size: 12.5px; }
-.note { font-size: 13px; }
-.note[data-kind="error"] { color: var(--err); }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
-.row-label { display: block; color: var(--muted); font-size: 12px; }
-code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font: 12px var(--mono); }
-
-/* --- панель вкладок --- */
-.tabbar {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  height: 58px;
-  background: var(--card);
-  border-top: 1px solid var(--line);
-}
-.tab {
-  appearance: none;
-  border: 0;
-  background: none;
-  display: grid;
-  justify-items: center;
-  align-content: center;
-  gap: 2px;
+/* Окно вопроса: как меню — фон экрана, рамка 2, тень уголком. */
+.dlg {
+  width: min(340px, calc(100vw - 32px));
   padding: 0;
-  color: var(--muted);
-  font-size: 11.5px;
-  font-weight: 500;
-  cursor: pointer;
+  border: 2px solid var(--ink);
+  background: var(--screen);
+  color: var(--ink);
+  box-shadow: 4px 4px 0 rgb(0 0 0 / 0.35);
 }
-.tab-icon { display: grid; place-items: center; width: 52px; height: 28px; border-radius: 14px; transition: background 0.15s; }
-.tab-icon .ic { width: 21px; height: 21px; }
-.tab:hover { color: var(--text); }
-.tab[aria-selected="true"] { color: var(--accent); font-weight: 650; }
-.tab[aria-selected="true"] .tab-icon { background: var(--accent-soft); }
-.tab:focus-visible { outline: none; }
-.tab:focus-visible .tab-icon { outline: 2px solid var(--accent); }
+.dlg::backdrop { background: rgb(0 0 0 / 0.45); }
+.dlg-form { display: grid; gap: 8px; padding: 14px; }
+.dlg-title { font: 600 15px/20px var(--font-lcd); overflow-wrap: anywhere; }
+.dlg-text { font: 500 13px/16px var(--font-lcd); overflow-wrap: anywhere; }
+.dlg-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
 
-/* --- вложенные экраны: поверх шапки и вкладки, панель вкладок видна --- */
-.screens { position: absolute; inset: 0 0 58px 0; pointer-events: none; }
-.screen {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  grid-template-rows: auto 1fr;
-  background: var(--bg);
-  pointer-events: auto;
-  animation: screen-in 0.14s ease-out;
-}
-@keyframes screen-in { from { transform: translateX(14px); opacity: 0.4; } }
-@media (prefers-reduced-motion: reduce) { .screen { animation: none; } }
-.screen-head {
+/* --- общее для вкладок --- */
+/* Заголовок вкладки: название 22.22 / 26, число приглушённо, справа кнопка или меню. */
+.panel-head { flex: none; display: flex; align-items: center; gap: 8px; height: 26px; }
+.panel-head h2 { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; margin: 0; font: 700 22.22px/26px var(--font-lcd); white-space: nowrap; }
+.panel-head .count { font: 500 14px/26px var(--font-lcd); color: var(--ink-muted); }
+.lcd .panel-head .btn { flex: none; height: 26px; min-height: 26px; font: 600 14px/18px var(--font-lcd); }
+.lcd .tools { flex: none; }
+/* Подсказка под списком: пунктир, потом текст 13 / 16. Пусто: текст 14 / 18 и основная кнопка. */
+.lcd .foot-hint { margin-top: 10px; border-top: 2px dotted var(--ink); padding-top: 10px; }
+.empty { font: 500 14px/18px var(--font-lcd); }
+.empty-state { display: grid; justify-items: start; gap: 10px; padding-top: 4px; font: 500 14px/18px var(--font-lcd); }
+.select-small { min-width: 0; }
+/* Полоса действия на развёрнутой странице («Импорт правил: выберите файл»): рамка, текст и кнопки. */
+.action-bar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; border: 2px solid var(--ink); padding: 8px; font: 500 13px/16px var(--font-lcd); }
+
+/* --- «Главная» --- */
+/* Одна колонка шириной с экран: длинный адрес или имя сервера обрезается многоточием и не распирает экран. */
+#panel-home { flex: none; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 10px; padding: 14px; }
+/* Пунктир между блоками. */
+#panel-home > .sep-top { border-top: 2px dotted var(--ink); padding-top: 10px; }
+
+/* Верхняя строка: сигнал, имя сервера, задержка, уголок. Открывает выбор сервера. Высота строки 20,
+   область нажатия 24 (по 2 сверху и снизу за счёт отрицательных полей). */
+.srv-line {
+  appearance: none;
   display: flex;
   align-items: center;
-  gap: 4px;
-  height: 48px;
-  padding: 0 8px 0 4px;
-  background: var(--card);
-  border-bottom: 1px solid var(--line);
-}
-.screen-head .back { color: var(--text); }
-.screen:focus { outline: none; }
-.screen-titles { flex: 1; min-width: 0; display: grid; }
-.screen-title { margin: 0; font-size: 15px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.screen-sub { font-size: 11.5px; color: var(--muted); }
-.screen-sub:empty { display: none; }
-.screen-body { overflow-y: auto; overscroll-behavior: contain; padding: 12px 14px 18px; display: grid; gap: 10px; align-content: start; }
-
-/* --- главная --- */
-.conflict { background: var(--warn-bg); border: 1px solid var(--warn); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
-.conflict strong { display: block; margin-bottom: 4px; font-size: 14px; }
-
-.power-block { display: grid; justify-items: center; gap: 3px; padding: 2px 0 0; text-align: center; }
-/* «Главная» плотнее: в окне 400×600 под большой кнопкой помещаются сервер, «Российские сайты —
-   без VPN» и блок «Этот сайт» целиком, вместе с нижней строкой ссылок; с карточкой разрешения
-   виден хотя бы заголовок «Этот сайт». Замер — в tools/chrome-check.js. */
-#panel-home { gap: 8px; padding-top: 10px; padding-bottom: 10px; }
-#serverRow { padding: 6px 12px; }
-.power {
-  --ring: var(--idle);
-  width: 88px;
-  height: 88px;
-  margin-bottom: 2px;
-  border-radius: 50%;
-  border: 3px solid var(--ring);
-  background: var(--card);
-  color: var(--muted);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  transition: background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s;
-}
-.power svg { width: 38px; height: 38px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
-.power:hover { box-shadow: 0 0 0 7px color-mix(in srgb, var(--ring) 18%, transparent); }
-.power:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
-.power:disabled { cursor: default; opacity: 0.5; box-shadow: none; }
-.power[data-state="connecting"] { --ring: var(--accent); color: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
-.power[data-state="on"] {
-  --ring: var(--brand-2);
-  border-color: transparent;
-  background: var(--grad);
-  color: #fff;
-  box-shadow: 0 10px 26px color-mix(in srgb, var(--brand-1) 35%, transparent);
-}
-.power[data-state="on"]:hover { box-shadow: 0 10px 26px color-mix(in srgb, var(--brand-1) 35%, transparent), 0 0 0 7px color-mix(in srgb, var(--brand-2) 20%, transparent); }
-.power[data-state="warn"], .power[data-state="rules"] { --ring: var(--warn); color: var(--warn); }
-.power[data-state="error"] { --ring: var(--err); color: var(--err); }
-@keyframes pulse { 50% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--accent) 22%, transparent); } }
-@media (prefers-reduced-motion: reduce) { .power[data-state="connecting"] { animation: none; } }
-.power-label { font-size: 12px; color: var(--muted); }
-.status { font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
-.status[data-state="on"] { color: var(--status-ok); }
-.status[data-state="warn"], .status[data-state="rules"] { color: var(--status-warn); }
-.status[data-state="error"] { color: var(--err); }
-.detail { color: var(--muted); font-size: 12px; min-height: 1em; }
-
-.problem { background: var(--err-bg); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
-.problem-text { color: var(--err-text); font-weight: 600; }
-.problem .hint { color: var(--text); font-size: 13px; }
-.steps { margin: 0; padding-left: 20px; font-size: 12px; display: grid; gap: 3px; }
-.download-row { display: flex; align-items: center; gap: 12px; margin-top: 2px; }
-.download-row .btn { text-decoration: none; }
-.release-link { font-size: 12px; color: var(--accent); }
-.small-link { justify-self: start; font-size: 13px; }
-
-.row-card {
-  display: grid;
-  grid-template-columns: auto 1fr auto auto;
-  align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
+  height: 24px;
+  margin: -2px 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: 600 15px/20px var(--font-lcd);
   text-align: left;
   cursor: pointer;
 }
-.row-card:hover { background: var(--hover); }
-.row-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.row-main { min-width: 0; display: grid; }
-.row-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srv-line:hover { background: var(--ink-hover); }
+.srv-ms { flex: none; font-weight: 500; white-space: nowrap; }
+.srv-ms.fail { font-weight: 600; }
+.srv-line .chev .ic { width: 14px; height: 14px; }
 
-/* флаг страны из имени сервера; нет флага — буква в кружке */
-.flag { display: inline-grid; place-items: center; width: 28px; font-size: 21px; line-height: 1; flex: none; }
-.flag.letter {
-  width: 26px;
-  height: 26px;
-  margin: 0 1px;
-  border-radius: 50%;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-size: 12.5px;
-  font-weight: 700;
-}
-.direct-ic { color: var(--muted); }
-.direct-ic .ic { width: 22px; height: 22px; }
+/* Статус: крупная надпись по центру, под ней одна строка. Длинная надпись (не помещается в строку
+   размером 33.33) набирается вторым крупным размером, 22.22. */
+.status-block { display: grid; justify-items: center; gap: 2px; text-align: center; }
+.status { max-width: 100%; margin: 0; font: 700 33.33px/40px var(--font-lcd); white-space: nowrap; }
+.status.small { padding: 7px 0; font: 700 22.22px/26px var(--font-lcd); white-space: normal; overflow-wrap: anywhere; }
+.detail { min-height: 18px; font: 500 14px/18px var(--font-lcd); overflow-wrap: anywhere; }
 
-/* полоски задержки: 4 уровня, серые — нет ответа */
-.bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; flex: none; }
-.bars i { display: block; width: 4px; border-radius: 1px; background: var(--bar-off); }
-.bars i:nth-child(1) { height: 5px; }
-.bars i:nth-child(2) { height: 8px; }
-.bars i:nth-child(3) { height: 11px; }
-.bars i:nth-child(4) { height: 14px; }
-.bars[data-n="4"] i.on { background: var(--bar4); }
-.bars[data-n="3"] i.on { background: var(--bar3); }
-.bars[data-n="2"] i.on { background: var(--bar2); }
-.bars[data-n="1"] i.on { background: var(--bar1); }
-.bars.pending i { animation: bars-wait 1s ease-in-out infinite; }
-.bars.pending i:nth-child(2) { animation-delay: 0.1s; }
-.bars.pending i:nth-child(3) { animation-delay: 0.2s; }
-.bars.pending i:nth-child(4) { animation-delay: 0.3s; }
-@keyframes bars-wait { 50% { opacity: 0.35; } }
-@media (prefers-reduced-motion: reduce) { .bars.pending i { animation: none; } }
+/* Шаги установки компаньона и ссылки в предупреждении. */
+.problem-text { overflow-wrap: anywhere; }
+.steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.download-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.release-link { font: 600 13px/18px var(--font-lcd); }
 
-/* «Этот сайт» */
-.site { display: grid; gap: 6px; }
-.site-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.favicon { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; flex: none; }
-.favicon img { width: 18px; height: 18px; display: block; }
-.favicon.letter { background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 700; border-radius: 50%; }
-.site-domain {
-  min-width: 0;
-  max-width: 100%;
-  border: 1px solid var(--field-line);
-  border-radius: 8px;
-  background: var(--card);
-  color: var(--text);
-  font-size: 15px;
-  font-weight: 650;
-  padding: 3px 6px;
-}
-.site-domain:disabled { border-color: transparent; opacity: 1; appearance: none; padding: 3px 0; }
-.site-why { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
-.site-warn { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--warn-text); background: var(--warn-bg); border-radius: 8px; padding: 7px 8px 7px 10px; }
-.site-warn span { flex: 1; }
-.site-warn .btn { flex: none; }
-.site-controls { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 2px; }
-.switch-row {
+/* «Российские сайты без VPN»: строка с флажком справа, нажимается вся строка. */
+.ru-row {
   appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 24px;
+  padding: 0;
   border: 0;
   background: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 6px 4px 0;
-  font-weight: 650;
-  color: var(--muted);
+  color: var(--ink);
+  font: 500 14px/18px var(--font-lcd);
+  text-align: left;
   cursor: pointer;
-  border-radius: 8px;
 }
-.switch-row:focus-visible { outline: 2px solid var(--accent); }
-.switch { position: relative; width: 42px; height: 24px; border-radius: 12px; background: var(--switch-off); transition: background 0.15s; flex: none; }
-.switch::after {
-  content: "";
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
-  transition: transform 0.15s;
+.ru-title { flex: 1; min-width: 0; }
+.ru-row:hover .check-box { background-color: var(--ink-hover); }
+
+/* «Этот сайт». */
+.site { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.site-top { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: start; }
+.site-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; height: 18px; }
+.site-label { font: 500 13px/18px var(--font-lcd); }
+/* «Домены этой вкладки»: ссылка с уголком, открывает вложенный экран. */
+.lcd .tab-link { gap: 4px; white-space: nowrap; text-decoration: none; }
+/* Адрес сайта — select: крупно, без рамки, справа уголок вниз. Один вариант — уголка нет. */
+.lcd .site-domain {
+  max-width: 100%;
+  height: 26px;
+  border: 0;
+  padding: 0 22px 0 0;
+  background-color: transparent;
+  background-position: right 2px center;
+  background-size: 14px 14px;
+  font: 700 22.22px/26px var(--font-lcd);
 }
-.switch-row[aria-checked="true"] { color: var(--text); }
-.switch-row[aria-checked="true"] .switch { background: var(--grad); }
-.switch-row[aria-checked="true"] .switch::after { transform: translateX(18px); }
-.flag-btn {
+.lcd .site-domain:disabled { opacity: 1; padding-right: 0; background-image: none; }
+.lcd .site-domain:hover:not(:disabled) { background-color: var(--ink-hover); }
+/* Выбор из двух и кнопка сервера для сайта: высота 32, рамка 2, промежуток 8. */
+.site-controls { display: flex; gap: 8px; height: 32px; }
+.seg, .code-btn {
   appearance: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 36px;
-  padding: 0 6px 0 8px;
-  border: 1px solid var(--field-line);
-  border-radius: 10px;
-  background: var(--card);
+  border: 2px solid var(--ink);
+  background: none;
+  color: var(--ink);
+  padding: 0;
+  font: 600 14px/18px var(--font-lcd);
   cursor: pointer;
 }
-.flag-btn:hover { background: var(--hover); }
-.flag-btn.dim .flag { opacity: 0.45; filter: grayscale(0.5); }
-.flag-btn:focus-visible { outline: 2px solid var(--accent); }
-.site-links { display: flex; justify-content: space-between; gap: 10px; }
-.site-links .small-link[hidden] + .small-link { margin-left: auto; }
-.td { display: grid; gap: 6px; }
-.td-note { font-size: 12px; color: var(--muted); }
-.td-list { list-style: none; margin: 0; padding: 4px; max-height: 180px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
-.td-list:empty { display: none; }
-.td-list label { display: flex; align-items: center; gap: 8px; padding: 3px 4px; font-size: 13px; cursor: pointer; }
-.td-list input { accent-color: var(--accent); flex: none; }
-.td-list .favicon { width: 18px; height: 18px; font-size: 10px; }
-.td-list .favicon img { width: 14px; height: 14px; }
-.td-list .td-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.td-list .td-rule { margin-left: auto; flex: none; font-size: 11px; color: var(--muted); }
-.td-actions { display: flex; gap: 6px; align-items: center; }
-.reload { display: grid; gap: 6px; font-size: 12px; background: var(--accent-soft); border-radius: 8px; padding: 8px 10px; }
-.reload .btn { justify-self: start; }
-.add-card { display: grid; gap: 8px; }
+.seg { flex: 1; min-width: 0; }
+.seg:hover, .code-btn:hover { background: var(--ink-hover); }
+.seg[aria-pressed="true"] { background: var(--ink); color: var(--screen); }
+.seg[aria-pressed="true"]:hover { background: var(--ink-fill-hover); border-color: var(--ink-fill-hover); }
+.code-btn { flex: none; display: flex; align-items: center; justify-content: center; gap: 6px; width: 64px; }
+.code-btn.dim .site-code { color: var(--ink-muted); }
+/* Строка про правило — внизу блока. «Убрать правило», если правило есть, стоит в конце этой же
+   строки, как слово в тексте: так строка занимает меньше места и блок помещается в окно 580.
+   Область нажатия ссылки — 24 (поля сверху и снизу на высоту строки не влияют). */
+.site-foot { min-height: 32px; font: 500 13px/16px var(--font-lcd); overflow-wrap: anywhere; }
+.site-why { display: inline; }
+.lcd .site-foot .link { display: inline; min-height: 0; margin-left: 6px; padding: 4px 0; font: 600 13px/16px var(--font-lcd); white-space: nowrap; }
+.reload { display: grid; justify-items: start; gap: 8px; }
 
-.select-small {
-  min-width: 0;
-  border: 1px solid var(--field-line);
-  border-radius: 8px;
-  background: var(--card);
-  color: var(--text);
-  font-size: 13px;
-  padding: 6px 6px;
-}
-.select-small:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
-.td-actions .select-small { flex: 1; }
+/* Запрос разрешения (на «Главной» и на «Правилах»): предупреждение с действием. */
+.lcd .perm-card { gap: 6px; }
+.perm-title { font: 600 13px/16px var(--font-lcd); }
+.perm-card .tools { margin-top: 2px; }
+#panel-rules .perm-card { margin-bottom: 8px; }
 
-/* --- списки серверов (выбор сервера и вкладка «Серверы») --- */
-.pick-search { position: sticky; top: -12px; z-index: 1; margin: -12px -14px 0; padding: 12px 14px 6px; background: var(--bg); }
-.pick-list { display: grid; gap: 8px; }
-.group-title { margin: 6px 4px -2px; font-size: 12px; font-weight: 600; color: var(--muted); }
-.srv-list { list-style: none; margin: 0; padding: 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.srv {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 10px;
-  min-height: 50px;
-  padding: 6px 4px 6px 12px;
-  border-top: 1px solid var(--line);
-  cursor: pointer;
-}
-.srv:first-child { border-top: 0; }
-.srv:has(.more) { grid-template-columns: auto minmax(0, 1fr) auto auto auto; gap: 8px; padding-right: 2px; }
-.srv:hover { background: var(--hover); }
-.srv:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.srv[aria-selected="true"] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
-/* при открытии выбора сервера — к выбранному: короткая вспышка поверх обычной подсветки */
-.srv.flash { animation: srv-flash 1.6s ease-out; }
-@keyframes srv-flash { 0%, 35% { background: color-mix(in srgb, var(--accent) 30%, var(--card)); } }
-.srv-main { min-width: 0; display: grid; }
-.srv-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.srv-meta { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; }
-.srv-meta-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.tag { flex: none; font-size: 11px; font-weight: 650; color: var(--teal); border: 1px solid currentColor; border-radius: 99px; padding: 0 6px; line-height: 15px; }
-/* Сервер не ответил на пинг — словами, а не только бледными полосками. */
-.srv-fail { flex: none; color: var(--err-text); font-weight: 600; }
-.srv .bars { margin-left: 2px; }
-.star .ic { width: 19px; height: 19px; }
-.star[aria-pressed="true"] { color: #f5a800; }
-.star[aria-pressed="true"] .ic { fill: currentColor; }
-.srv .icon-btn { width: 30px; height: 30px; }
-.srv.special .srv-name { font-weight: 600; }
-.special-ic { width: 28px; height: 28px; border-radius: 50%; background: var(--hover); color: var(--muted); }
-.special-ic .ic { width: 18px; height: 18px; }
-.srv.special { grid-template-columns: auto minmax(0, 1fr); }
-.srv.dragging { opacity: 0.45; }
-.srv.drop-before { box-shadow: inset 0 3px 0 var(--accent); }
-.srv.drop-after { box-shadow: inset 0 -3px 0 var(--accent); }
-.rename { width: 100%; border: 1px solid var(--accent); border-radius: 6px; padding: 3px 6px; background: var(--card); font-weight: 600; }
+/* Нет серверов: поле для ссылок прямо на «Главной». */
+.add-card { display: grid; gap: 8px; justify-items: start; }
+.row-label { display: block; font: 500 13px/16px var(--font-lcd); }
 
-/* вкладка «Серверы»: подписки */
-.sub-block { display: grid; gap: 6px; margin-top: 4px; }
-.sub-head { display: flex; align-items: center; gap: 2px; padding-right: 4px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); }
-.sub-open { appearance: none; flex: 1; min-width: 0; display: grid; text-align: left; border: 0; background: none; padding: 8px 12px; border-radius: 11px; cursor: pointer; }
-.sub-open:hover { background: var(--hover); }
-.sub-open:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.sub-name { font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sub-facts { font-size: 12px; color: var(--muted); }
-.sub-note { font-size: 12px; padding: 6px 10px; border-radius: 8px; background: var(--accent-soft); overflow-wrap: anywhere; }
-.sub-note.error { color: var(--err-text); background: var(--err-bg); }
+/* --- списки серверов: вкладка «Серверы» и выбор сервера --- */
+/* Подписка: название 15 / 20, под ним строка про трафик и срок, справа меню. Рамок нет. */
 #srvGroups { display: grid; gap: 8px; }
-#srvGroups > .srv-list + .group-title { margin-top: 8px; }
+.srv-list + .sub-block { margin-top: 6px; }
+.sub-head { display: flex; align-items: flex-start; gap: 8px; padding: 2px 4px 0; }
+.sub-open { appearance: none; flex: 1; min-width: 0; display: grid; padding: 0; border: 0; background: none; color: var(--ink); text-align: left; cursor: pointer; }
+.sub-open:hover { background: var(--ink-hover); }
+.sub-name { font: 600 15px/20px var(--font-lcd); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sub-facts { font: 500 13px/16px var(--font-lcd); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Сообщение провайдера и ошибка обновления: заметка. */
+.sub-note { border-left: 4px solid var(--ink); padding-left: 8px; font: 500 13px/16px var(--font-lcd); overflow-wrap: anywhere; }
+.sub-block .sub-note { margin: 6px 4px 4px; }
+/* Заголовок группы («Свои серверы», подписка в выборе сервера, журнал в диагностике): 15 / 18,
+   число приглушённо, справа пунктир до края. */
+.group-title { display: flex; align-items: center; gap: 8px; height: 24px; margin: 6px 0 0; padding: 0 4px; font: 600 15px/18px var(--font-lcd); white-space: nowrap; }
+.group-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.group-title .count { margin-left: 2px; font: 500 13px/18px var(--font-lcd); color: var(--ink-muted); }
+.group-title::after { content: ""; flex: 1; min-width: 12px; border-top: 2px dotted var(--ink); }
+.srv-list + .group-title { margin-top: 8px; }
+/* Строка списка: высота 44, код страны, имя 15 / 18, подпись 13 / 16, сигнал, звезда, меню. */
+.srv-list { list-style: none; margin: 0; padding: 0; }
+.srv { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 4px; cursor: pointer; }
+.srv:hover { background: var(--ink-hover); }
+.srv:focus-visible { outline-offset: -2px; }
+.srv-main { flex: 1; min-width: 0; display: grid; }
+.srv-name { flex: 1; min-width: 0; font: 600 15px/18px var(--font-lcd); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srv-meta { display: flex; align-items: center; gap: 6px; min-width: 0; font: 500 13px/16px var(--font-lcd); white-space: nowrap; overflow: hidden; }
+.srv-meta-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.srv-fail { font-weight: 600; }
+/* Метка ядра «Xray»: рамка 2, текст 13 / 600 (мельче 13 на экране только код страны — решение автора
+   2026-11-18; в STYLE.md для метки записано 12 при высоте 18), высота 20, стоит в конце подписи. */
+.tag { flex: none; height: 20px; padding: 0 4px; border: 2px solid currentColor; font: 600 13px/16px var(--font-lcd); }
+/* Выбранная строка залита целиком, всё в ней цвета экрана. */
+.srv[aria-selected="true"] { background: var(--ink); color: var(--screen); }
+.srv[aria-selected="true"]:hover { background: var(--ink-fill-hover); }
+.srv[aria-selected="true"]:focus-visible { outline-color: var(--screen); }
+.srv[aria-selected="true"] .icon-btn:hover { background: color-mix(in srgb, currentColor 20%, transparent); }
+/* Звезда: контуром или залита чернилами. */
+.star[aria-pressed="true"] .ic { fill: currentColor; }
+/* Перетаскивание: строка бледнее, место вставки — полоса чернилами сверху или снизу. */
+.srv.dragging { opacity: 0.5; }
+.srv.drop-before { background: linear-gradient(var(--ink), var(--ink)) top / 100% 3px no-repeat; }
+.srv.drop-after { background: linear-gradient(var(--ink), var(--ink)) bottom / 100% 3px no-repeat; }
+/* Переименование прямо в строке. */
+.lcd .srv .rename { height: 24px; padding: 0 4px; font: 600 15px/18px var(--font-lcd); }
 
-/* --- правила --- */
-.rule-add { display: grid; grid-template-columns: minmax(0, 1fr) 118px 36px; gap: 6px; align-items: start; }
-.rule-input { resize: none; min-height: 36px; font: 14px/1.4 var(--font); padding: 7px 10px; overflow: hidden; white-space: pre; }
-.rule-input[rows="1"] { height: 36px; }
-.rule-add .select-small { height: 36px; }
-.plus { width: 36px; height: 36px; padding: 0; font-size: 21px; font-weight: 500; line-height: 1; }
-.rules-off { font-size: 12px; color: var(--warn-text); background: var(--warn-bg); border-radius: 8px; padding: 7px 10px; }
-.rules { list-style: none; margin: 0; padding: 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+/* --- «Правила» --- */
+/* Добавление: поле в одну строку (остаётся textarea), список действия шириной 104, квадратный «плюс». */
+.rule-add { display: flex; align-items: flex-start; gap: 6px; }
+.lcd .rule-input { flex: 1; min-width: 0; min-height: 32px; resize: none; overflow: hidden; white-space: pre; }
+.lcd .rule-input[rows="1"] { height: 32px; }
+/* Ширина списка 104. Выбранное название длиннее («Without VPN», имя сервера) — список растёт по
+   тексту до 160 (field-sizing, Chrome 123+; в Chrome старше ширина остаётся 104), дальше многоточие. */
+.rule-add .select-small { flex: none; width: 104px; min-width: 104px; max-width: 160px; font-weight: 600; }
+@supports (field-sizing: content) { .rule-add .select-small { width: auto; field-sizing: content; } }
+.plus { flex: none; height: 32px; }
+.plus .ic { width: 16px; height: 16px; stroke-width: 3; stroke-linecap: square; }
+.rules-ru, .rules-off { margin-bottom: 8px; }
+/* Строка правила: имя, под ним подпись, справа метка маршрута, корзина, меню. Рамок и линий нет. */
+.rules { list-style: none; margin: 0; padding: 0; }
 .rules:empty { display: none; }
-.rule {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) 100px 30px 36px; /* последняя шире: «⋯» отодвинуто от корзины */
-  align-items: center;
-  gap: 8px;
-  min-height: 48px;
-  padding: 6px 2px 6px 10px;
-  border-top: 1px solid var(--line);
-}
-.rule:first-child { border-top: 0; }
-.rules .empty { padding: 12px; }
-.rule-main { min-width: 0; display: grid; }
-.rule-domain { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rule-sub { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* Отключённое правило: текст серый, но читаемый (не ниже 4,5:1) — бледнеют только значки. */
-.rule.off .rule-domain { color: var(--muted); }
-.rule.off .rule-target { color: var(--muted); background: var(--card); border-color: var(--field-line); font-weight: 400; }
-.rule.off .favicon, .rule.off .rule-target .flag, .rule.off .rule-target .ic { opacity: 0.5; }
-/* Корзина удаляет сразу — между её значком и «⋯» не меньше 24 пикс. */
-.rule [data-action="more"] { justify-self: end; }
+.rule { display: flex; align-items: center; gap: 6px; height: 44px; }
+.rules .empty { padding: 8px 0; }
+.rule-main { flex: 1; min-width: 0; display: grid; }
+.rule-domain { font: 600 15px/18px var(--font-lcd); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rule-sub { font: 500 13px/16px var(--font-lcd); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Метка маршрута: «без VPN» — контур, «VPN» и свой сервер — залиты. Длинное имя сервера обрезается. */
 .rule-target {
   appearance: none;
-  justify-self: end;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 100px;
-  height: 28px;
-  padding: 0 9px 0 6px;
-  border: 1px solid var(--field-line);
-  border-radius: 99px;
-  background: var(--card);
-  font-size: 12px;
+  flex: none;
+  display: block;
+  max-width: 132px;
+  height: 24px;
+  padding: 0 6px;
+  border: 2px solid var(--ink);
+  background: none;
+  color: var(--ink);
+  font: 600 13px/18px var(--font-lcd);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
 }
-.rule-target:hover { background: var(--hover); }
-.rule-target:focus-visible { outline: 2px solid var(--accent); }
-.rule-target .flag { width: auto; font-size: 16px; }
-.rule-target .flag.letter { width: 18px; height: 18px; font-size: 10px; margin: 0; }
-.target-name { overflow: hidden; text-overflow: ellipsis; }
-.rule-target.direct { color: var(--muted); padding-left: 7px; }
-.rule-target.direct .ic { width: 14px; height: 14px; }
-.rule-target.vpn { color: var(--accent); background: var(--accent-soft); border-color: transparent; font-weight: 650; padding: 0 10px; }
-.rule .icon-btn { width: 30px; height: 30px; }
-.rule .icon-btn .ic { width: 18px; height: 18px; }
-.empty-box { background: var(--card); border: 1px dashed var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 8px; font-size: 13px; }
-.sets { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.set { display: grid; gap: 4px; }
-.set-name { font-weight: 650; }
-.set-count { font-size: 12px; color: var(--muted); }
+.target-name { display: block; overflow: hidden; text-overflow: ellipsis; }
+.rule-target:hover { background: var(--ink-hover); }
+.rule-target.vpn, .rule-target.server { background: var(--ink); color: var(--screen); }
+.rule-target.vpn:hover, .rule-target.server:hover { background: var(--ink-fill-hover); border-color: var(--ink-fill-hover); }
+/* Между значками корзины и меню — не меньше 24: чтобы не удалить правило, целясь в меню (решение
+   автора 2026-11-17; в макете промежуток меньше). */
+.rule [data-action="more"] { margin-left: 15px; }
+/* Выключенное правило: имя, подпись и метка приглушены. */
+.rule.off .rule-domain, .rule.off .rule-sub { color: var(--ink-muted); }
+.rule.off .rule-target { border-color: var(--ink-muted); background: none; color: var(--ink-muted); }
+.rule.off .rule-target.vpn, .rule.off .rule-target.server { background: var(--ink-muted); color: var(--screen); }
+.empty-box { display: grid; gap: 8px; padding-top: 4px; font: 500 14px/18px var(--font-lcd); }
 
-/* --- «Российские сайты — без VPN»: строка на «Главной» (невысокая — там мало места) и
-   напоминание на «Правилах» --- */
-.ru-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 12px; text-align: left; font: inherit; color: var(--text); cursor: pointer; }
-.ru-row:hover { background: var(--hover); }
-.ru-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.ru-text { display: grid; min-width: 0; }
-.ru-title { font-size: 13px; font-weight: 600; line-height: 1.3; }
-.ru-sub { font-size: 11.5px; line-height: 1.3; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ru-row[aria-checked="true"] .switch { background: var(--grad); }
-.ru-row[aria-checked="true"] .switch::after { transform: translateX(18px); }
-.rules-ru { font-size: 12px; color: var(--muted); background: var(--accent-soft); border-radius: 8px; padding: 6px 10px; }
-
-/* --- «домены сайта»: экран со списком и карточка разрешения --- */
-.sd-list { list-style: none; margin: 0; padding: 0; background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.sd-list:empty { display: none; }
-.sd-item { display: grid; grid-template-columns: 24px minmax(0, 1fr) 30px; align-items: center; gap: 8px; min-height: 40px; padding: 4px 4px 4px 10px; border-top: 1px solid var(--line); }
-.sd-item:first-child { border-top: 0; }
-.sd-name { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sd-item .icon-btn { width: 30px; height: 30px; }
-.sd-item .icon-btn .ic { width: 16px; height: 16px; }
-.sd-auto-row, .sd-removed-row { display: grid; gap: 6px; justify-items: start; }
-.sd-removed { overflow-wrap: anywhere; }
-/* Карточка — невысокая: в окне 400×600 под ней должен быть виден заголовок блока «Этот сайт»
-   (с полосой прокрутки строки уже, и статус «работают правила» занимает две строки). */
-.perm-card { display: grid; gap: 4px; padding: 8px 10px; border-color: var(--accent); }
-.perm-title { font-weight: 650; font-size: 13px; line-height: 1.3; }
-.perm-card .hint { font-size: 12px; line-height: 1.35; }
-.perm-card .tools { margin-top: 2px; }
-.perm-card .btn-small, .perm-card .ghost { padding: 4px 10px; font-size: 12.5px; }
-
-/* --- настройки --- */
-.group { margin: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--card); padding: 8px 12px 12px; display: grid; gap: 8px; min-width: 0; }
-legend { float: left; width: 100%; padding: 2px 0 0; font-weight: 650; font-size: 13px; }
-legend + * { clear: both; }
-.check { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; cursor: pointer; }
-/* Галочка или вариант в настройках: название — полужирным, пояснение — обычным, мельче. */
-.opt { display: grid; gap: 1px; min-width: 0; }
-.opt-name { font-weight: 600; }
-.opt-note { font-size: 12px; color: var(--muted); }
-.check input { margin: 3px 0 0; accent-color: var(--accent); flex: none; }
-.field { display: grid; gap: 4px; font-size: 13px; }
-.field .search { font-size: 13px; }
-.narrow { width: 120px; }
-.list-card { padding: 0; overflow: hidden; }
+/* --- «Настройки» --- */
+#panel-settings .panel-scroll { gap: 10px; }
+/* Разделы без рамок, заголовок 15 / 20, между разделами пунктир. */
+.group { min-width: 0; margin: 0; padding: 0; border: 0; display: grid; gap: 10px; }
+.group + .group { border-top: 2px dotted var(--ink); padding-top: 10px; }
+.group legend { float: left; width: 100%; padding: 0; font: 600 15px/20px var(--font-lcd); }
+.group legend + * { clear: both; }
+/* Поле или список с подписью: подпись 13 / 16 сверху, список на всю ширину. */
+.field { display: grid; gap: 4px; font: 500 13px/16px var(--font-lcd); }
+.lcd .field select { width: 100%; }
+.lcd .field .narrow { width: 120px; }
+.lcd .field .hint { color: var(--ink-muted); }
+/* Строки перехода: высота 40, текст 14 / 600, справа значок 16, между строками пунктир. */
+.list-card { display: grid; }
 .list-row {
   appearance: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   width: 100%;
-  padding: 12px 14px;
+  height: 40px;
+  padding: 0;
   border: 0;
-  border-top: 1px solid var(--line);
+  border-top: 2px dotted var(--ink);
   background: none;
-  color: var(--text);
-  font-size: 14px;
+  color: var(--ink);
+  font: 600 14px/18px var(--font-lcd);
+  text-align: left;
   text-decoration: none;
   cursor: pointer;
 }
-.list-row:first-child { border-top: 0; }
-.list-row:hover { background: var(--hover); }
-.list-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.list-row .ext .ic { width: 17px; height: 17px; color: var(--muted); }
-.ext { display: inline-grid; }
-.versions { font-size: 12px; color: var(--muted); text-align: center; }
-.versions a { color: inherit; }
+.list-row:hover { background: var(--ink-hover); }
+.list-row:focus-visible { outline-offset: -2px; }
+.list-row .ic { width: 16px; height: 16px; stroke-width: 3; stroke-linecap: square; stroke-linejoin: miter; }
+.list-row .chev, .list-row .ext { display: inline-grid; flex: none; margin-right: 2px; }
+/* Версии: 13 / 16, приглушённо. */
+.versions { font: 500 13px/16px var(--font-lcd); color: var(--ink-muted); }
+.lcd .versions a { color: inherit; }
 
-/* --- подписка, диагностика, добавление --- */
-.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 12px; margin: 0; font-size: 12.5px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
-.facts dt { color: var(--muted); }
-.facts dd { margin: 0; overflow-wrap: anywhere; }
-.facts dd.error { color: var(--err); }
+/* --- вложенные экраны: поверх шапки и вкладки, клавиши вкладок видны --- */
+/* В шапке на корпусе — круглая клавиша «назад» 32, заголовок и подзаголовок шрифтом корпуса, справа
+   действие (кнопка-значок 36). Ниже экран на всю высоту, отступ снизу 12. */
+.screens { position: absolute; inset: 0 0 68px 0; pointer-events: none; }
+.screen { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--body); pointer-events: auto; }
+.screen:focus { outline: none; }
+.screen-head { flex: none; display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 10px 0 16px; }
+.back-key {
+  appearance: none;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--key);
+  color: var(--key-text);
+  box-shadow: var(--key-shadow);
+  cursor: pointer;
+  transition: transform 60ms, box-shadow 60ms;
+}
+.back-key:active { transform: translateY(var(--key-shadow-h)); box-shadow: none; }
+.back-key .ic { width: 18px; height: 18px; stroke-width: 2.4; }
+.screen-titles { flex: 1; min-width: 0; display: grid; }
+.screen-title { margin: 0; font: 600 15px/18px var(--font-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.screen-sub { font: 500 12px/14px var(--font-body); color: var(--body-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.screen-sub:empty { display: none; }
+/* Экран. Прокручивается либо всё его содержимое (внутри — один panel-scroll), либо только список:
+   поиск сверху и кнопки снизу тогда стоят на месте (выбор сервера, домены этой вкладки). */
+.screen-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 16px 12px;
+  padding: 12px;
+  border: 6px solid var(--bezel);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.screen-body > * { flex: none; }
+.screen-body > .panel-scroll { flex: 1; }
+.screen-scroll { gap: 10px; }
+
+/* Выбор сервера: поиск стоит на месте, список под ним прокручивается. Особые строки («Как у остальных
+   сайтов», «Без VPN») — без кода страны, место под него оставлено. */
+.lcd .pick-list { gap: 8px; }
+.pick-list .empty { padding: 8px 4px; }
+
+/* Сведения в две колонки (подписка, диагностика): слева название 13 / 18 приглушённо, ширина 116,
+   справа значение 14 / 18 / 600. Длинное значение переносится; адрес подписки обрезается многоточием. */
+.facts { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 4px 8px; margin: 0; }
+.facts dt { font: 500 13px/18px var(--font-lcd); color: var(--ink-muted); overflow-wrap: anywhere; }
+.facts dd { margin: 0; font: 600 14px/18px var(--font-lcd); overflow-wrap: anywhere; }
+.facts dd.url { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sub-notes { display: grid; gap: 6px; }
 .sub-notes:empty { display: none; }
-.log { margin: 0; max-height: 180px; overflow: auto; background: var(--code-bg); border-radius: 8px; padding: 8px 10px; font: 11px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* «Проверка подписки»: после пунктира. Флажок с пояснением 13 / 16. */
+.sub-screen .group { border-top: 2px dotted var(--ink); padding-top: 10px; }
+.sub-screen .check { font: 500 13px/16px var(--font-lcd); }
+.sub-screen .check > span { padding-top: 2px; }
+.sub-screen .check b { font-weight: 600; }
+/* Отчёт проверки и журналы: рамка 2, текст 13 / 16 шрифтом экрана, своя прокрутка. */
+.log { margin: 0; max-height: 180px; overflow: auto; border: 2px solid var(--ink); padding: 6px 8px; font: 500 13px/16px var(--font-lcd); white-space: pre-wrap; overflow-wrap: anywhere; }
+.log:focus-visible { outline-offset: 0; }
 .report { max-height: 260px; }
-.add-form { display: grid; gap: 10px; }
-.add-form textarea { min-height: 130px; }
+.diag .tools .note { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 
-/* --- меню «⋯», окно вопроса, сообщения --- */
+/* Добавление серверов: подпись 14 / 18, поле высотой 130, залитая кнопка, строка результата,
+   подсказка после пунктира. */
+.add-form { display: grid; gap: 10px; justify-items: start; }
+.add-form .row-label { font: 500 14px/18px var(--font-lcd); }
+.lcd .add-form textarea { height: 130px; }
+.lcd .add-form .hint { justify-self: stretch; border-top: 2px dotted var(--ink); padding-top: 10px; }
 
-.dlg { width: min(340px, 90vw); border: 0; border-radius: 14px; padding: 18px; background: var(--card); color: var(--text); box-shadow: var(--shadow); }
-.dlg::backdrop { background: rgb(10 16 28 / 0.4); }
-.dlg-form { display: grid; gap: 8px; }
-.dlg-title { font-weight: 650; font-size: 15px; }
-.dlg-text { font-size: 13px; color: var(--muted); }
-.dlg-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
-.btn.danger { background: var(--err); }
-.btn.danger:hover { background: color-mix(in srgb, var(--err) 85%, #000); }
-.ghost.danger { color: var(--err); }
+/* Домены сайта (из правила): пояснение, строки высотой 40 (адрес 14 / 600, справа корзина), после
+   пунктира — про автосбор и убранные домены. */
+.sd-list { list-style: none; margin: 0; padding: 0; }
+.sd-list:empty { display: none; }
+.sd-item { display: flex; align-items: center; gap: 8px; height: 40px; }
+.sd-name { flex: 1; min-width: 0; font: 600 14px/18px var(--font-lcd); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sd-auto-row, .sd-removed-row { display: grid; gap: 6px; justify-items: start; }
+.sd-auto-row { border-top: 2px dotted var(--ink); padding-top: 10px; }
+.sd-removed { overflow-wrap: anywhere; }
 
-.toast {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 68px;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 12px;
-  border-radius: 10px;
-  background: var(--text);
-  color: var(--card);
-  font-size: 13px;
-  box-shadow: var(--shadow);
-  overflow-wrap: anywhere;
-}
-.toast[data-kind="error"] { background: var(--err); color: var(--toast-err-text); }
-/* Сообщение, которое само не исчезает (ошибка, причина, указание, кнопка): крестик «закрыть» и,
-   если есть, действие («Вернуть», «Открыть настройки»). Цвета — от самого сообщения. */
-.toast-text { flex: 1; min-width: 0; }
-.toast-action, .toast-close { appearance: none; flex: none; border: 0; background: none; color: inherit; cursor: pointer; border-radius: 6px; }
-.toast-action { min-height: 24px; padding: 2px 8px; font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
-.toast-close { display: grid; place-items: center; width: 24px; height: 24px; margin-right: -4px; padding: 0; }
-.toast-close .ic { width: 16px; height: 16px; }
-.toast-action:hover, .toast-close:hover { background: color-mix(in srgb, currentColor 16%, transparent); }
-.toast-action:focus-visible, .toast-close:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
-.action-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); font-size: 13px; }
+/* Домены этой вкладки: пояснение (или запрос разрешения, или «пусто» с кнопкой «Обновить вкладку»)
+   сверху, список с флажками прокручивается, внизу на месте — список действий на всю ширину и под
+   ним «Добавить правила» на всю ширину. Строка 36, нажимается вся. */
+.td-top { display: grid; gap: 8px; justify-items: start; }
+.td-list { list-style: none; }
+.td-list label { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 4px; cursor: pointer; }
+.td-list label:hover { background: var(--ink-hover); }
+.td-name { flex: 1; min-width: 0; font: 500 14px/18px var(--font-lcd); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.td-rule { flex: none; font: 500 13px/16px var(--font-lcd); color: var(--ink-muted); }
+.td-actions { display: grid; gap: 8px; border-top: 2px dotted var(--ink); padding-top: 10px; }
+.lcd .td-actions select { width: 100%; }
+.lcd .td-actions .btn { min-height: 32px; }
+
+/* Готовые наборы: название 15 / 18, пояснение, число доменов приглушённо, кнопки; между наборами пунктир. */
+.sets { list-style: none; margin: 0; padding: 0; display: grid; }
+.set { display: grid; gap: 4px; padding: 10px 0; border-top: 2px dotted var(--ink); }
+.set-name { font: 600 15px/18px var(--font-lcd); }
+.set-count { font: 500 13px/16px var(--font-lcd); color: var(--ink-muted); }
+.set .tools { margin-top: 4px; }

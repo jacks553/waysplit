@@ -60,6 +60,25 @@ export function splitFlag(name) {
   return { flag: any ? any[0] : '', name: text.trim() };
 }
 
+// countryCode — две буквы страны из флага-эмодзи в имени сервера: «🇳🇱 Амстердам» → «NL»; флага нет — ''.
+export function countryCode(name) {
+  const { flag } = splitFlag(name);
+  return flag ? [...flag].map((ch) => String.fromCharCode(ch.codePointAt(0) - 0x1f1e6 + 65)).join('') : '';
+}
+
+// shownName — имя сервера, как оно пишется в тексте, метках, выпадающих списках и сообщениях: без
+// флага, перед именем — код страны буквами («NL Амстердам»). Флага нет — имя как есть.
+export function shownName(name) {
+  const code = countryCode(name);
+  return code ? `${code} ${splitFlag(name).name}` : String(name ?? '').trim();
+}
+
+// noFlags — любой текст без флагов-эмодзи: каждый флаг заменён кодом страны. Для текстов, которые
+// приходят готовыми (сообщения фона, журнал событий): в них имя сервера стоит как записано.
+export function noFlags(text) {
+  return String(text ?? '').replace(/(\p{Regional_Indicator}{2})[ \t]*/gu, (_all, flag) => `${countryCode(flag)} `);
+}
+
 // PING_FRESH_MS — сколько пинг сервера считается свежим: моложе — окно расширения не меряет его
 // заново при каждом открытии (меньше запросов через сервер; число в статусе — не старше минуты).
 export const PING_FRESH_MS = 60_000;
@@ -91,12 +110,14 @@ export async function send(msg) {
 export const parseAction = (v) => (v === 'direct' ? { action: 'direct', serverId: null } : { action: 'proxy', serverId: v.slice(6) || null });
 
 // fillActions — варианты «Без VPN», «Через VPN — текущий сервер», «Через VPN — <сервер>».
-export function fillActions(select, servers, value) {
+// nameOf — как показать имя сервера: по умолчанию как записано (с флагом — классическое окно);
+// новое окно передаёт shownName: код страны буквами.
+export function fillActions(select, servers, value, nameOf = (name) => name) {
   const opt = (v, text) => Object.assign(document.createElement('option'), { value: v, textContent: text });
   select.replaceChildren(
     opt('direct', t('action.direct')),
     opt('proxy:', t('action.proxyCurrent')),
-    ...servers.map((s) => opt(`proxy:${s.id}`, t('action.proxyServer', { server: s.name }))),
+    ...servers.map((s) => opt(`proxy:${s.id}`, t('action.proxyServer', { server: nameOf(s.name) }))),
   );
   select.value = [...select.options].some((o) => o.value === value) ? value : 'proxy:';
 }

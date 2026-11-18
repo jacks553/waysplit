@@ -13,7 +13,7 @@ import (
 	"waysplit/host/internal/singbox"
 )
 
-const version = "1.2.1"
+const version = "1.3.0"
 
 const usage = `waysplit-host %s — компаньон расширения Waysplit.
 

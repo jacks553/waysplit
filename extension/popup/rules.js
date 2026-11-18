@@ -5,11 +5,11 @@
 // «+N доменов сайта»: домены, привязанные к правилу (lib/sitedomains.js). «Готовые наборы»,
 // импорт, экспорт и «Правила работают, когда VPN выключен» — в меню «⋯» вкладки.
 
-import { parseAction, send, splitFlag } from '../lib/format.js';
+import { parseAction, send, shownName, splitFlag } from '../lib/format.js';
 import { has, t } from '../lib/i18n.js';
 import { toUnicode } from '../lib/domains.js';
 import { exportRules } from '../lib/rules.js';
-import { $, el, faviconEl, flagEl, icon, openMenu, setIcon, toast } from './ui.js';
+import { $, el, icon, openMenu, setIcon, toast } from './ui.js';
 import { S, closeScreen, defineTab, openScreen, serverById, vpnOn } from './state.js';
 import { openPicker } from './picker.js';
 import { openFull } from './full.js';
@@ -21,7 +21,7 @@ let sets = null;
 function fillRuleActions(select, value) {
   const opt = (v, text) => el('option', { value: v, textContent: text });
   select.replaceChildren(opt('direct', t('action.direct')), opt('proxy:', t('action.proxy')),
-    ...S.view.servers.map((s) => opt(`proxy:${s.id}`, s.name)));
+    ...S.view.servers.map((s) => opt(`proxy:${s.id}`, shownName(s.name))));
   select.value = [...select.options].some((o) => o.value === value) ? value : 'direct';
 }
 
@@ -74,12 +74,13 @@ function ruleItem(r) {
   const server = r.action === 'proxy' && r.serverId ? serverById(r.serverId) : null;
   if (r.action === 'direct') {
     target.classList.add('direct');
-    target.insertAdjacentHTML('beforeend', icon('direct'));
     target.append(el('span', { textContent: t('rules.label.direct') }));
     target.title = t('rules.target.direct');
   } else if (server) {
-    target.append(flagEl(server), el('span', { className: 'target-name', textContent: splitFlag(server.name).name }));
-    target.title = t('rules.target.server', { server: server.name });
+    // Свой сервер: код страны и имя, например «DE Франкфурт» (у сервера без флага — только имя).
+    target.classList.add('server');
+    target.append(el('span', { className: 'target-name', textContent: shownName(server.name) }));
+    target.title = t('rules.target.server', { server: shownName(server.name) });
   } else {
     target.classList.add('vpn');
     target.append(el('span', { textContent: 'VPN' }));
@@ -96,7 +97,7 @@ function ruleItem(r) {
   more.setAttribute('aria-label', t('rules.actions.aria', { domain: shown }));
   more.setAttribute('aria-haspopup', 'menu');
   setIcon(more, 'more');
-  li.append(faviconEl(r.domain), name, target, del, more);
+  li.append(name, target, del, more);
   return li;
 }
 
@@ -123,7 +124,7 @@ function openSiteDomains(ruleId) {
     build(sc) {
       sc.how = el('p', { className: 'hint' });
       sc.auto = el('p', { className: 'hint sd-auto' });
-      sc.allow = el('button', { type: 'button', className: 'btn btn-small', textContent: t('common.allow'), hidden: true });
+      sc.allow = el('button', { type: 'button', className: 'btn', textContent: t('common.allow'), hidden: true });
       sc.allow.addEventListener('click', async () => {
         toast(t(await requestPerm() ? 'sd.perm.granted' : 'sd.perm.denied'), 'keep');
       });
@@ -162,8 +163,8 @@ function openSiteDomains(ruleId) {
         const del = el('button', { type: 'button', className: 'icon-btn danger', title: t('sd.remove') });
         del.dataset.domain = d;
         del.setAttribute('aria-label', t('sd.remove.aria', { domain: shown }));
-        setIcon(del, 'close');
-        return el('li', { className: 'sd-item' }, faviconEl(d), el('span', { className: 'sd-name', textContent: shown, title: shown }), del);
+        setIcon(del, 'trash');
+        return el('li', { className: 'sd-item' }, el('span', { className: 'sd-name', textContent: shown, title: shown }), del);
       }));
       sc.empty.hidden = r.siteDomains.length > 0;
       sc.empty.textContent = t('sd.empty');
@@ -265,6 +266,7 @@ $('rulesMore').addEventListener('click', () => {
   ]);
 });
 setIcon($('rulesMore'), 'more');
+setIcon(document.querySelector('#ruleForm .plus'), 'plus');
 
 async function toggleWhenOff() {
   const value = !S.view.settings.rulesWhenOff;
@@ -338,9 +340,9 @@ async function openSets() {
             return b;
           };
           const buttons = set.action
-            ? [button(set.action, t(set.action === 'direct' ? 'sets.add.direct' : 'sets.add.proxy'), 'btn btn-small')]
-            : [button('direct', t('action.direct'), 'ghost'), button('proxy', t('action.proxy'), 'btn btn-small')];
-          const li = el('li', { className: 'card set' }, el('p', { className: 'set-name', textContent: setText(set, 'name') }),
+            ? [button(set.action, t(set.action === 'direct' ? 'sets.add.direct' : 'sets.add.proxy'), 'btn')]
+            : [button('direct', t('action.direct'), 'ghost'), button('proxy', t('action.proxy'), 'btn')];
+          const li = el('li', { className: 'set' }, el('p', { className: 'set-name', textContent: setText(set, 'name') }),
             el('p', { className: 'hint', textContent: setText(set, 'note') || set.domains.slice(0, 6).join(', ') }),
             el('p', { className: 'set-count', textContent: t('sets.count', { n: set.domains.length }) }),
             el('div', { className: 'tools' }, ...buttons));

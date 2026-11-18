@@ -17,109 +17,94 @@
 <body>
 <div class="app" id="app">
   <header class="top" id="top">
-    <img class="logo" src="../icons/icon48.png" alt="" width="24" height="24">
-    <span class="brand">Waysplit</span>
-    <button class="icon-btn lang-btn" id="langBtn" type="button"></button>
+    <!-- Кнопка оформления: значок и название — одна кнопка с меню «Вид окна» и «Тема» (lib/lookmenu.js). -->
+    <button class="look-btn" id="lookBtn" type="button" data-i18n-aria-label="settings.look.legend" data-i18n-title="settings.look.legend">
+      <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21v-7M12 14 6 7M12 14l6-7M6 11V7h4M18 11V7h-4"/></svg>
+      <span class="brand">Waysplit</span>
+      <span class="chev" aria-hidden="true"></span>
+    </button>
+    <button class="lang-btn" id="langBtn" type="button"></button>
     <button class="icon-btn" id="helpBtn" type="button" data-i18n-aria-label="top.help" aria-haspopup="menu" data-i18n-title="top.help"></button>
     <button class="icon-btn" id="expandBtn" type="button" data-i18n-aria-label="top.expand" data-i18n-title="top.expand"></button>
   </header>
 
-  <main class="content" id="content">
+  <main class="content lcd" id="content">
     <!-- Главная -->
     <section class="panel" id="panel-home" role="tabpanel" aria-labelledby="tab-home">
-      <div class="conflict" id="conflict" role="alert" hidden>
+      <button class="srv-line" id="serverRow" type="button" hidden>
+        <span id="srvBars"></span>
+        <span class="srv-name" id="srvName"></span>
+        <span class="srv-ms" id="srvMs"></span>
+        <span class="chev" aria-hidden="true"></span>
+      </button>
+
+      <section class="status-block">
+        <p class="status" id="status" aria-live="polite" data-i18n="home.lcd.off"></p>
+        <p class="detail" id="detail"></p>
+      </section>
+
+      <div class="lcd-alert" id="conflict" role="alert" hidden>
         <strong data-i18n="home.conflict.title"></strong>
         <span data-i18n="home.conflict.text"></span>
       </div>
-      <div class="conflict" id="webrtcWarn" role="alert" hidden>
+      <div class="lcd-alert" id="webrtcWarn" role="alert" hidden>
         <strong data-i18n="home.webrtc.title"></strong>
         <span data-i18n="home.webrtc.text"></span>
       </div>
 
-      <section class="power-block">
-        <button class="power" id="power" type="button" aria-pressed="false" data-state="off">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5v8"/><path d="M6.6 6.9a7.6 7.6 0 1 0 10.8 0"/></svg>
-        </button>
-        <p class="power-label" data-i18n="home.powerLabel"></p>
-        <p class="status" id="status" aria-live="polite" data-i18n="home.status.off"></p>
-        <p class="detail" id="detail"></p>
-      </section>
-
-      <div class="problem" id="problem" hidden>
+      <div class="lcd-alert" id="problem" hidden>
         <p class="problem-text" id="problemText"></p>
         <p class="hint" id="hint" hidden></p>
         <button class="link small-link" id="problemGo" type="button" hidden></button>
         <ol class="steps" id="steps" hidden></ol>
         <div class="download-row" id="downloadRow" hidden>
-          <a class="btn btn-small" id="download" href="#" target="_blank" rel="noopener" data-i18n="common.download"></a>
+          <a class="btn" id="download" href="#" target="_blank" rel="noopener" data-i18n="common.download"></a>
           <a class="release-link" id="releasePage" href="#" target="_blank" rel="noopener" data-i18n="home.releasePage"></a>
         </div>
       </div>
 
-      <button class="card row-card" id="serverRow" type="button" hidden>
-        <span class="flag" id="srvFlag"></span>
-        <span class="row-main">
-          <span class="row-label" id="srvLabel" data-i18n="home.server"></span>
-          <span class="row-name" id="srvName"></span>
-        </span>
-        <span id="srvBars"></span>
-        <span class="chev" aria-hidden="true"></span>
+      <button class="ru-row sep-top" id="ruSwitch" type="button" role="switch" aria-checked="false" data-i18n-title="ru.sub" hidden>
+        <span class="ru-title" data-i18n="ru.title"></span>
+        <span class="check-box" aria-hidden="true"></span>
       </button>
 
-      <button class="card ru-row" id="ruSwitch" type="button" role="switch" aria-checked="false" hidden>
-        <span class="switch" aria-hidden="true"></span>
-        <span class="ru-text">
-          <span class="ru-title" data-i18n="ru.title"></span>
-          <span class="ru-sub" data-i18n="ru.sub"></span>
-        </span>
-      </button>
+      <section class="perm-card lcd-alert" id="permHome" hidden></section>
 
-      <section class="card perm-card" id="permHome" hidden></section>
-
-      <section class="card site" id="site" hidden>
-        <span class="row-label" data-i18n="home.thisSite"></span>
-        <div class="reload" id="siteNew" role="status" hidden>
-          <span id="siteNewText" data-i18n="home.siteNew"></span>
-          <button class="btn btn-small" id="siteNewReload" type="button" data-i18n="common.reloadTab"></button>
-        </div>
-        <div class="site-main">
-          <span class="favicon" id="siteIcon" aria-hidden="true"></span>
+      <section class="site sep-top" id="site" hidden>
+        <div class="site-top">
+          <div class="site-head">
+            <span class="site-label" data-i18n="home.thisSite"></span>
+            <button class="link tab-link" id="tdButton" type="button"><span data-i18n="home.tabDomains"></span><span class="chev" aria-hidden="true"></span></button>
+          </div>
           <select class="site-domain" id="siteDomain" data-i18n-aria-label="home.siteDomain.aria"></select>
         </div>
-        <p class="site-why" id="siteWhy"></p>
-        <div class="site-warn" id="siteWarn" hidden>
-          <span id="siteWarnText"></span>
-          <button class="btn btn-small" id="siteWarnFix" type="button" data-i18n="home.warn.enableRules"></button>
+        <div class="lcd-alert" id="siteNew" role="status" hidden>
+          <span id="siteNewText" data-i18n="home.siteNew"></span>
+          <button class="btn" id="siteNewReload" type="button" data-i18n="common.reloadTab"></button>
         </div>
         <div class="site-controls" id="siteControls">
-          <button class="switch-row" id="siteSwitch" type="button" role="switch" aria-checked="false">
-            <span class="switch" aria-hidden="true"></span>
-            <span id="siteSwitchText" data-i18n="action.direct"></span>
-          </button>
-          <button class="flag-btn" id="siteServer" type="button" data-i18n-aria-label="home.siteServer" data-i18n-title="home.siteServer">
-            <span class="flag" id="siteFlag"></span>
-            <span class="chev small" aria-hidden="true"></span>
+          <button class="seg" id="siteVpn" type="button" aria-pressed="false" data-i18n="action.proxy"></button>
+          <button class="seg" id="siteDirect" type="button" aria-pressed="false" data-i18n="action.direct"></button>
+          <button class="code-btn" id="siteServer" type="button" data-i18n-aria-label="home.siteServer" data-i18n-title="home.siteServer">
+            <span class="site-code" id="siteFlag"></span>
+            <span class="chev" aria-hidden="true"></span>
           </button>
         </div>
-        <div class="site-links">
-          <button class="link small-link" id="ruleRemove" type="button" hidden data-i18n="home.ruleRemove"></button>
-          <button class="link small-link" id="tdButton" type="button" aria-expanded="false" data-i18n="home.tabDomains"></button>
+        <div class="lcd-alert" id="siteWarn" hidden>
+          <span id="siteWarnText"></span>
+          <button class="btn" id="siteWarnFix" type="button" data-i18n="home.warn.enableRules"></button>
         </div>
-        <div class="td" id="td" hidden>
-          <p class="td-note" id="tdNote"></p>
-          <ul class="td-list" id="tdList"></ul>
-          <div class="td-actions" id="tdActions" hidden>
-            <select class="select-small" id="tdAction" data-i18n-aria-label="home.td.action.aria"></select>
-            <button class="btn btn-small" id="tdAdd" type="button" data-i18n="home.td.add"></button>
-          </div>
+        <div class="site-foot">
+          <p class="site-why" id="siteWhy"></p>
+          <button class="link" id="ruleRemove" type="button" hidden data-i18n="home.ruleRemove"></button>
         </div>
-        <div class="reload" id="reload" hidden>
+        <div class="lcd-note reload" id="reload" hidden>
           <span data-i18n="home.ruleSaved"></span>
-          <button class="btn btn-small" id="reloadTab" type="button" data-i18n="common.reloadTab"></button>
+          <button class="ghost" id="reloadTab" type="button" data-i18n="common.reloadTab"></button>
         </div>
       </section>
 
-      <form class="card add-card" id="homeAdd" hidden>
+      <form class="add-card sep-top" id="homeAdd" hidden>
         <label class="row-label" for="homeLinks" data-i18n="home.add.label"></label>
         <textarea id="homeLinks" rows="3" spellcheck="false" data-i18n-placeholder="common.linksPlaceholder"></textarea>
         <button class="btn" id="homeAddBtn" type="submit" data-i18n="common.add"></button>
@@ -131,16 +116,21 @@
     <section class="panel" id="panel-servers" role="tabpanel" aria-labelledby="tab-servers" hidden>
       <div class="panel-head">
         <h2><span data-i18n="servers.title"></span> <span class="count" id="srvCount"></span></h2>
-        <button class="btn btn-small" id="srvAdd" type="button" data-i18n="servers.add"></button>
+        <button class="btn" id="srvAdd" type="button" data-i18n="servers.add"></button>
       </div>
       <input class="search" id="srvSearch" type="search" data-i18n-placeholder="servers.search" autocomplete="off">
       <div class="tools">
         <button class="ghost" id="pingAll" type="button" data-i18n="servers.pingAll"></button>
         <button class="ghost" id="fastest" type="button" data-i18n="servers.fastest"></button>
       </div>
-      <div id="srvGroups"></div>
-      <p class="empty" id="srvEmpty" hidden data-i18n="servers.empty"></p>
-      <p class="hint" id="srvHint" data-i18n="servers.hint"></p>
+      <div class="panel-scroll">
+        <div id="srvGroups"></div>
+        <div class="empty-state" id="srvEmpty" hidden>
+          <p data-i18n="servers.empty"></p>
+          <button class="btn" id="srvAddEmpty" type="button" data-i18n="servers.add"></button>
+        </div>
+        <p class="hint foot-hint" id="srvHint" data-i18n="servers.hint"></p>
+      </div>
     </section>
 
     <!-- Правила -->
@@ -149,26 +139,30 @@
         <h2><span data-i18n="rules.title"></span> <span class="count" id="rulesCount"></span></h2>
         <button class="icon-btn" id="rulesMore" type="button" data-i18n-aria-label="rules.more.aria" aria-haspopup="menu" data-i18n-title="common.more"></button>
       </div>
-      <p class="rules-ru" id="rulesRu" hidden data-i18n="rules.ruOn"></p>
       <form class="rule-add" id="ruleForm">
         <textarea class="search rule-input" id="ruleInput" rows="1" spellcheck="false" data-i18n-placeholder="rules.input.placeholder" data-i18n-aria-label="rules.input.aria"></textarea>
         <select class="select-small" id="ruleAction" data-i18n-aria-label="rules.action.aria"></select>
-        <button class="btn plus" type="submit" data-i18n-aria-label="rules.addRule" data-i18n-title="rules.addRule">+</button>
+        <button class="btn btn-plus plus" type="submit" data-i18n-aria-label="rules.addRule" data-i18n-title="rules.addRule"></button>
       </form>
-      <p class="rules-off" id="rulesOff" hidden></p>
-      <section class="card perm-card" id="permRules" hidden></section>
-      <ul class="rules" id="rulesList"></ul>
+      <hr>
+      <div class="panel-scroll">
+        <p class="rules-ru lcd-note" id="rulesRu" hidden data-i18n="rules.ruOn"></p>
+        <p class="rules-off lcd-note" id="rulesOff" hidden></p>
+        <section class="perm-card lcd-alert" id="permRules" hidden></section>
+        <ul class="rules" id="rulesList"></ul>
       <div class="empty-box" id="rulesEmpty" hidden>
         <p data-i18n="rules.empty.p1"><b data-slot="title" data-i18n="rules.empty.title"></b></p>
         <p data-i18n="rules.empty.p2"><code data-slot="domain">example.com</code></p>
       </div>
-      <p class="hint" id="rulesHint" data-i18n="rules.hint"></p>
+        <p class="hint foot-hint" id="rulesHint" data-i18n="rules.hint"></p>
+      </div>
     </section>
 
     <!-- Настройки -->
     <section class="panel" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
       <div class="panel-head"><h2 data-i18n="tabs.settings"></h2></div>
 
+      <div class="panel-scroll">
       <fieldset class="group">
         <legend data-i18n="settings.onFailure.legend"></legend>
         <label class="check"><input type="radio" name="onFailure" value="block">
@@ -190,9 +184,9 @@
         <label class="check"><input type="checkbox" id="autoSiteDomains">
           <span class="opt"><span class="opt-name" data-i18n="settings.autoSite"></span>
             <span class="opt-note" data-i18n="settings.autoSite.note"></span></span></label>
-        <div class="site-warn" id="autoSitePerm" hidden>
+        <div class="lcd-alert" id="autoSitePerm" hidden>
           <span data-i18n="settings.autoSite.perm"></span>
-          <button class="btn btn-small" id="autoSitePermBtn" type="button" data-i18n="common.allow"></button>
+          <button class="btn" id="autoSitePermBtn" type="button" data-i18n="common.allow"></button>
         </div>
       </fieldset>
 
@@ -233,8 +227,14 @@
 
       <fieldset class="group">
         <legend data-i18n="settings.look.legend"></legend>
+        <label class="field"><span data-i18n="settings.design"></span>
+          <select class="select-small" id="design">
+            <option value="lcd" data-i18n="settings.design.lcd"></option>
+            <option value="classic" data-i18n="settings.design.classic"></option>
+          </select></label>
+        <!-- Тема нового окна — своя настройка (themeLcd), отдельная от темы классического окна. -->
         <label class="field"><span data-i18n="settings.theme"></span>
-          <select class="select-small" id="theme">
+          <select class="select-small" id="themeLcd">
             <option value="system" data-i18n="settings.theme.system"></option>
             <option value="light" data-i18n="settings.theme.light"></option>
             <option value="dark" data-i18n="settings.theme.dark"></option>
@@ -253,15 +253,25 @@
         </div>
       </fieldset>
 
-      <div class="card list-card">
+      <div class="list-card">
         <button class="list-row" id="openDiag" type="button"><span data-i18n="settings.diag"></span><span class="chev" aria-hidden="true"></span></button>
         <a class="list-row" id="helpLink" target="_blank" rel="noopener"><span data-i18n="top.help"></span><span class="ext" aria-hidden="true"></span></a>
         <a class="list-row" id="issuesLink" target="_blank" rel="noopener"><span data-i18n="top.report"></span><span class="ext" aria-hidden="true"></span></a>
       </div>
       <p class="versions" id="versions"></p>
       <p class="versions" id="hostLang" hidden><a id="hostLangLink" target="_blank" rel="noopener"></a></p>
+      </div>
     </section>
   </main>
+
+  <!-- Зона клавиши питания: под экраном, только на «Главной». Слева лампочка с подписью. -->
+  <div class="power-zone" id="powerZone" data-led="off">
+    <div class="led-box"><span class="led" aria-hidden="true"></span><span class="led-label" id="ledLabel"></span></div>
+    <button class="power" id="power" type="button" aria-pressed="false" data-state="off">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v9"/><path d="M6.3 6.8a8 8 0 1 0 11.4 0"/></svg>
+    </button>
+    <div class="led-box" aria-hidden="true"></div>
+  </div>
 
   <div class="screens" id="screens"></div>
 
@@ -277,7 +287,7 @@
 
 <div class="pop" id="pop" popover="auto" role="menu"></div>
 <dialog class="dlg" id="dlg">
-  <form method="dialog" class="dlg-form">
+  <form method="dialog" class="dlg-form lcd">
     <p class="dlg-title" id="dlgTitle"></p>
     <p class="dlg-text" id="dlgText"></p>
     <input class="search" id="dlgInput" type="text" maxlength="100" hidden>

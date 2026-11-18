@@ -1,15 +1,17 @@
 // «Начало работы» (SPEC 3.6): три шага — компаньон, ссылка, включение. Шаг отмечается, когда сделан.
 
-import { addSummary, send } from '../lib/format.js';
+import { addSummary, noFlags, send } from '../lib/format.js';
 import { normalize } from '../lib/storage.js';
 import { applyTheme } from '../lib/theme.js';
+import { designOf, pageUrl } from '../lib/design.js';
 import { hostText } from '../lib/hostmsg.js';
 import { startPage, t, usePageLanguage } from '../lib/i18n.js';
 import { initMenu } from '../popup/ui.js';
 import { initLangButton } from '../popup/langbtn.js';
 import { DOWNLOAD_URL, DOWNLOAD_ZIP_URL, MIN_HOST_VERSION, installSteps, olderThan, outdatedMessage } from '../lib/companion.js';
 
-applyTheme();
+// Тема — та же, что у нового окна (настройка themeLcd); пока она не прочитана, страница не показывается.
+applyTheme('themeLcd').finally(() => document.documentElement.classList.add('ready'));
 startPage(); // надписи разметки — сразу; язык из настроек уточняется в render()
 const $ = (id) => document.getElementById(id);
 
@@ -26,6 +28,14 @@ function done(step, yes) {
   $(step).dataset.done = String(yes);
 }
 
+// say — строка состояния шага. Беда (kind 'error') — предупреждение в рамке, остальное — строкой.
+function say(id, text, kind = '') {
+  const node = $(id);
+  node.textContent = text;
+  node.dataset.kind = kind;
+  node.classList.toggle('lcd-alert', kind === 'error');
+}
+
 // hostResp — последний ответ компаньона на «hello»: по нему строка состояния собирается заново,
 // когда меняется язык.
 let hostResp;
@@ -39,20 +49,16 @@ function renderHost() {
   const ok = !!r && !r.singboxError && !outdated;
   done('step1', ok);
   $('howto').hidden = ok; // установщик и ставит, и обновляет компаньон вместе с ядрами
-  if (ok) {
-    $('hostState').textContent = t('welcome.host.ok', { host: r.hostVersion, singbox: r.singboxVersion });
-    $('hostState').dataset.kind = 'ok';
-  } else {
-    $('hostState').textContent = outdated ? t('welcome.host.outdated', { message: outdatedMessage(r.hostVersion) })
-      : r ? hostText(r.singboxError, r.singboxError.message) : resp?.error?.message || t('welcome.host.down');
-    $('hostState').dataset.kind = 'error';
+  if (ok) say('hostState', t('welcome.host.ok', { host: r.hostVersion, singbox: r.singboxVersion }), 'ok');
+  else {
+    say('hostState', outdated ? t('welcome.host.outdated', { message: outdatedMessage(r.hostVersion) })
+      : r ? hostText(r.singboxError, r.singboxError.message) : resp?.error?.message || t('welcome.host.down'), 'error');
   }
 }
 
 async function checkHost() {
   hostResp = undefined;
-  $('hostState').textContent = t('welcome.checking');
-  $('hostState').dataset.kind = '';
+  say('hostState', t('welcome.checking'));
   hostResp = await send({ type: 'hello' });
   renderHost();
 }
@@ -70,11 +76,12 @@ async function render() {
   done('step2', st.servers.length > 0);
   done('step3', st.enabled && status?.state === 'on');
   $('ruDirect').checked = st.settings.ruDirect;
+  $('openFull').href = pageUrl(designOf(st.settings), '?full#rules'); // окно на всю вкладку — в выбранном оформлении
   $('enable').disabled = !st.servers.length;
   $('enable').textContent = t(st.enabled ? 'home.power.turnOff' : 'home.power.turnOn');
-  $('vpnState').textContent = !st.servers.length ? t('home.power.needServer')
-    : st.enabled ? (status?.state === 'on' ? t('welcome.vpn.on') : status?.state === 'error' ? t('welcome.vpn.error', { error: status.message }) : t('home.status.connecting')) : t('home.status.off');
-  $('vpnState').dataset.kind = status?.state === 'on' && st.enabled ? 'ok' : status?.state === 'error' && st.enabled ? 'error' : '';
+  say('vpnState', !st.servers.length ? t('home.power.needServer')
+    : st.enabled ? (status?.state === 'on' ? t('welcome.vpn.on') : status?.state === 'error' ? noFlags(t('welcome.vpn.error', { error: status.message })) : t('home.status.connecting')) : t('home.status.off'),
+  status?.state === 'on' && st.enabled ? 'ok' : status?.state === 'error' && st.enabled ? 'error' : '');
 }
 
 $('recheck').addEventListener('click', checkHost);
@@ -88,7 +95,7 @@ $('addBtn').addEventListener('click', async () => {
   const resp = await send({ type: 'addLinks', text });
   $('addBtn').disabled = false;
   out.dataset.kind = resp?.ok ? '' : 'error';
-  out.textContent = resp?.ok ? addSummary(resp.result) : resp?.error?.message || t('common.failed');
+  out.textContent = noFlags(resp?.ok ? addSummary(resp.result) : resp?.error?.message || t('common.failed'));
   if (resp?.ok) $('links').value = '';
 });
 // «Российские сайты — без VPN» — та же настройка, что переключатель на «Главной» окна расширения.

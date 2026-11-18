@@ -1,29 +1,32 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-light="on">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title data-i18n="welcome.title">Waysplit</title>
   <link rel="icon" href="../icons/icon32.png">
   <link rel="stylesheet" href="../lib/common.css">
   <link rel="stylesheet" href="welcome.css">
   <script type="module" src="welcome.js"></script>
 </head>
-<!-- Надписей в разметке нет: data-i18n="ключ" — текст элемента, сами тексты — в словарях
+<!-- «Начало работы»: тот же телефон, что окно расширения, только широкий (design/lcd/STYLE.md). На
+     корпусе — шапка и нижняя строка, шаги — на экране; подсветка экрана горит всегда (data-light).
+     Надписей в разметке нет: data-i18n="ключ" — текст элемента, сами тексты — в словарях
      lib/i18n/ (их подставляет lib/i18n.js). Вложенный элемент с data-slot="имя" остаётся в тексте
      на месте {имя}. -->
 <body>
-  <main class="wrap">
+  <main class="phone">
     <header class="hero">
-      <img src="../icons/icon128.png" alt="" width="80" height="80">
-      <div>
+      <img src="../icons/icon128.png" alt="" width="48" height="48">
+      <div class="hero-text">
         <h1 data-i18n="welcome.title"></h1>
         <p class="name-note" data-i18n="welcome.nameNote"></p>
-        <p data-i18n="welcome.intro"></p>
+        <p class="intro" data-i18n="welcome.intro"></p>
       </div>
       <button class="lang-btn" id="langBtn" type="button"></button>
     </header>
 
-    <ol class="steps">
+    <ol class="steps lcd">
       <li class="step" id="step1" data-done="false">
         <div class="mark" aria-hidden="true">1</div>
         <div class="body">
@@ -52,8 +55,9 @@
             <button class="btn" id="addBtn" type="button" data-i18n="common.add"></button>
             <p class="add-result" id="addResult" hidden></p>
           </div>
-          <label class="option"><input type="checkbox" id="ruDirect">
-            <span><b data-i18n="ru.title"></b><span class="option-sub" data-i18n="ru.sub"></span></span></label>
+          <label class="check"><input type="checkbox" id="ruDirect">
+            <span class="opt"><span class="opt-name" data-i18n="ru.title"></span>
+              <span class="opt-note" data-i18n="ru.sub"></span></span></label>
         </div>
       </li>
 
@@ -70,7 +74,7 @@
       </li>
     </ol>
 
-    <p class="foot" data-i18n="welcome.foot"><a href="../popup/popup.html?full#rules" data-slot="open" data-i18n="welcome.foot.open"></a></p>
+    <p class="foot" data-i18n="welcome.foot"><a id="openFull" href="../popup/popup.html?full#rules" data-slot="open" data-i18n="welcome.foot.open"></a></p>
   </main>
 <div class="pop" id="pop" popover="auto" role="menu"></div>
 </body>

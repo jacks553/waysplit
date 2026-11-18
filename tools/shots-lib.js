@@ -147,9 +147,11 @@ export class NativeHost {
 `;
 }
 
+// from — папка расширения (по умолчанию — extension этого проекта; другая — например, версия 1.2.1
+// для сравнения кадров классического окна).
 // prepareExtension — копия расширения в work/extension с подделкой компаньона; extra(ext) — свои
 // файлы в копию (например, сцена для магазина); lang — язык данных (ru или en). Вернёт путь к копии.
-export async function prepareExtension(work, extra = null, lang = 'ru') {
+export async function prepareExtension(work, extra = null, lang = 'ru', from = join(root, 'extension')) {
   const { ownLinks, subLinks, pings, text } = fixtures(lang);
   const parse = await companion({ cmd: 'parse_links', text: ownLinks.join('\n') }, work);
   const subParse = await companion({ cmd: 'parse_links', text: subLinks.join('\n') }, work);
@@ -168,7 +170,7 @@ export async function prepareExtension(work, extra = null, lang = 'ru') {
     pings,
   };
   const ext = join(work, 'extension');
-  cpSync(join(root, 'extension'), ext, { recursive: true });
+  cpSync(from, ext, { recursive: true });
   writeFileSync(join(ext, 'lib', 'native.js'), mockNative(fix));
   extra?.(ext);
   return ext;
@@ -255,6 +257,20 @@ export function startChrome(profile, { scrollbars = false, screen = '1920x1080' 
         for (let i = 0; i < 100 && (await p.eval('document.readyState')) !== 'complete'; i++) await sleep(100);
         await sleep(700); // данные из хранилища и шрифты
       },
+      // mouse — настоящий щелчок мышью в точке страницы; key — настоящее нажатие клавиши (Enter, Escape, стрелки).
+      mouse: async (x, y) => {
+        for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
+          await send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' ? 'none' : 'left', clickCount: type === 'mouseMoved' ? 0 : 1 }, sessionId);
+        }
+      },
+      key: async (key) => {
+        const code = { Enter: 13, Escape: 27, ArrowDown: 40, ArrowUp: 38, Tab: 9 }[key];
+        const base = { key, code: key, windowsVirtualKeyCode: code, nativeVirtualKeyCode: code };
+        await send('Input.dispatchKeyEvent', { type: key === 'Enter' ? 'keyDown' : 'rawKeyDown', ...base, ...(key === 'Enter' ? { text: '\r', unmodifiedText: '\r' } : {}) }, sessionId);
+        await send('Input.dispatchKeyEvent', { type: 'keyUp', ...base }, sessionId);
+      },
+      // focused — считать страницу активной (иначе у фоновой вкладки :focus-visible не срабатывает, клавиши не доходят).
+      focused: () => send('Emulation.setFocusEmulationEnabled', { enabled: true }, sessionId),
       // inject — свой код до скриптов страницы и её фреймов (при следующей загрузке).
       inject: (source) => send('Page.addScriptToEvaluateOnNewDocument', { source }, sessionId),
       // errors — ошибки скриптов страницы (и окна во фрейме сцены магазина).

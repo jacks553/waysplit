@@ -1,85 +1,49 @@
-/* Страница «Начало работы» — в стиле окна расширения (SPEC-POPUP.md): сине-бирюзовый, карточки,
-   та же тема (как в системе, светлая, тёмная). Общие цвета и кнопки — lib/common.css. */
+/* Страница «Начало работы»: тот же телефон, что окно расширения, только широкий
+   (design/lcd/STYLE.md). Корпус по центру страницы, на нём шапка, экран с тремя шагами и нижняя
+   строка. Цвета, шрифты и детали экрана (кнопки, поля, флажок, предупреждение) — lib/common.css. */
 
-body { background: var(--bg-full); }
-.wrap { max-width: 760px; margin: 0 auto; padding: 32px 24px 48px; display: grid; gap: 20px; }
+body { background: var(--page); padding: 32px; }
+.phone { max-width: 760px; margin: 0 auto; padding: 20px; border-radius: 24px; background: var(--body); display: grid; gap: 16px; }
 
-.hero {
-  display: flex;
-  gap: 20px;
-  align-items: center;
-  padding: 22px 26px;
-  border-radius: 18px;
-  background: var(--grad);
-  color: #fff;
-  box-shadow: var(--shadow);
-}
-.hero img { flex: none; filter: drop-shadow(0 6px 14px rgb(0 0 0 / 0.25)); }
-.hero h1 { margin: 0 0 6px; font-size: 24px; font-weight: 700; letter-spacing: -0.2px; }
-.hero p { color: rgb(255 255 255 / 0.92); }
-.hero .name-note { font-weight: 600; margin-bottom: 4px; }
-/* Кнопка языка: справа вверху шапки, того же размера, что кнопки в шапке окна. */
-.hero .lang-btn {
-  appearance: none;
-  flex: none;
-  align-self: flex-start;
-  margin-left: auto;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 1px solid rgb(255 255 255 / 0.55);
-  border-radius: 8px;
-  background: rgb(255 255 255 / 0.14);
-  color: #fff;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  line-height: 1;
-  cursor: pointer;
-}
-.hero .lang-btn:hover { background: rgb(255 255 255 / 0.26); }
-.hero .lang-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+/* Шапка на корпусе: значок расширения 48 (цветной — по нему узнают значок на панели Chrome),
+   заголовок 22 / 28, под ним две строки 14 / 20, справа сверху кнопка языка, как в окне. */
+.hero { display: flex; align-items: flex-start; gap: 14px; }
+.hero img { flex: none; display: block; }
+.hero-text { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.hero h1 { margin: 0 0 2px; font: 600 22px/28px var(--font-body); }
+.hero .name-note { font: 600 14px/20px var(--font-body); color: var(--body-text); }
+.hero .intro { font: 500 14px/20px var(--font-body); color: var(--body-muted); }
 
-.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
-.step {
-  display: grid;
-  grid-template-columns: 40px 1fr;
-  gap: 14px;
-  padding: 16px 18px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 14px;
+/* Экран: рамка 6, радиус 12, поля 20. Три шага один под другим, между ними пунктир. */
+.steps { list-style: none; margin: 0; padding: 20px; border: 6px solid var(--bezel); border-radius: 12px; display: grid; }
+.step { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 14px; }
+.step + .step { margin-top: 16px; border-top: 2px dotted var(--ink); padding-top: 16px; }
+/* Номер шага: квадрат 28 с рамкой 2. Шаг выполнен — квадрат залит, внутри галочка цветом экрана. */
+.mark { position: relative; width: 28px; height: 28px; border: 2px solid var(--ink); font: 600 15px/24px var(--font-lcd); text-align: center; }
+.step[data-done="true"] .mark { background: var(--ink); color: transparent; }
+.step[data-done="true"] .mark::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  background: var(--screen);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='4' stroke-linecap='butt' stroke-linejoin='miter'%3E%3Cpath d='M1.5 8.5l4.5 4.5 8.5-9.5'/%3E%3C/svg%3E") center / 16px 16px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%23000' stroke-width='4' stroke-linecap='butt' stroke-linejoin='miter'%3E%3Cpath d='M1.5 8.5l4.5 4.5 8.5-9.5'/%3E%3C/svg%3E") center / 16px 16px no-repeat;
 }
-.step[data-done="true"] { border-color: color-mix(in srgb, var(--brand-2) 55%, var(--line)); }
-.mark {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-.step[data-done="true"] .mark { background: var(--grad); color: #fff; font-size: 0; }
-.step[data-done="true"] .mark::after { content: "✓"; font-size: 18px; }
-.body { display: grid; gap: 8px; min-width: 0; }
-.body h2 { margin: 4px 0 0; font-size: 17px; }
-.body code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); border-radius: 4px; padding: 1px 5px; }
-.howto { display: grid; gap: 8px; }
+/* Справа — заголовок 22.22 / 26, текст 14 / 18; абзацы не шире 600. */
+.body { display: grid; gap: 10px; justify-items: start; min-width: 0; }
+.body h2 { margin: 1px 0 0; font: 700 22.22px/26px var(--font-lcd); }
+.body > p, .howto > p, .install, .body > textarea, .body > .check { max-width: 600px; }
+.body > textarea { justify-self: stretch; }
+/* Состояние («Компаньон на связи», «Подключено»): строка 14 / 18 / 600. Беда — предупреждение в рамке
+   (класс lcd-alert ставит welcome.js). */
+.state { font: 600 14px/18px var(--font-lcd); overflow-wrap: anywhere; }
+.state:empty { display: none; }
+.howto { display: grid; gap: 10px; justify-items: start; }
 .install { margin: 0; padding-left: 22px; display: grid; gap: 4px; }
-.howto a.btn { text-decoration: none; }
-.release-link { font-size: 13px; color: var(--accent); }
-.note { color: var(--muted); font-size: 13px; }
-.state { font-weight: 600; }
-.state[data-kind="ok"] { color: var(--status-ok); }
-.state[data-kind="error"] { color: var(--err); }
-.row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.ghost, .btn { justify-self: start; }
-.foot { color: var(--muted); font-size: 13px; }
-.foot a { color: var(--accent); font-weight: 600; }
-/* Галочка «Российские сайты — без VPN» на шаге со ссылкой — та же настройка, что переключатель в окне. */
-.option { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; cursor: pointer; }
-.option input { margin: 3px 0 0; accent-color: var(--accent); flex: none; }
-.option-sub { display: block; color: var(--muted); font-size: 13px; }
+.release-link { font: 600 13px/18px var(--font-lcd); }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; max-width: 100%; }
+.row .lcd-alert { flex: 1 1 100%; max-width: 600px; }
+
+/* Нижняя строка на корпусе под экраном. */
+.foot { margin: 0 4px; font: 500 13px/18px var(--font-body); color: var(--body-muted); }
+.foot a { color: var(--body-text); font-weight: 600; text-underline-offset: 2px; }

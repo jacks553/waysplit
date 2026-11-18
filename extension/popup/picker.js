@@ -2,11 +2,11 @@
 // Вверху — поиск; избранные сверху, потом группы по подпискам, свои ссылки — отдельно. При открытии
 // пинг видимых серверов обновляется сам, не чаще раза в минуту на сервер.
 
-import { PROTOCOLS, freshPing, hostPort, matches, pingBars, securityText, send, splitFlag } from '../lib/format.js';
+import { freshPing, hostPort, matches, pingBars, PROTOCOLS, securityText, send, shownName, splitFlag } from '../lib/format.js';
 import { t } from '../lib/i18n.js';
 import { ruleServer } from '../lib/rules.js';
 import { toUnicode } from '../lib/domains.js';
-import { barsEl, el, flagEl, icon, setIcon, toast } from './ui.js';
+import { barsEl, ccEl, el, setIcon, toast } from './ui.js';
 import { S, closeScreen, currentServer, isFav, openScreen, serverById, vpnOn } from './state.js';
 
 // metaEl — вторая строка в строке сервера. Текст — в своём элементе: только так он обрезается
@@ -36,7 +36,7 @@ export function serverItem(s, { selected = false, full = false, more = false } =
   star.setAttribute('aria-pressed', String(fav));
   star.setAttribute('aria-label', t('fav.aria', { name: s.name }));
   setIcon(star, 'star');
-  li.append(flagEl(s), el('span', { className: 'srv-main' },
+  li.append(ccEl(s), el('span', { className: 'srv-main' },
     el('span', { className: 'srv-name', textContent: splitFlag(s.name).name, title: s.name }), meta), barsEl(s), star);
   if (more) {
     const b = el('button', { type: 'button', className: 'icon-btn more', title: t('common.actions') });
@@ -165,7 +165,7 @@ export function openPicker(mode) {
     if (mode.kind === 'rule') {
       const cur = currentServer();
       return [
-        { key: 'current', title: t('action.proxyCurrent'), sub: cur ? t('picker.current.now', { server: cur.name }) : t('picker.current.none') },
+        { key: 'current', title: t('action.proxyCurrent'), sub: cur ? t('picker.current.now', { server: shownName(cur.name) }) : t('picker.current.none') },
         { key: 'direct', title: t('action.direct'), sub: t('picker.direct.rule') },
       ];
     }
@@ -198,10 +198,11 @@ export function openPicker(mode) {
     title,
     actions: [pingBtn],
     className: 'picker',
+    fixed: true,
     build(sc) {
       const search = el('input', { className: 'search', type: 'search', placeholder: t('servers.search'), autocomplete: 'off' });
       search.setAttribute('aria-label', t('picker.search.aria'));
-      const list = el('div', { className: 'pick-list' });
+      const list = el('div', { className: 'pick-list panel-scroll' });
       sc.body.append(el('div', { className: 'pick-search' }, search), list);
       search.addEventListener('input', () => {
         query = search.value;
@@ -233,7 +234,7 @@ export function openPicker(mode) {
           pick(e.target.dataset.key || e.target.dataset.id);
         }
       });
-      pinger = autoPing(sc.body);
+      pinger = autoPing(list);
       sc.onClose = () => pinger.stop();
       sc.list = list;
       sc.search = search;
@@ -255,31 +256,30 @@ export function openPicker(mode) {
           li.dataset.key = x.key;
           li.setAttribute('role', 'option');
           li.setAttribute('aria-selected', String(sel === x.key));
-          const ic = el('span', { className: 'flag special-ic' });
-          ic.innerHTML = icon(x.key === 'direct' ? 'direct' : 'rules');
-          li.append(ic, el('span', { className: 'srv-main' }, el('span', { className: 'srv-name', textContent: x.title }), metaEl(x.sub)));
+          // Особая строка — без кода страны, место под него оставлено: имена стоят ровно.
+          li.append(el('span', { className: 'cc none' }), el('span', { className: 'srv-main' }, el('span', { className: 'srv-name', textContent: x.title }), metaEl(x.sub)));
           return li;
         })));
       }
       for (const g of groupsOf(found)) {
-        parts.push(el('h3', { className: 'group-title', textContent: g.title }));
+        // Название — в своём элементе: длинное название подписки обрезается многоточием, пунктир остаётся.
+        parts.push(el('h3', { className: 'group-title' }, el('span', { className: 'group-name', textContent: g.title, title: g.title })));
         parts.push(el('ul', { className: 'srv-list' }, ...g.list.map((s) => serverItem(s, { selected: sel === s.id }))));
       }
       if (!found.length) parts.push(el('p', { className: 'empty', textContent: t(servers.length ? 'common.nothingFound' : 'picker.noServers') }));
-      const keep = sc.body.scrollTop;
+      const keep = sc.list.scrollTop;
       sc.list.replaceChildren(...parts);
-      sc.body.scrollTop = keep;
+      sc.list.scrollTop = keep;
       pinger.observe(sc.list);
     },
   });
   if (mode.kind === 'main') screen.search.focus({ preventScroll: true });
-  // К выбранному: прокрутить так, чтобы он был посередине, и коротко подсветить.
+  // К выбранному: прокрутить так, чтобы он был посередине списка.
   const chosenRow = screen.list.querySelector('li[aria-selected="true"]');
   if (chosenRow) {
     const r = chosenRow.getBoundingClientRect();
-    const b = screen.body.getBoundingClientRect();
-    screen.body.scrollTop += r.top - b.top - (b.height - r.height) / 2;
-    chosenRow.classList.add('flash');
+    const b = screen.list.getBoundingClientRect();
+    screen.list.scrollTop += r.top - b.top - (b.height - r.height) / 2;
   }
   return screen;
 }

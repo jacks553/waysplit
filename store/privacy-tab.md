@@ -50,10 +50,10 @@ While the VPN is on, sets chrome.privacy.network.webRTCIPHandlingPolicy to "disa
 
 **favicon**
 ```text
-Shows website icons next to the user's site rules and next to the active site in the popup, so the list is easier to read. Icons are read only from Chrome's own local favicon cache through the extension's _favicon URL: no network requests and no third-party icon services, so the user's list of rules never leaves the computer. If Chrome has no icon for a site, the first letter of the domain is shown instead.
+Shows website icons next to the user's site rules and next to the active site in the classic design of the popup, so the list is easier to read. The user chooses the design in the popup (the menu of the Waysplit button in the header, or the settings); the new default design (since 1.3.0) shows no site icons. Icons are read only from Chrome's own local favicon cache through the extension's _favicon URL: no network requests and no third-party icon services, so the user's list of rules never leaves the computer. If Chrome has no icon for a site, the first letter of the domain is shown instead.
 ```
 
-Перевод: значки сайтов у правил и у открытого сайта в окне — чтобы список легче читался. Значки берутся только из памяти самого Chrome (адрес `_favicon` расширения): никаких запросов в интернет и сторонних сервисов, список правил не уходит с компьютера. Нет значка — первая буква домена.
+Перевод: значки сайтов у правил и у открытого сайта в классическом виде окна — чтобы список легче читался. Вид окна человек выбирает в самом окне (меню кнопки Waysplit в шапке или настройки); новый вид (он стоит изначально с версии 1.3.0) значков сайтов не показывает. Значки берутся только из памяти самого Chrome (адрес `_favicon` расширения): никаких запросов в интернет и сторонних сервисов, список правил не уходит с компьютера. Нет значка — первая буква домена.
 
 **webRequest (необязательное)** — ИЗМЕНЕНО в 1.1.0
 ```text

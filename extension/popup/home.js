@@ -1,16 +1,16 @@
-// Вкладка «Главная»: большая кнопка VPN, статус, строка «Сервер», блок «Этот сайт»
-// (переключатель «через VPN / без VPN», сервер для сайта, «Домены этой вкладки»), ошибки и шаги
-// установки компаньона.
+// Вкладка «Главная» (вид — design/lcd/STYLE.md): на экране верхняя строка с сервером, крупный статус,
+// «Российские сайты без VPN», блок «Этот сайт» (кнопки «Через VPN» и «Без VPN», сервер для сайта,
+// «Домены этой вкладки»), ошибки и шаги установки компаньона; под экраном — клавиша питания с лампочкой.
 
-import { addSummary, fillActions, freshPing, parseAction, pingBars, pingReason, send, splitFlag } from '../lib/format.js';
+import { addSummary, countryCode, fillActions, freshPing, noFlags, parseAction, pingBars, pingReason, send, shownName, splitFlag } from '../lib/format.js';
 import { t } from '../lib/i18n.js';
 import { routeFor, routeIn, ruleServer, ruleTable } from '../lib/rules.js';
 import { siteOf } from '../lib/tabdomains.js';
 import { stillAttached } from '../lib/sitedomains.js';
 import { normalizeDomain, parents, toUnicode } from '../lib/domains.js';
 import { DOWNLOAD_URL, DOWNLOAD_ZIP_URL, MIN_HOST_VERSION, docsUrl, installSteps, olderThan, outdatedMessage } from '../lib/companion.js';
-import { $, barsEl, el, faviconEl, flagEl, icon, setIcon, toast } from './ui.js';
-import { S, currentServer, defineTab, showTab, vpnOn } from './state.js';
+import { $, barsEl, el, setIcon, toast } from './ui.js';
+import { S, currentServer, defineTab, openScreen, showTab, updateLight, vpnOn } from './state.js';
 import { openPicker } from './picker.js';
 import { openDiag } from './diag.js';
 import { SITE_PERMS, checkPerm, renderPermCards } from './siteperm.js';
@@ -34,12 +34,32 @@ const HINTS = {
   CORE_STOPPED: LOG_HINT,
 };
 
+// ERR_NAMES — крупная надпись при ошибке: короткое название беды (design/lcd/STYLE.md, «Состояния
+// Главной») — ключ словаря home.err.<имя> по коду ошибки. Кода нет в таблице — слово «Ошибка».
+// Причина и что делать — строкой ниже и в рамке под ней.
+const ERR_NAMES = {
+  HOST_NOT_FOUND: 'noCompanion', HOST_FORBIDDEN: 'denied', HOST_START_FAILED: 'hostStart', HOST_OUTDATED: 'outdated',
+  HOST_EXITED: 'lost', HOST_DISCONNECTED: 'lost', HOST_CLOSED: 'lost', HOST_PROTOCOL: 'lost', HOST_NAME: 'lost', HOST_ERROR: 'lost',
+  TIMEOUT: 'timeout', INTERNAL: 'internal', PROXY_FAILED: 'proxy', CORE_STOPPED: 'coreStopped', SERVER_INVALID: 'server',
+  SINGBOX_NOT_FOUND: 'noCore', XRAY_NOT_FOUND: 'noCore', SINGBOX_FAILED: 'coreFailed', XRAY_FAILED: 'coreFailed', START_FAILED: 'coreFailed',
+  START_TIMEOUT: 'slowStart', CONFIG_INVALID: 'config', PORT_BUSY: 'port',
+};
+const errorName = (code) => (ERR_NAMES[code] ? t(`home.err.${ERR_NAMES[code]}`) : t('home.status.error'));
+
 let ping = { serverId: null, ms: null, error: '', reason: '' }; // быстрый пинг текущего сервера
 let busy = false;
 // hostProblem — компаньон не установлен или устарел, а серверов ещё нет (кнопка VPN неактивна,
 // ошибки состояния не будет): шаги установки — сразу (SPEC-STORE.md, 1.3).
 let hostProblem = null;
 let problemGo = null;
+
+// LED — лампочка у клавиши питания и её подпись (design/lcd/STYLE.md, «Состояния Главной»): зелёная —
+// VPN включён, мигает — подключение, жёлтая — работают только правила, красная — ошибка (и сервер
+// не отвечает), не горит — выключено. Состояние всегда продублировано надписью на экране.
+const LED = {
+  on: ['on', 'home.led.vpn'], connecting: ['blink', 'home.led.vpn'], rules: ['rules', 'home.led.rules'],
+  warn: ['error', 'home.led.error'], error: ['error', 'home.led.error'], off: ['off', 'home.led.vpn'], no_server: ['off', 'home.led.vpn'],
+};
 
 function render() {
   const view = S.view;
@@ -61,38 +81,57 @@ function render() {
   power.setAttribute('aria-label', t(view.enabled ? 'home.power.turnOff' : 'home.power.turnOn'));
   power.disabled = busy || (!server && !view.enabled);
   power.title = server || view.enabled ? '' : t('home.power.needServer');
+  // Беда — ошибка состояния или «компаньона нет» (он нужен и при выключенном VPN: без него ничего
+  // не работает): экран горит, лампочка красная, крупно — название беды.
+  const trouble = state === 'error' ? { code: st.code, message: st.message } : state === 'warn' ? null : hostProblem;
+  S.hostProblem = hostProblem;
+  updateLight();
+  const [led, ledLabel] = trouble ? LED.error : LED[state] || LED.off;
+  $('powerZone').dataset.led = led;
+  $('ledLabel').textContent = t(ledLabel);
 
-  const name = server?.name || '';
+  // На экране нет эмодзи: имя сервера — без флага.
+  const name = server ? splitFlag(server.name).name : '';
   const texts = {
-    off: [t('home.status.off'), t(server ? 'home.detail.off' : 'home.detail.offNoServer')],
+    off: [t('home.lcd.off'), t(server ? 'home.lcd.off.detail' : 'home.detail.offNoServer')],
     no_server: [t('home.status.no_server'), t('home.detail.no_server')],
-    connecting: [t('home.status.connecting'), name],
-    on: [ping.serverId === server?.id && ping.ms ? t('home.status.onPing', { server: name, ms: ping.ms }) : t('home.status.on', { server: name }), t('home.detail.on')],
-    warn: [t('home.status.warn'), warnDetail(name)],
-    error: [t('home.status.error'), st?.message || ''],
-    // Одна строка: на «Главной» мало места (две строки сдвигают блок «Этот сайт» за край окна).
-    rules: [t('home.status.rules'), t('home.detail.rules', { n: st?.viaVpn ?? 0 })],
+    connecting: [t('home.status.connecting'), server ? shownName(server.name) : ''],
+    on: [t('home.lcd.on'), t('home.lcd.on.detail')],
+    warn: [t('home.err.noAnswer'), warnDetail(server ? shownName(server.name) : '')],
+    error: [errorName(st?.code), st?.message || ''],
+    rules: [t('home.lcd.off'), t('home.lcd.rules.detail', { n: st?.viaVpn ?? 0 })],
   };
-  const [title, detail] = texts[state] || texts.off;
-  $('status').textContent = title;
-  $('status').dataset.state = state;
-  $('detail').textContent = state === 'error' ? '' : detail;
+  const [title, detail] = trouble && state !== 'error' ? [errorName(trouble.code), trouble.message || ''] : texts[state] || texts.off;
+  const status = $('status');
+  status.textContent = title;
+  status.dataset.state = state;
+  // Крупная надпись не помещается в строку — вторым крупным размером (22.22).
+  status.classList.remove('small');
+  status.classList.toggle('small', status.scrollWidth > status.clientWidth);
+  $('detail').textContent = noFlags(detail);
 
   $('conflict').hidden = !st?.conflict;
   // Защита WebRTC должна стоять, а ею управляет другое расширение.
   $('webrtcWarn').hidden = !(view.enabled && view.settings.webrtcProtection && (st?.webrtc === 'other' || st?.webrtc === 'blocked'));
-  if (state === 'error') showProblem(st.code, st.message);
-  else if (hostProblem) showProblem(hostProblem.code, hostProblem.message);
-  else $('problem').hidden = true;
+  if (trouble) {
+    // Причина уже написана строкой под статусом: в рамке ниже остаются подсказка, шаги и ссылки.
+    showProblem(trouble.code, trouble.message);
+    $('problemText').hidden = true;
+    $('problem').hidden = $('hint').hidden && $('problemGo').hidden && $('steps').hidden && $('downloadRow').hidden;
+  } else $('problem').hidden = true;
 
+  // Верхняя строка: сигнал, имя сервера, задержка (или «нет ответа»), уголок.
   $('serverRow').hidden = !server;
   if (server) {
-    $('srvFlag').replaceWith(Object.assign(flagEl(server), { id: 'srvFlag' }));
-    $('srvName').textContent = splitFlag(server.name).name;
-    $('srvName').title = server.name;
+    const bars = pingBars(server);
+    const ms = ping.serverId === server.id && ping.ms ? ping.ms : server.lastPingMs > 0 ? server.lastPingMs : 0;
     $('srvBars').replaceChildren(barsEl(server));
-    // Сервер не ответил на пинг — словами, а не только бледными полосками.
-    $('srvLabel').replaceChildren(t('home.server'), ...(pingBars(server).n === 0 ? [' · ', el('span', { className: 'srv-fail', textContent: t('common.noAnswer') })] : []));
+    $('srvName').textContent = name;
+    $('srvName').title = shownName(server.name);
+    // Сервер не ответил на пинг — словами, а не только погасшими столбиками.
+    $('srvMs').textContent = bars.n === 0 ? t('common.noAnswer') : ms ? t('fmt.ms', { ms }) : '';
+    $('srvMs').classList.toggle('fail', bars.n === 0);
+    $('serverRow').setAttribute('aria-label', `${t('home.server')}: ${name}, ${bars.title}`);
   }
   $('homeAdd').hidden = view.servers.length > 0;
   // «Российские сайты — без VPN» — настройка ruDirect (та же галочка — в «Настройках»).
@@ -115,6 +154,7 @@ function warnDetail(name) {
 
 function showProblem(code, message) {
   $('problemText').textContent = message;
+  $('problemText').hidden = false;
   const hint = HINTS[code] || {};
   $('hint').hidden = !hint.text;
   $('hint').textContent = hint.text ? t(hint.text) : '';
@@ -148,17 +188,6 @@ function fillDomains() {
   $('siteDomain').disabled = options.length < 2;
 }
 
-// siteIcon — значок сайта рядом с доменом: сам значок — сайта целиком (такой есть в памяти Chrome),
-// а буква, пока значка нет, — первая буква показанного домена (bank.example.net → «B»).
-function siteIcon(domain) {
-  const base = normalizeDomain(S.site.host).domain || S.site.host;
-  const label = domain || base;
-  if ($('siteIcon').dataset.label === label) return;
-  const node = Object.assign(faviconEl(siteOf(base), label), { id: 'siteIcon' });
-  node.dataset.label = label;
-  $('siteIcon').replaceWith(node);
-}
-
 const exactRule = (domain) => S.view.rules.find((r) => r.domain === domain) || null;
 
 function renderSite() {
@@ -167,7 +196,6 @@ function renderSite() {
   if ($('site').hidden) return;
   if (!$('siteDomain').options.length) fillDomains();
   const domain = $('siteDomain').value;
-  siteIcon(domain);
   const r = routeFor(view, S.site.host, S.ruDomains);
   const exact = exactRule(domain);
   const local = r.kind === 'local';
@@ -186,7 +214,7 @@ function renderSite() {
     // via — сайт идёт по правилу другого сайта: его домен привязан к тому правилу («домен сайта»).
     const parts = [
       r.via ? t('home.why.ruleVia', { domain: toUnicode(r.rule.domain), via: toUnicode(r.via) }) : t('home.why.rule', { domain: toUnicode(r.rule.domain) }),
-      r.kind === 'vpn' ? t('home.why.throughServer', { server: r.server.name }) : t('common.withoutVpn'),
+      r.kind === 'vpn' ? t('home.why.throughServer', { server: splitFlag(r.server.name).name }) : t('common.withoutVpn'),
     ];
     if (!r.via && r.rule.siteDomains.length) parts.push(t('n.siteDomains', { n: r.rule.siteDomains.length }));
     why = parts.join(' · ');
@@ -210,20 +238,18 @@ function renderSite() {
 
   $('siteControls').hidden = local || !domain;
   const viaVpn = r.kind === 'vpn';
-  $('siteSwitch').setAttribute('aria-checked', String(viaVpn));
-  $('siteSwitchText').textContent = t(viaVpn ? 'action.proxy' : 'action.direct');
-  // Кнопка справа — куда идёт сайт: флаг сервера или «без VPN». Правило сейчас не действует —
-  // флаг сервера из правила, приглушённо.
+  // Выбор из двух: нажата та кнопка, как сайт идёт сейчас.
+  $('siteVpn').setAttribute('aria-pressed', String(viaVpn));
+  $('siteDirect').setAttribute('aria-pressed', String(!viaVpn));
+  // Кнопка справа — сервер для сайта: код страны (у сервера без флага — первая буква имени), без
+  // сервера — прочерк. Правило сейчас не действует — код сервера из правила, приглушённо.
   const idle = viaVpn ? null : sleeping || (off?.action === 'proxy' ? off : null);
   const target = viaVpn ? r.server : idle ? ruleServer(idle, view.servers, currentServer()) : null;
   const btn = $('siteServer');
-  const shown = target ? flagEl(target) : el('span', { className: 'flag direct-ic' });
-  if (!target) shown.innerHTML = icon('direct');
-  shown.id = 'siteFlag';
-  $('siteFlag').replaceWith(shown);
+  $('siteFlag').textContent = target ? countryCode(target.name) || (splitFlag(target.name).name.trim()[0] || '?').toUpperCase() : '—';
   btn.classList.toggle('dim', !!(idle && target));
-  btn.title = idle && target ? t('home.siteServer.idle', { server: target.name })
-    : target ? t('home.siteServer.named', { server: target.name }) : t('home.siteServer.direct');
+  btn.title = idle && target ? t('home.siteServer.idle', { server: shownName(target.name) })
+    : target ? t('home.siteServer.named', { server: shownName(target.name) }) : t('home.siteServer.direct');
   $('ruleRemove').hidden = !exact;
 
   // Автосбор привязал к правилу этого сайта новые домены — уже сделанные запросы к ним прошли
@@ -263,10 +289,12 @@ $('ruSwitch').addEventListener('click', async () => {
   else toast(t(value ? 'ru.toast.on' : 'ru.toast.off'), 'keep');
 });
 
-$('siteSwitch').addEventListener('click', () => {
-  const viaVpn = $('siteSwitch').getAttribute('aria-checked') === 'true';
-  setSiteRule(viaVpn ? 'direct' : 'proxy');
-});
+// «Через VPN» и «Без VPN»: нажатие на ненажатую кнопку создаёт или меняет правило для домена.
+for (const [id, action] of [['siteVpn', 'proxy'], ['siteDirect', 'direct']]) {
+  $(id).addEventListener('click', () => {
+    if ($(id).getAttribute('aria-pressed') !== 'true') setSiteRule(action);
+  });
+}
 $('siteServer').addEventListener('click', () => {
   openPicker({ kind: 'site', domain: $('siteDomain').value, onDone: () => { $('reload').hidden = false; } });
 });
@@ -282,70 +310,130 @@ $('siteDomain').addEventListener('change', renderSite);
 // Разрешение (наблюдать за запросами и видеть адреса сайтов) Chrome спрашивает при первом нажатии.
 const TD_PERMS = SITE_PERMS; // то же разрешение, что у автосбора «доменов сайта»
 
-$('tdButton').addEventListener('click', async () => {
-  const open = $('td').hidden;
-  $('td').hidden = !open;
-  $('tdButton').setAttribute('aria-expanded', String(open));
-  if (!open) return;
-  $('tdList').replaceChildren();
-  $('tdActions').hidden = true;
-  let granted = await chrome.permissions.contains(TD_PERMS);
-  if (!granted) {
-    $('tdNote').textContent = t('home.td.needPerm');
-    try {
-      granted = await chrome.permissions.request(TD_PERMS); // окно может закрыться, пока Chrome спрашивает
-    } catch {
-      granted = false;
-    }
-    checkPerm();
-    $('tdNote').textContent = t(granted ? 'home.td.granted' : 'home.td.denied');
-    if (granted) $('reload').hidden = false;
-    return;
+// «Домены этой вкладки» — вложенный экран (design/lcd/STYLE.md): пояснение, список с флажками,
+// внизу — выбор действия и «Добавить правила»; запрос разрешения и «пусто» — на нём же.
+function openTabDomains() {
+  openScreen({
+    title: t('home.tabDomains'),
+    sub: toUnicode(normalizeDomain(S.site.host).domain || S.site.host),
+    className: 'td-screen',
+    fixed: true,
+    build(sc) {
+      const note = el('p', { id: 'tdNote', className: 'hint' });
+      const allow = el('button', { id: 'tdAllow', type: 'button', className: 'btn', textContent: t('common.allow'), hidden: true });
+      // Пусто: контурная кнопка обновляет вкладку сайта и сама перечитывает список.
+      const reload = el('button', { id: 'tdReload', type: 'button', className: 'ghost', textContent: t('common.reloadTab'), hidden: true });
+      const list = el('ul', { id: 'tdList', className: 'td-list panel-scroll' });
+      const action = el('select', { id: 'tdAction' });
+      action.setAttribute('aria-label', t('home.td.action.aria'));
+      const add = el('button', { id: 'tdAdd', type: 'button', className: 'btn', textContent: t('home.td.add') });
+      sc.body.append(el('div', { className: 'td-top' }, note, allow, reload), list, el('div', { id: 'tdActions', className: 'td-actions', hidden: true }, action, add));
+      allow.addEventListener('click', askTabPerm);
+      reload.addEventListener('click', reloadForDomains);
+      add.addEventListener('click', addTabRules);
+    },
+  });
+}
+
+// tdSay — строка вверху экрана: пояснение или, пока разрешения нет, предупреждение с действием.
+function tdSay(text, alert = false) {
+  const note = $('tdNote');
+  if (!note) return; // экран закрыли
+  note.textContent = text;
+  note.parentElement.classList.toggle('lcd-alert', alert);
+}
+
+// askTabPerm — запрос разрешения видеть запросы вкладок (Chrome спрашивает по нажатию).
+async function askTabPerm() {
+  tdSay(t('home.td.needPerm'), true);
+  $('tdAllow').hidden = true;
+  let granted = false;
+  try {
+    granted = await chrome.permissions.request(TD_PERMS); // окно может закрыться, пока Chrome спрашивает
+  } catch {
+    granted = false;
   }
-  await renderTabDomains();
+  checkPerm();
+  if (!$('tdNote')) return; // экран закрыли
+  // Разрешение получено: запросы вкладки расширение увидит после её обновления — кнопка «Обновить
+  // вкладку». Отказали — кнопка «Разрешить» остаётся на экране.
+  tdSay(t(granted ? 'home.tdScreen.granted' : 'home.tdScreen.denied'), !granted);
+  $('tdAllow').hidden = granted;
+  $('tdReload').hidden = !granted;
+}
+
+$('tdButton').addEventListener('click', async () => {
+  openTabDomains();
+  if (await chrome.permissions.contains(TD_PERMS)) await renderTabDomains();
+  else await askTabPerm();
 });
 
 async function renderTabDomains() {
   const resp = await send({ type: 'tabDomains', tabId: S.site.tabId });
   const hosts = resp?.ok ? resp.result : [];
+  if (!$('tdNote')) return; // экран закрыли
   if (!hosts.length) {
-    $('tdNote').textContent = t('home.td.empty');
-    $('reload').hidden = false;
-    return;
+    tdSay(t('home.tdScreen.empty'));
+    $('tdReload').hidden = false;
+    $('tdList').replaceChildren();
+    $('tdActions').hidden = true;
+    return false;
   }
+  $('tdReload').hidden = true;
   const sites = new Map();
   for (const h of hosts) sites.set(siteOf(h), (sites.get(siteOf(h)) || 0) + 1);
   const own = siteOf(S.site.host);
   const list = [...sites.keys()].sort((a, b) => (a === own ? -1 : b === own ? 1 : a.localeCompare(b)));
-  $('tdNote').textContent = t('home.td.count', { n: list.length });
+  tdSay(t('home.td.count', { n: list.length }));
   const table = ruleTable(S.view.rules); // одна на весь список
   $('tdList').replaceChildren(...list.map((site) => {
     const box = el('input', { type: 'checkbox', value: site });
     const rule = routeIn(table, site)?.rule;
-    const label = el('label', {}, box, faviconEl(site),
+    const label = el('label', {}, box,
       el('span', { className: 'td-name', textContent: toUnicode(site), title: t('home.td.requests', { n: sites.get(site) }) }));
     if (rule) label.append(el('span', { className: 'td-rule', textContent: t(rule.action === 'direct' ? 'common.withoutVpn' : 'common.throughVpn') }));
     return el('li', {}, label);
   }));
-  fillActions($('tdAction'), S.view.servers, 'proxy:');
+  fillActions($('tdAction'), S.view.servers, 'proxy:', shownName);
   $('tdActions').hidden = false;
+  return true;
 }
 
-$('tdAdd').addEventListener('click', async () => {
+// reloadForDomains — «Обновить вкладку» на пустом экране: обновить вкладку сайта и перечитывать
+// список, пока он не соберётся (фон записывает домены через полсекунды после запросов вкладки).
+async function reloadForDomains() {
+  $('tdReload').disabled = true;
+  tdSay(t('home.tdScreen.reloading'));
+  try {
+    await chrome.tabs.reload(S.site.tabId);
+  } catch { /* вкладку закрыли — список останется пустым */ }
+  let found = false;
+  for (let i = 0; i < 12 && !found && $('tdNote'); i++) {
+    await new Promise((r) => setTimeout(r, 700));
+    if (!$('tdNote')) return; // экран закрыли
+    const resp = await send({ type: 'tabDomains', tabId: S.site.tabId });
+    found = resp?.ok && resp.result.length > 0;
+  }
+  if (!$('tdNote')) return;
+  $('tdReload').disabled = false;
+  await renderTabDomains();
+}
+
+async function addTabRules() {
   const domains = [...$('tdList').querySelectorAll('input:checked')].map((x) => x.value);
   if (!domains.length) {
-    $('tdNote').textContent = t('home.td.pickOne');
+    tdSay(t('home.td.pickOne'));
     return;
   }
   const resp = await send({ type: 'addRules', domains, ...parseAction($('tdAction').value) });
   if (!resp?.ok) {
-    $('tdNote').textContent = resp?.error?.message || t('common.failed');
+    tdSay(resp?.error?.message || t('common.failed'));
     return;
   }
   await renderTabDomains(); // обновить пометки «без VPN» / «через VPN»
-  $('tdNote').textContent = t('home.td.added', { added: resp.result.added, updated: resp.result.updated });
+  tdSay(t('home.td.added', { added: resp.result.added, updated: resp.result.updated }));
   $('reload').hidden = false;
-});
+}
 
 $('reloadTab').addEventListener('click', async () => {
   if (S.site) await chrome.tabs.reload(S.site.tabId);
@@ -385,6 +473,7 @@ $('power').addEventListener('click', async () => {
 $('serverRow').addEventListener('click', () => openPicker({ kind: 'main' }));
 setIcon(document.querySelector('#serverRow .chev'), 'chev');
 setIcon(document.querySelector('#siteServer .chev'), 'down');
+setIcon(document.querySelector('#tdButton .chev'), 'chev');
 
 // Серверов ещё нет — поле для ссылок прямо на главной.
 $('homeAdd').addEventListener('submit', async (e) => {

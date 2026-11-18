@@ -23,9 +23,10 @@ What it does
 • VLESS servers (including Reality, Vision and XHTTP) and Hysteria2, added by vless:// and hysteria2:// links or by a subscription from your provider.
 • Site rules: "always through VPN" (the current server or one you choose) and "always without VPN". A rule covers all subdomains, and you can set a whole domain zone.
 • Site domains: the domains a site loads its video, images and scripts from follow the site's rule. For example, on a video site both the page and the video itself go through VPN. The list is shown next to the rule, and you can remove any domain.
-• "Russian sites without VPN": a switch on the Home tab. When it is on, sites in the .ru, .рф and .su zones and Russian services on other domains open without VPN even when the VPN is on. Your own rules take priority.
+• "Russian sites without VPN": a checkbox on the Home tab. When it is checked, sites in the .ru, .рф and .su zones and Russian services on other domains open without VPN even when the VPN is on. Your own rules take priority.
 • Rules can work when the VPN is off: only the sites you chose go through VPN.
-• Everything is controlled from the extension popup, on the Home, Servers, Rules and Settings tabs. For the open site there is a "through VPN / without VPN" switch and a server picker right on the Home tab.
+• Everything is controlled from the extension popup, on the Home, Servers, Rules and Settings tabs. For the open site there are "Through VPN" and "Without VPN" buttons and a server picker right on the Home tab.
+• Two designs: the new one, styled as a push-button phone, and the classic one. The design and the theme are chosen in the menu that opens when you click the Waysplit name in the popup header.
 • One-click server selection, favorites, ping check, and picking the server with the lowest latency.
 • Leak protection: while the VPN is on, WebRTC does not reveal your real IP address. If the server is unavailable, the site will not open without VPN (or it will, if you set it so).
 • Subscriptions update automatically. Traffic, expiry date and provider messages are shown.
@@ -45,7 +46,7 @@ Open source (Apache 2.0 license). Questions and bug reports: https://github.com/
 
 ## Снимки
 
-Пять кадров 1280×800 лежат в `store/screenshots-en`. Их делает команда `node tools/store-shots.js --lang=en`: то же окно и те же кадры, что в русских снимках, но окно, подписи и вымышленные данные английские.
+Пять кадров 1280×800 лежат в `store/screenshots-en`: `1-popup.png`, `2-servers.png`, `3-rules.png`, `4-subscription.png`, `5-designs.png`. С версии 1.3.0 на кадрах 1–4 новое окно, кадр 5 показывает два вида окна рядом. Их делает команда `node tools/store-shots.js --lang=en`: то же окно и те же кадры, что в русских снимках, но окно, подписи и вымышленные данные английские.
 
 ## Ссылки
 

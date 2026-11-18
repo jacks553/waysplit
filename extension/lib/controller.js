@@ -71,6 +71,7 @@ export class Controller {
         if (st.settings.autoConnect === 'off' && st.enabled) await this.store.set({ enabled: false });
       }
       await this.#languageOnce();
+      await this.#themeOnce();
       await this.#applySetsOnce();
       await this.reconcile();
     })();
@@ -87,6 +88,16 @@ export class Controller {
       await this.#mutate((st) => ({ settings: { ...st.settings, language } }));
     }
     this.#useLanguage(normalize(await this.store.get()).settings);
+  }
+
+  // #themeOnce — у нового окна своя тема (версия 1.3.0), изначально тёмная. Один раз, пока её нет в
+  // хранилище: кто раньше сам выбрал светлую тему, у того и новое окно светлое; во всех остальных
+  // случаях («как в системе», тёмная, новая установка) — тёмное. Тема классического окна не меняется.
+  async #themeOnce() {
+    const raw = (await this.store.get()) || {};
+    if (raw.settings?.themeLcd !== undefined) return;
+    const themeLcd = raw.settings?.theme === 'light' ? 'light' : 'dark';
+    await this.#mutate((st) => ({ settings: { ...st.settings, themeLcd } }));
   }
 
   // #useLanguage — язык сообщений фона по настройке language ('auto' — по языку Chrome).
@@ -808,8 +819,10 @@ export class Controller {
   // Включён ли VPN — не меняется. Ссылки заново разбирает компаньон; порты — заново по порядку.
   async importBackup(data) {
     if (data?.type !== 'backup' || !Array.isArray(data.servers)) throw coded('BAD_FILE', t('err.BAD_FILE.backup'));
-    // В копиях версий до 1.2.0 настройки языка нет — язык остаётся нынешним.
-    const settings = { ...DEFAULT_SETTINGS, language: normalize(await this.store.get()).settings.language };
+    // В копиях версий до 1.2.0 настройки языка нет — язык остаётся нынешним. В копиях версий до
+    // 1.3.0 нет выбора оформления и темы нового окна — они тоже остаются нынешними.
+    const now = normalize(await this.store.get()).settings;
+    const settings = { ...DEFAULT_SETTINGS, language: now.language, design: now.design, themeLcd: now.themeLcd };
     for (const [k, v] of Object.entries(data.settings || {})) if (validSetting(k, v)) settings[k] = v;
     const parsed = data.servers.length
       ? await this.host.request('parse_links', { text: data.servers.map((s) => String(s.link ?? '')).join('\n') }, 30000)
@@ -1048,7 +1061,9 @@ const SETTING_CHECKS = {
   subscriptionUA: (v) => typeof v === 'string' && v.trim().length > 0 && v.length <= 200,
   subscriptionIntervalHours: (v) => Number.isInteger(v) && v >= 1 && v <= 168,
   logLevel: (v) => ['trace', 'debug', 'info', 'warn', 'error'].includes(v),
+  design: (v) => v === 'lcd' || v === 'classic',
   theme: (v) => v === 'system' || v === 'light' || v === 'dark',
+  themeLcd: (v) => v === 'system' || v === 'light' || v === 'dark',
   language: (v) => LANGUAGE_SETTINGS.includes(v),
 };
 
